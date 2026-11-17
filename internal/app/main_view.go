@@ -105,9 +105,15 @@ func (a *clipApp) view(c *ui.Context) {
 	enterPressed := c.Shortcut(0, ui.KeyEnter)
 
 	page := ui.Column(c.Key("main-page")).Fill()
+	a.updateControlsCollapse(c)
+	targetCtrl := float32(1)
+	if a.controlsCollapsed {
+		targetCtrl = 0
+	}
+	p := page.Animate("controls-open", targetCtrl, 180*time.Millisecond)
 	page.Children(func() {
-		// 顶部标题栏（常驻固定）
-		ui.Column(c).Padding(8, 16, 4, 16).Children(func() {
+		// 顶部标题栏（常驻固定；搜索栏展开时收紧下边距，收起时保持 10px 平衡高度）
+		ui.Column(c).Padding(8, 16, 10-5*p, 16).Children(func() {
 			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(4).DragWindow().Children(func() {
 				ui.Text(c, "MyTieZ").FontSize(18).Bold().TextColor(t.Text)
 				ui.Box(c).Grow(1)
@@ -132,13 +138,7 @@ func (a *clipApp) view(c *ui.Context) {
 		})
 
 		// 搜索框与分类筛选栏（离开顶部时收起，滚回最顶部再向上滚展开）
-		a.updateControlsCollapse(c)
-		targetCtrl := float32(1)
-		if a.controlsCollapsed {
-			targetCtrl = 0
-		}
 		ctrlWrap := ui.Column(c.Key("header-controls")).FillWidth()
-		p := ctrlWrap.Animate("open", targetCtrl, 180*time.Millisecond)
 		if p < 1 {
 			const controlsFullHeight float32 = 90 // 2(top pad) + 46(search) + 8(gap) + 26(tabs) + 8(bottom pad)
 			ctrlWrap.ClipY().Height(p * controlsFullHeight).Opacity(p)

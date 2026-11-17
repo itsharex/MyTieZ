@@ -548,3 +548,58 @@ func TestHotkeyRecorder(t *testing.T) {
 		t.Fatalf("expected hotkey reset to Alt+V, hotkey=%q shortcut=%q", a.settings.Hotkey, a.shortcut)
 	}
 }
+
+func TestClearSearchResetsTopAndClosesSearch(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	for i := 0; i < 12; i++ {
+		item, err := st.SaveText(
+			string(rune('A'+i))+" searchable clipboard entry",
+			store.SaveOptions{Deduplicate: false},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			if _, err := st.UpdateTags(item.ID, []string{"工作"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	// 初始打开不自动聚焦搜索框，不弹出标签浮层
+	if tt.HasText("筛选标签 工作") {
+		t.Fatalf("expected search tag popover closed initially, texts=%q", tt.Texts())
+	}
+
+	// 点击搜索框并输入查询、向下滚动
+	if err := tt.Click("搜索剪贴板"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("searchable")
+	if a.query != "searchable" {
+		t.Fatalf("expected query=searchable, got %q", a.query)
+	}
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 120)
+	tt.Advance(250 * time.Millisecond)
+
+	// 点击叉号清除搜索：应回到顶部且关闭搜索（不再聚焦、关闭标签浮层）
+	if err := tt.Click("清除搜索"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.query != "" || a.listScroll.Y != 0 || !a.atTop || a.controlsCollapsed {
+		t.Fatalf("expected search cleared at top, query=%q scrollY=%v atTop=%v collapsed=%v", a.query, a.listScroll.Y, a.atTop, a.controlsCollapsed)
+	}
+	if tt.HasText("筛选标签 工作") {
+		t.Fatalf("expected search tag popover closed after clearing search, texts=%q", tt.Texts())
+	}
+}

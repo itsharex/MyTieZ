@@ -92,8 +92,7 @@ func (a *clipApp) view(c *ui.Context) {
 		a.editingTagsID = 0
 		a.tagInput = ""
 	} else if a.query != "" && c.Shortcut(0, ui.KeyEscape) {
-		a.query = ""
-		a.reload()
+		a.clearSearch(c)
 	} else if a.selected >= 0 && c.Shortcut(0, ui.KeyEscape) {
 		a.selected = -1
 	} else if c.Shortcut(0, ui.KeyEscape) && a.panel != nil {
@@ -163,9 +162,7 @@ func (a *clipApp) view(c *ui.Context) {
 						}
 						if a.query != "" {
 							ui.ButtonBase(c).Size(24, 24).Center().Radius(radiusMicro).Label("清除搜索").OnClick(func() {
-								a.query = ""
-								a.reload()
-								a.searchHandle.Focus(c)
+								a.clearSearch(c)
 							}).Children(func() {
 								ui.Icon(c, iconClear).FontSize(16).TextColor(t.TextMuted)
 							})
@@ -214,7 +211,7 @@ func (a *clipApp) view(c *ui.Context) {
 		a.list.Label = func(i int) string { return a.items[i].Preview }
 
 		ui.Column(c).Grow(1).HandleInput(a.handleListWheel).Children(func() {
-			list := ui.List(c, &a.list, len(a.items)).TrackScroll(&a.listScroll).
+			list := ui.List(c, &a.list, len(a.items)).Bind(&a.listHandle).TrackScroll(&a.listScroll).
 				Grow(1).Padding(10, 16, 12, 16).Gap(4).
 				Rows(func(row ui.ListRow) {
 					a.renderCard(row)
@@ -413,6 +410,22 @@ func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string,
 			ui.Text(c, text).FontSize(bodySize).LineHeight(lineHeight).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(5)
 		}
 	})
+}
+
+func (a *clipApp) clearSearch(c *ui.Context) {
+	a.query = ""
+	a.selected = -1
+	a.controlsCollapsed = false
+	a.atTop = true
+	a.upScrollAccum = 0
+	a.listScroll.Y = 0
+	a.reload()
+	if len(a.items) > 0 {
+		a.list.ScrollTo(0, ui.Start)
+	}
+	if c != nil {
+		a.listHandle.Focus(c)
+	}
 }
 
 func (a *clipApp) canAutoCollapseControls() bool {

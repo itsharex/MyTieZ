@@ -28,6 +28,7 @@ type clipApp struct {
 	filterIdx    int // 0: 全部, 1: 文本, 2: 图片, 3: 文件
 	selected     int
 	list           ui.ListState
+	listHandle     ui.Handle
 	listScroll     ui.ScrollState
 	searchHandle   ui.Handle
 	editingTagsID   int64
@@ -178,11 +179,6 @@ func (a *clipApp) showPanel() {
 	a.panel.SetAlwaysOnTop(a.winPinned)
 	a.panel.Show()
 	a.panel.Focus()
-	if !a.showSettings {
-		a.panel.Update(func() {
-			a.searchHandle.Focus()
-		})
-	}
 }
 
 func (a *clipApp) togglePanel() {

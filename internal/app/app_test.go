@@ -317,6 +317,20 @@ func TestRichTextPreviewAndFilter(t *testing.T) {
 		t.Fatalf("unexpected parsed rich spans: %+v", spans)
 	}
 
+	// Verify UTF-16LE clipboard HTML (e.g. Firefox/Zen text/html) decodes cleanly.
+	utf16HTML := `<div class="title"><h1><b>MyGO</b> 标题</h1></div>`
+	utf16Bytes := make([]byte, 0, len(utf16HTML)*2)
+	for _, r := range utf16HTML {
+		utf16Bytes = append(utf16Bytes, byte(r), byte(r>>8))
+	}
+	if decoded := decodeClipboardHTML(utf16Bytes); decoded != utf16HTML {
+		t.Fatalf("expected decoded UTF-16LE HTML %q, got %q", utf16HTML, decoded)
+	}
+	uSpans := parseHTMLPreviewSpans(string(utf16Bytes), myTiezLightTheme)
+	if len(uSpans) != 1 || uSpans[0].Weight != 700 || uSpans[0].Text != "MyGO 标题" {
+		t.Fatalf("unexpected UTF-16LE rich spans: %+v", uSpans)
+	}
+
 	a := newClipApp(st, nil)
 	a.reload()
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)

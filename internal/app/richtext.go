@@ -1,8 +1,10 @@
 package app
 
 import (
+	"encoding/binary"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/egoist/mygo/ui"
 	"golang.org/x/net/html"
@@ -26,10 +28,63 @@ type spanStyle struct {
 	hasBG         bool
 }
 
+// decodeClipboardHTML converts Windows UTF-16LE/BE clipboard HTML payloads
+// (such as Firefox/Zen "text/html" format) into clean UTF-8 without NUL bytes.
+func decodeClipboardHTML(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	var s string
+	switch {
+	case len(b) >= 2 && b[0] == 0xFF && b[1] == 0xFE:
+		s = decodeUTF16Bytes(b[2:], binary.LittleEndian)
+	case len(b) >= 2 && b[0] == 0xFE && b[1] == 0xFF:
+		s = decodeUTF16Bytes(b[2:], binary.BigEndian)
+	case looksLikeUTF16(b, true):
+		s = decodeUTF16Bytes(b, binary.LittleEndian)
+	case looksLikeUTF16(b, false):
+		s = decodeUTF16Bytes(b, binary.BigEndian)
+	default:
+		s = string(b)
+	}
+	return strings.TrimRight(strings.ReplaceAll(s, "\x00", ""), "\r\n ")
+}
+
+func looksLikeUTF16(b []byte, little bool) bool {
+	if len(b) < 4 || len(b)%2 != 0 {
+		return false
+	}
+	if little && b[0] == '<' && b[1] == 0 {
+		return true
+	}
+	if !little && b[0] == 0 && b[1] == '<' {
+		return true
+	}
+	sample := min(len(b), 128)
+	zeros := 0
+	for i := 0; i+1 < sample; i += 2 {
+		if little && b[i+1] == 0 && b[i] != 0 {
+			zeros++
+		} else if !little && b[i] == 0 && b[i+1] != 0 {
+			zeros++
+		}
+	}
+	return zeros*4 >= sample/2
+}
+
+func decodeUTF16Bytes(b []byte, order binary.ByteOrder) string {
+	n := len(b) / 2
+	u := make([]uint16, n)
+	for i := 0; i < n; i++ {
+		u[i] = order.Uint16(b[i*2 : i*2+2])
+	}
+	return string(utf16.Decode(u))
+}
+
 // parseHTMLPreviewSpans extracts lightweight inline-styled spans from clipboard HTML
 // for card previews without generating screenshots or layout-breaking sizes.
 func parseHTMLPreviewSpans(rawHTML string, t *ui.Theme) []ui.Span {
-	frag := extractHTMLFragment(rawHTML)
+	frag := extractHTMLFragment(decodeClipboardHTML([]byte(rawHTML)))
 	if frag == "" {
 		return nil
 	}

@@ -276,7 +276,7 @@ func (a *clipApp) onClipboardChanged() {
 		var htmlStr string
 		if a.settings.CaptureRichText && slices.Contains(formats, transfer.HTML) {
 			if htmlData, err := mygo.Clipboard.ReadFormat(transfer.HTML); err == nil && len(htmlData) > 0 {
-				htmlStr = string(htmlData)
+				htmlStr = decodeClipboardHTML(htmlData)
 			}
 		}
 		h := store.TextContentHash(text, htmlStr)

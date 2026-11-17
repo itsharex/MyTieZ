@@ -434,4 +434,23 @@ func TestCardTagsInteractions(t *testing.T) {
 	if a.query != "#工作" || !tt.HasText("second plain entry") || tt.HasText("first tagged entry") {
 		t.Fatalf("expected tag filter #工作 to show only tagged item, query=%q texts=%q", a.query, tt.Texts())
 	}
+
+	// 取消筛选后测试多标签折叠为 +N
+	if err := tt.Click("#工作"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpdateTags(a.items[0].ID, []string{"工作", "一个非常非常长的标签名称用于测试预算", "第三个标签", "第四个标签", "第五个标签"}); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
+	tt.Frame()
+	if !tt.HasText("展开全部标签") {
+		t.Fatalf("expected overflow tags collapsed with +N button, texts=%q", tt.Texts())
+	}
+	if err := tt.Click("展开全部标签"); err != nil {
+		t.Fatal(err)
+	}
+	if a.editingTagsID != a.items[0].ID || !tt.HasText("第五个标签") {
+		t.Fatalf("expected clicking +N to open full tag editor, editingTagsID=%d texts=%q", a.editingTagsID, tt.Texts())
+	}
 }

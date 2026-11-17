@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"mytiez/internal/store"
+	"mytiez/locales"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -380,10 +381,10 @@ func TestOpenHelpers(t *testing.T) {
 	if isHTTPURL("not a url") || isHTTPURL("https://example.com\nsecond") || isHTTPURL("ftp://example.com") {
 		t.Fatal("expected non-http or multiline text not to be recognized as http URL")
 	}
-	if got := openAppDisplayName(""); got != "系统默认" {
+	if got := openAppDisplayName(locales.In(""), ""); got != "系统默认" {
 		t.Fatalf("expected empty app path to display 系统默认, got %q", got)
 	}
-	if got := openAppDisplayName(`C:\Program Files\Notepad++\notepad++.exe`); got != "notepad++" {
+	if got := openAppDisplayName(locales.In(""), `C:\Program Files\Notepad++\notepad++.exe`); got != "notepad++" {
 		t.Fatalf("expected exe suffix stripped, got %q", got)
 	}
 }
@@ -775,5 +776,43 @@ func TestLightweightSettings(t *testing.T) {
 	tt.Key(ui.Alt, ui.Key2)
 	if tt.HasText(secondText) {
 		t.Fatalf("expected second item %q deleted after Alt+2 quick paste", secondText)
+	}
+}
+
+func TestI18nLocales(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	// 默认简体中文
+	tt.SetLocale("zh-Hans")
+	if !tt.HasText("暂无剪贴板记录") || !tt.HasText("富文本") {
+		t.Fatalf("expected zh-Hans texts, got %q", tt.Texts())
+	}
+
+	// 切换繁體中文
+	tt.SetLocale("zh-Hant")
+	if !tt.HasText("暫無剪貼簿紀錄") || !tt.HasText("程式碼") {
+		t.Fatalf("expected zh-Hant texts, got %q", tt.Texts())
+	}
+
+	// 切换英文
+	tt.SetLocale("en")
+	if !tt.HasText("No clipboard history") || !tt.HasText("Rich Text") {
+		t.Fatalf("expected en texts, got %q", tt.Texts())
+	}
+
+	// 设置页英文显示
+	if err := tt.Click("Settings"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("General") || !tt.HasText("Appearance") || !tt.HasText("Default Apps") {
+		t.Fatalf("expected en settings groups, got %q", tt.Texts())
 	}
 }

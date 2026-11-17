@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"mytiez/internal/store"
+	"mytiez/locales"
 
 	"github.com/egoist/mygo"
 )
@@ -45,17 +46,17 @@ func (a *clipApp) openItem(item store.ClipItem) {
 				targetURL = "https://" + targetURL
 			}
 			if err := launchURLTarget(appPath, targetURL); err != nil {
-				a.setStatus("打开链接失败: " + err.Error())
+				a.setStatus(locales.StatusOpenUrlErr(err.Error()))
 			}
 			return
 		}
 		tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("MyTieZ_entry_%d.txt", item.ID))
 		if err := os.WriteFile(tmpPath, []byte(item.Text), 0o600); err != nil {
-			a.setStatus("写入临时文件失败: " + err.Error())
+			a.setStatus(locales.StatusWriteTmpErr(err.Error()))
 			return
 		}
 		if err := launchTarget(appPath, tmpPath); err != nil {
-			a.setStatus("打开失败: " + err.Error())
+			a.setStatus(locales.StatusOpenErr(err.Error()))
 		}
 
 	case store.KindRichText:
@@ -65,24 +66,24 @@ func (a *clipApp) openItem(item store.ClipItem) {
 		}
 		tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("MyTieZ_entry_%d.html", item.ID))
 		if err := os.WriteFile(tmpPath, []byte(content), 0o600); err != nil {
-			a.setStatus("写入临时文件失败: " + err.Error())
+			a.setStatus(locales.StatusWriteTmpErr(err.Error()))
 			return
 		}
 		if err := launchTarget(appPath, tmpPath); err != nil {
-			a.setStatus("打开失败: " + err.Error())
+			a.setStatus(locales.StatusOpenErr(err.Error()))
 		}
 
 	case store.KindImage:
 		if item.ImagePath == "" {
-			a.setStatus("图片文件不存在")
+			a.setStatus(locales.StatusImgMissing())
 			return
 		}
 		if _, err := os.Stat(item.ImagePath); err != nil {
-			a.setStatus("图片文件不存在")
+			a.setStatus(locales.StatusImgMissing())
 			return
 		}
 		if err := launchTarget(appPath, item.ImagePath); err != nil {
-			a.setStatus("打开图片失败: " + err.Error())
+			a.setStatus(locales.StatusOpenImgErr(err.Error()))
 		}
 
 	case store.KindFile:
@@ -95,13 +96,13 @@ func (a *clipApp) openItem(item store.ClipItem) {
 				continue
 			}
 			if err := mygo.Shell.OpenPath(p); err != nil {
-				a.setStatus("打开文件失败: " + err.Error())
+				a.setStatus(locales.StatusOpenFileErr(err.Error()))
 				return
 			}
 			opened = true
 		}
 		if !opened {
-			a.setStatus("文件不存在或已移动")
+			a.setStatus(locales.StatusFileMissing())
 		}
 	}
 }
@@ -134,15 +135,15 @@ func launchTarget(appPath, target string) error {
 
 func launchWithApp(appPath, target string) error {
 	if _, err := os.Stat(appPath); err != nil {
-		return fmt.Errorf("未找到指定程序: %s", filepath.Base(appPath))
+		return fmt.Errorf("%s", locales.ErrAppNotFound(filepath.Base(appPath)))
 	}
 	return exec.Command(appPath, target).Start()
 }
 
-func openAppDisplayName(path string) string {
+func openAppDisplayName(msgs locales.Messages, path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return "系统默认"
+		return msgs.OpenAppDefault()
 	}
 	base := filepath.Base(path)
 	for _, ext := range []string{".exe", ".EXE", ".app", ".APP"} {
@@ -159,7 +160,7 @@ func (a *clipApp) pickOpenApp(title string, dst *string) {
 	}
 	var filters []mygo.FileFilter
 	if runtime.GOOS == "windows" {
-		filters = []mygo.FileFilter{{Name: "应用程序", Extensions: []string{"exe"}}}
+		filters = []mygo.FileFilter{{Name: locales.OpenAppFilterExe(), Extensions: []string{"exe"}}}
 	}
 	a.pickingApp = true
 	defer func() {
@@ -167,17 +168,17 @@ func (a *clipApp) pickOpenApp(title string, dst *string) {
 	}()
 	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 		Parent:  a.panel,
-		Title:   "选择" + title + "默认打开程序",
+		Title:   locales.OpenAppDialogTitle(title),
 		Filters: filters,
 	})
 	if err != nil {
-		a.settingsNotice = "选择程序失败: " + err.Error()
+		a.settingsNotice = locales.OpenAppPickErr(err.Error())
 		return
 	}
 	if len(paths) == 0 || strings.TrimSpace(paths[0]) == "" {
 		return
 	}
 	*dst = paths[0]
-	a.settingsNotice = "已将" + title + "打开方式设为 " + openAppDisplayName(paths[0])
+	a.settingsNotice = locales.OpenAppSetNotice(title, openAppDisplayName(locales.In(""), paths[0]))
 	a.persistSettings()
 }

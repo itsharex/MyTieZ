@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"mytiez/internal/store"
+	"mytiez/locales"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -196,9 +197,10 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 				})
 			}
 			if hidden > 0 {
+				msgs := locales.In(c.Locale())
 				moreText := fmt.Sprintf("+%d", hidden)
 				moreBg := t.SurfaceHover
-				moreBtn := ui.ButtonBase(c).Padding(2, 6).Radius(radiusMicro).Label("展开全部标签")
+				moreBtn := ui.ButtonBase(c).Padding(2, 6).Radius(radiusMicro).Label(msgs.TagsExpandAll())
 				if moreBtn.Hovered() {
 					moreBg = t.SurfacePressed
 				}
@@ -214,13 +216,14 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 		return
 	}
 
+	msgs := locales.In(c.Locale())
 	ui.Column(c).FillWidth().Padding(5, 0, 0, 0).Gap(6).Children(func() {
 		if len(item.Tags) > 0 {
 			ui.Row(c).FillWidth().Wrap().AlignItems(ui.Center).Gap(5).Children(func() {
 				for _, tag := range item.Tags {
 					tagName := tag
 					chipBg, chipFg := tagChipColors(tagName, t.Dark)
-					chip := ui.ButtonBase(c).Padding(2, 7).Radius(radiusMicro).Label("移除标签 " + tagName).
+					chip := ui.ButtonBase(c).Padding(2, 7).Radius(radiusMicro).Label(msgs.TagsRemoveA11y(tagName)).
 						Background(chipBg).
 						OnClick(func() {
 							a.removeTagFromItem(item, tagName)
@@ -237,9 +240,9 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
 			inp := ui.TextInput(c, &a.tagInput).Bind(&a.tagInputHandle).
-				Placeholder("输入标签回车添加...").
+				Placeholder(msgs.TagsInputPlaceholder()).
 				Grow(1).Height(26).Padding(0, 8).Radius(radiusMicro).
-				FontSize(12).Background(t.Background).Border(1, t.Border).Label("标签输入框")
+				FontSize(12).Background(t.Background).Border(1, t.Border).Label(msgs.TagsInputLabel())
 			if a.tagFocusPending {
 				a.tagFocusPending = false
 				a.tagInputHandle.Focus(c)
@@ -248,7 +251,7 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 				a.addTagToItem(item, a.tagInput)
 			}
 
-			addBtn := ui.ButtonBase(c).Height(26).Padding(0, 9).Radius(radiusMicro).Label("添加标签")
+			addBtn := ui.ButtonBase(c).Height(26).Padding(0, 9).Radius(radiusMicro).Label(msgs.TagsAddA11y())
 			addBg := t.Accent
 			if addBtn.Hovered() {
 				addBg = t.AccentHover
@@ -258,10 +261,10 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 					a.addTagToItem(item, a.tagInput)
 				}).
 				Children(func() {
-					ui.Text(c, "添加").FontSize(11.5).FontWeight(600).TextColor(t.AccentText)
+					ui.Text(c, msgs.TagsAddBtn()).FontSize(11.5).FontWeight(600).TextColor(t.AccentText)
 				})
 
-			doneBtn := ui.ButtonBase(c).Height(26).Padding(0, 9).Radius(radiusMicro).Label("完成标签编辑")
+			doneBtn := ui.ButtonBase(c).Height(26).Padding(0, 9).Radius(radiusMicro).Label(msgs.TagsDoneA11y())
 			doneBg := t.Surface
 			if doneBtn.Hovered() {
 				doneBg = t.SurfaceHover
@@ -272,7 +275,7 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 					a.tagInput = ""
 				}).
 				Children(func() {
-					ui.Text(c, "完成").FontSize(11.5).FontWeight(600).TextColor(t.TextMuted)
+					ui.Text(c, msgs.TagsDoneBtn()).FontSize(11.5).FontWeight(600).TextColor(t.TextMuted)
 				})
 		})
 
@@ -281,7 +284,7 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 				for _, sTag := range suggestions {
 					sug := sTag
 					sBg, sFg := tagChipColors(sug, t.Dark)
-					btn := ui.ButtonBase(c).Padding(2, 7).Radius(radiusMicro).Label("选择标签 " + sug).
+					btn := ui.ButtonBase(c).Padding(2, 7).Radius(radiusMicro).Label(msgs.TagsSelectA11y(sug)).
 						Background(sBg.Alpha(0.75)).
 						OnClick(func() {
 							a.addTagToItem(item, sug)
@@ -325,18 +328,19 @@ func (a *clipApp) renderSearchTagPopover(c *ui.Context, t *ui.Theme) {
 		shadowAlpha = 0.24
 	}
 
+	msgs := locales.In(c.Locale())
 	ui.Column(c).Absolute().Left(16).Right(16).Top(98).ZIndex(30).KeepFocus().
 		Padding(10, 12).Gap(7).Radius(radiusGroup).
 		Background(popBg).Border(1, t.Border.Alpha(0.55)).
 		Shadow(0, 8, 20, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
 		Children(func() {
-			ui.Text(c, "标签").FontSize(11.5).FontWeight(600).TextColor(t.TextMuted)
+			ui.Text(c, msgs.TagsPopoverTitle()).FontSize(11.5).FontWeight(600).TextColor(t.TextMuted)
 			ui.Row(c).FillWidth().Wrap().AlignItems(ui.Center).Gap(6).Children(func() {
 				for _, tag := range tags {
 					tagName := tag
 					chipBg, chipFg := tagChipColors(tagName, t.Dark)
 					active := q == "#"+tagName
-					btn := ui.ButtonBase(c).Padding(3, 9).Radius(radiusMicro).Label("筛选标签 " + tagName).
+					btn := ui.ButtonBase(c).Padding(3, 9).Radius(radiusMicro).Label(msgs.TagsFilterA11y(tagName)).
 						Background(chipBg)
 					if active {
 						btn.Border(1.5, chipFg)

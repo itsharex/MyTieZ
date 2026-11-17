@@ -1,12 +1,12 @@
 package app
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"mytiez/internal/store"
+	"mytiez/locales"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -62,10 +62,11 @@ func (a *clipApp) renderHeaderIconBtn(c *ui.Context, icon *ui.SVG, label string,
 }
 
 func (a *clipApp) renderWindowActionButtons(c *ui.Context) {
-	a.renderHeaderIconBtn(c, iconPin, "固定窗口", a.winPinned, false, func() {
+	msgs := locales.In(c.Locale())
+	a.renderHeaderIconBtn(c, iconPin, msgs.HeaderPin(), a.winPinned, false, func() {
 		a.toggleWindowPin()
 	})
-	a.renderHeaderIconBtn(c, iconClear, "隐藏窗口", false, true, func() {
+	a.renderHeaderIconBtn(c, iconClear, msgs.HeaderHide(), false, true, func() {
 		if a.panel != nil {
 			a.panel.Hide()
 		}
@@ -113,6 +114,7 @@ func (a *clipApp) view(c *ui.Context) {
 	a.handleQuickPasteShortcut(c)
 	enterPressed := c.Shortcut(0, ui.KeyEnter)
 
+	msgs := locales.In(c.Locale())
 	page := ui.Column(c.Key("main-page")).Fill()
 	a.updateControlsCollapse(c)
 	targetCtrl := float32(1)
@@ -127,18 +129,18 @@ func (a *clipApp) view(c *ui.Context) {
 				ui.Text(c, "MyTieZ").FontSize(18).Bold().TextColor(t.Text)
 				ui.Box(c).Grow(1)
 
-				a.renderHeaderIconBtn(c, iconPin, "固定窗口", a.winPinned, false, func() {
+				a.renderHeaderIconBtn(c, iconPin, msgs.HeaderPin(), a.winPinned, false, func() {
 					a.toggleWindowPin()
 				})
-				a.renderHeaderIconBtn(c, iconTrash, "清空未置顶", false, false, func() {
+				a.renderHeaderIconBtn(c, iconTrash, msgs.HeaderClearUnpinned(), false, false, func() {
 					a.clearUnpinned()
 				})
-				a.renderHeaderIconBtn(c, iconSettings, "设置", false, false, func() {
+				a.renderHeaderIconBtn(c, iconSettings, msgs.HeaderSettings(), false, false, func() {
 					a.showSettings = true
 					a.confirmAction = ""
 					a.settingsNotice = ""
 				})
-				a.renderHeaderIconBtn(c, iconClear, "隐藏窗口", false, true, func() {
+				a.renderHeaderIconBtn(c, iconClear, msgs.HeaderHide(), false, true, func() {
 					if a.panel != nil {
 						a.panel.Hide()
 					}
@@ -164,11 +166,11 @@ func (a *clipApp) view(c *ui.Context) {
 						ui.Icon(c, iconSearch).FontSize(18).TextColor(t.TextMuted)
 						if ui.TextInputBase(c, &a.query).Bind(&a.searchHandle).
 							Grow(1).FontSize(14).FontWeight(500).
-							Placeholder("搜索剪贴板…").Label("搜索剪贴板").Changed() {
+							Placeholder(msgs.SearchPlaceholder()).Label(msgs.SearchLabel()).Changed() {
 							a.reload()
 						}
 						if a.query != "" {
-							ui.ButtonBase(c).Size(24, 24).Center().Radius(radiusMicro).Label("清除搜索").OnClick(func() {
+							ui.ButtonBase(c).Size(24, 24).Center().Radius(radiusMicro).Label(msgs.SearchClear()).OnClick(func() {
 								a.clearSearch(c)
 							}).Children(func() {
 								ui.Icon(c, iconClear).FontSize(16).TextColor(t.TextMuted)
@@ -177,7 +179,14 @@ func (a *clipApp) view(c *ui.Context) {
 					})
 
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					tabs := []string{"文本", "富文本", "链接", "代码", "图片", "文件"}
+					tabs := []string{
+						msgs.TabText(),
+						msgs.TabRichText(),
+						msgs.TabURL(),
+						msgs.TabCode(),
+						msgs.TabImage(),
+						msgs.TabFile(),
+					}
 					for i, label := range tabs {
 						tabIdx := i + 1
 						active := a.filterIdx == tabIdx
@@ -226,8 +235,8 @@ func (a *clipApp) view(c *ui.Context) {
 				Children(func() {
 					if len(a.items) == 0 {
 						ui.Column(c).Fill().Center().Padding(32).Gap(6).Children(func() {
-							ui.Text(c, "暂无剪贴板记录").FontSize(15).TextColor(t.TextMuted)
-							ui.Text(c, "复制文本、图片或文件后将自动出现在这里").FontSize(13).TextColor(t.TextMuted)
+							ui.Text(c, msgs.EmptyTitle()).FontSize(15).TextColor(t.TextMuted)
+							ui.Text(c, msgs.EmptySubtitle()).FontSize(13).TextColor(t.TextMuted)
 						})
 					}
 				})
@@ -251,6 +260,7 @@ func (a *clipApp) view(c *ui.Context) {
 func (a *clipApp) renderCard(row ui.ListRow) {
 	c := row.Context
 	t := c.Theme()
+	msgs := locales.In(c.Locale())
 	item := a.items[row.Index]
 
 	hovered := row.Hovered()
@@ -292,7 +302,7 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 		Transition(cardTransition).
 		Children(func() {
 			ui.Row(c).MinHeight(cardActionSize).AlignItems(ui.Center).Gap(4).Children(func() {
-				kindIcon, _ := kindMeta(item.Kind)
+				kindIcon, _ := kindMeta(msgs, item.Kind)
 				if a.settings.ShowSourceIcon {
 					if appBmp := a.getOrLoadAppIcon(item.SourcePath); appBmp != nil {
 						ui.Image(c, appBmp).Size(14, 14).Fit(ui.Contain).Radius(3)
@@ -309,28 +319,28 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 				ui.Text(c, sourceName).FontSize(11.5).FontWeight(700).TextColor(t.TextMuted).SingleLine()
 
 				if item.Pinned {
-					ui.Text(c, "置顶").FontSize(11).FontWeight(600).TextColor(t.Accent).
+					ui.Text(c, msgs.CardPinned()).FontSize(11).FontWeight(600).TextColor(t.Accent).
 						Padding(1, 5).Radius(radiusMicro).Background(t.Surface.Mix(t.Accent, 0.12))
 				}
 
 				ui.Box(c).Grow(1)
 
 				if !a.settings.HideCardActions || hovered {
-					a.renderCardActionBtn(c, iconOpen, "打开", false, func() {
+					a.renderCardActionBtn(c, iconOpen, msgs.CardActionOpen(), false, func() {
 						a.openItem(item)
 					})
-					a.renderCardActionBtn(c, iconTag, "标签", len(item.Tags) > 0 || a.editingTagsID == item.ID, func() {
+					a.renderCardActionBtn(c, iconTag, msgs.CardActionTag(), len(item.Tags) > 0 || a.editingTagsID == item.ID, func() {
 						a.toggleTagEditor(item.ID)
 					})
-					a.renderCardActionBtn(c, iconPin, "置顶", item.Pinned, func() {
+					a.renderCardActionBtn(c, iconPin, msgs.CardActionPin(), item.Pinned, func() {
 						a.togglePin(item.ID)
 					})
-					a.renderCardActionBtn(c, iconClear, "删除", false, func() {
+					a.renderCardActionBtn(c, iconClear, msgs.CardActionDelete(), false, func() {
 						a.deleteItem(item.ID)
 					})
 				}
 
-				ui.Text(c, relativeTime(item.UpdatedAt)).Width(48).TextAlign(ui.End).
+				ui.Text(c, relativeTime(msgs, item.UpdatedAt)).Width(48).TextAlign(ui.End).
 					FontSize(11).FontWeight(400).TextColor(t.TextMuted).SingleLine()
 			})
 
@@ -478,7 +488,7 @@ func (a *clipApp) renderScrollTopButton(c *ui.Context, t *ui.Theme) {
 	}
 	btn := ui.ButtonBase(c.Key("scroll-top-btn")).
 		Absolute().Right(16).Bottom(16).ZIndex(20).
-		Size(34, 34).Center().Radius(17).Label("回到顶部")
+		Size(34, 34).Center().Radius(17).Label(locales.In(c.Locale()).ScrollTop())
 	bg := t.Surface
 	fg := t.Text
 	if btn.Hovered() {
@@ -642,7 +652,7 @@ func (a *clipApp) renderFilesPreview(c *ui.Context, item store.ClipItem) {
 			})
 		}
 		if len(item.Files) > maxShow {
-			ui.Textf(c, "等共 %d 个文件", len(item.Files)).FontSize(12.5).TextColor(t.TextMuted)
+			ui.Text(c, locales.In(c.Locale()).CardFilesMore(len(item.Files))).FontSize(12.5).TextColor(t.TextMuted)
 		}
 	})
 }
@@ -662,33 +672,33 @@ func (a *clipApp) getOrLoadAppIcon(path string) *ui.Bitmap {
 	})
 }
 
-func kindMeta(kind store.ClipKind) (*ui.SVG, string) {
+func kindMeta(msgs locales.Messages, kind store.ClipKind) (*ui.SVG, string) {
 	switch kind {
 	case store.KindRichText:
-		return iconRichText, "富文本"
+		return iconRichText, msgs.TabRichText()
 	case store.KindURL:
-		return iconLink, "链接"
+		return iconLink, msgs.TabURL()
 	case store.KindCode:
-		return iconCode, "代码"
+		return iconCode, msgs.TabCode()
 	case store.KindImage:
-		return iconImage, "图片"
+		return iconImage, msgs.TabImage()
 	case store.KindFile:
-		return iconFile, "文件"
+		return iconFile, msgs.TabFile()
 	default:
-		return iconText, "文本"
+		return iconText, msgs.TabText()
 	}
 }
 
-func relativeTime(t time.Time) string {
+func relativeTime(msgs locales.Messages, t time.Time) string {
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "< 1分钟"
+		return msgs.TimeJustNow()
 	case d < time.Hour:
-		return fmt.Sprintf("%d分钟前", int(d.Minutes()))
+		return msgs.TimeMinutesAgo(int(d.Minutes()))
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%d小时前", int(d.Hours()))
+		return msgs.TimeHoursAgo(int(d.Hours()))
 	default:
-		return fmt.Sprintf("%d天前", int(d.Hours()/24))
+		return msgs.TimeDaysAgo(int(d.Hours() / 24))
 	}
 }

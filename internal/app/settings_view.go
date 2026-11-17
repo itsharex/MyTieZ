@@ -6,6 +6,7 @@ import (
 
 	"mytiez/internal/store"
 	"mytiez/internal/sys"
+	"mytiez/locales"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -22,19 +23,20 @@ type settingsGroupExpanded struct {
 
 func (a *clipApp) settingsView(c *ui.Context) {
 	t := c.Theme()
+	msgs := locales.In(c.Locale())
 
 	ui.Column(c.Key("settings-page")).Fill().Children(func() {
 		// 设置页顶部导航栏（与主页顶栏同构，下方带左右留白的细分割线）
 		ui.Column(c).FillWidth().Padding(10, 16, 8, 16).Children(func() {
 			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(8).DragWindow().Children(func() {
-				a.renderHeaderIconBtn(c, iconBack, "返回", false, false, func() {
+				a.renderHeaderIconBtn(c, iconBack, msgs.HeaderBack(), false, false, func() {
 					a.cancelHotkeyRecording()
 					a.showSettings = false
 					a.confirmAction = ""
 					a.settingsNotice = ""
 				})
 
-				ui.Text(c, "设置").FontSize(17).Bold().TextColor(t.Text)
+				ui.Text(c, msgs.SettingsTitle()).FontSize(17).Bold().TextColor(t.Text)
 				ui.Box(c).Grow(1)
 				ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
 					a.renderWindowActionButtons(c)
@@ -56,36 +58,36 @@ func (a *clipApp) settingsView(c *ui.Context) {
 				}
 
 				// 1. 常规设置
-				a.renderSettingsGroup(c, "常规设置", &a.expanded.general, func() {
-					a.renderSwitchRow(c, "开机自启动", "", &a.settings.AutoStart, func(on bool) {
+				a.renderSettingsGroup(c, msgs.SettingsGroupGeneral(), &a.expanded.general, func() {
+					a.renderSwitchRow(c, msgs.SettingsAutostart(), "", &a.settings.AutoStart, func(on bool) {
 						if err := mygo.App.SetOpenAtLogin(on); err != nil {
 							log.Printf("set open at login: %v", err)
 							a.settings.AutoStart = !on
-							a.settingsNotice = "设置开机自启动失败: " + err.Error()
+							a.settingsNotice = msgs.SettingsAutostartErr(err.Error())
 						}
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "静默启动", "", &a.settings.SilentStart, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsSilentStart(), "", &a.settings.SilentStart, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "跟随鼠标位置呼出", "", &a.settings.FollowMouse, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsFollowMouse(), "", &a.settings.FollowMouse, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "失焦自动隐藏", "", &a.settings.AutoHideOnBlur, func(on bool) {
+					a.renderSwitchRow(c, msgs.SettingsAutoHide(), "", &a.settings.AutoHideOnBlur, func(on bool) {
 						a.applyAutoHide(on)
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "固定显示搜索栏", "", &a.settings.PinSearchBox, func(on bool) {
+					a.renderSwitchRow(c, msgs.SettingsPinSearchBox(), "", &a.settings.PinSearchBox, func(on bool) {
 						if on {
 							a.controlsCollapsed = false
 						}
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "显示回到顶部按钮", "", &a.settings.ScrollTopButton, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsScrollTopBtn(), "", &a.settings.ScrollTopButton, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSettingRow(c, "以管理员身份重启", "用于向管理员权限窗口粘贴内容", func() {
-						btn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label("以管理员身份重启")
+					a.renderSettingRow(c, msgs.SettingsRestartAdmin(), msgs.SettingsRestartAdminDesc(), func() {
+						btn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label(msgs.SettingsRestartAdmin())
 						bg := t.Surface
 						if btn.Hovered() {
 							bg = t.SurfaceHover
@@ -93,89 +95,95 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						btn.Background(bg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 							OnClick(func() {
 								if err := sys.RestartAsAdmin(); err != nil {
-									a.settingsNotice = "以管理员身份重启失败: " + err.Error()
+									a.settingsNotice = msgs.SettingsRestartAdminErr(err.Error())
 									return
 								}
 								mygo.App.Quit()
 							}).
 							Children(func() {
-								ui.Text(c, "重启").FontSize(13).FontWeight(600).TextColor(t.Text)
+								ui.Text(c, msgs.SettingsRestartBtn()).FontSize(13).FontWeight(600).TextColor(t.Text)
 							})
 					})
 				})
 
 				// 2. 剪贴板设置
-				a.renderSettingsGroup(c, "剪贴板设置", &a.expanded.clipboard, func() {
+				a.renderSettingsGroup(c, msgs.SettingsGroupClipboard(), &a.expanded.clipboard, func() {
 					a.renderHotkeyRecorder(c)
-					a.renderSwitchRow(c, "自动去重", "", &a.settings.Deduplicate, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsDeduplicate(), "", &a.settings.Deduplicate, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "记录文件路径", "", &a.settings.CaptureFiles, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsCaptureFiles(), "", &a.settings.CaptureFiles, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "捕获带格式的文本", "", &a.settings.CaptureRichText, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsCaptureRichText(), "", &a.settings.CaptureRichText, func(bool) {
 						a.persistSettings()
 					})
-					a.renderChoiceGroup(c, "保留历史上限", []choiceOption{
-						{label: "200", a11y: "上限200", active: a.settings.MaxHistory == 200, onClick: func() { a.setMaxHistory(200) }},
-						{label: "500", a11y: "上限500", active: a.settings.MaxHistory == 500, onClick: func() { a.setMaxHistory(500) }},
-						{label: "1000", a11y: "上限1000", active: a.settings.MaxHistory == 1000, onClick: func() { a.setMaxHistory(1000) }},
-						{label: "不限", a11y: "上限不限", active: a.settings.MaxHistory == 0, onClick: func() { a.setMaxHistory(0) }},
+					a.renderChoiceGroup(c, msgs.SettingsMaxHistory(), []choiceOption{
+						{label: "200", a11y: msgs.SettingsLimit200(), active: a.settings.MaxHistory == 200, onClick: func() { a.setMaxHistory(200) }},
+						{label: "500", a11y: msgs.SettingsLimit500(), active: a.settings.MaxHistory == 500, onClick: func() { a.setMaxHistory(500) }},
+						{label: "1000", a11y: msgs.SettingsLimit1000(), active: a.settings.MaxHistory == 1000, onClick: func() { a.setMaxHistory(1000) }},
+						{label: msgs.SettingsUnlimited(), a11y: msgs.SettingsLimitUnlimited(), active: a.settings.MaxHistory == 0, onClick: func() { a.setMaxHistory(0) }},
 					})
-					a.renderSwitchRow(c, "点击仅复制", "", &a.settings.ClickCopyOnly, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsClickCopyOnly(), "", &a.settings.ClickCopyOnly, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "粘贴后移到顶部", "", &a.settings.MoveToTopOnPaste, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsMoveToTop(), "", &a.settings.MoveToTopOnPaste, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "粘贴后删除", "", &a.settings.DeleteAfterPaste, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsDeleteAfterPaste(), "", &a.settings.DeleteAfterPaste, func(bool) {
 						a.persistSettings()
 					})
-					a.renderChoiceGroup(c, "数字键快捷粘贴", []choiceOption{
-						{label: "关闭", a11y: "快捷粘贴关闭", active: a.settings.QuickPasteModifier == "none", onClick: func() { a.setQuickPasteModifier("none") }},
-						{label: "Alt+1~9", a11y: "快捷粘贴Alt", active: a.settings.QuickPasteModifier == "alt", onClick: func() { a.setQuickPasteModifier("alt") }},
-						{label: "Ctrl+1~9", a11y: "快捷粘贴Ctrl", active: a.settings.QuickPasteModifier == "ctrl", onClick: func() { a.setQuickPasteModifier("ctrl") }},
+					a.renderChoiceGroup(c, msgs.SettingsQuickPaste(), []choiceOption{
+						{label: msgs.SettingsQuickPasteOff(), a11y: msgs.SettingsQuickPasteOffA11y(), active: a.settings.QuickPasteModifier == "none", onClick: func() { a.setQuickPasteModifier("none") }},
+						{label: "Alt+1~9", a11y: msgs.SettingsQuickPasteAltA11y(), active: a.settings.QuickPasteModifier == "alt", onClick: func() { a.setQuickPasteModifier("alt") }},
+						{label: "Ctrl+1~9", a11y: msgs.SettingsQuickPasteCtrlA11y(), active: a.settings.QuickPasteModifier == "ctrl", onClick: func() { a.setQuickPasteModifier("ctrl") }},
 					})
 				})
 
 				// 3. 界面设置
-				a.renderSettingsGroup(c, "界面设置", &a.expanded.appearance, func() {
-					a.renderChoiceGroup(c, "窗口材质", []choiceOption{
-						{label: "云母", a11y: "材质云母", active: a.settings.BackdropMode == "mica", onClick: func() { a.setBackdropMode("mica") }},
-						{label: "毛玻璃", a11y: "材质毛玻璃", active: a.settings.BackdropMode == "acrylic", onClick: func() { a.setBackdropMode("acrylic") }},
-						{label: "纯色", a11y: "材质纯色", active: a.settings.BackdropMode == "solid", onClick: func() { a.setBackdropMode("solid") }},
+				a.renderSettingsGroup(c, msgs.SettingsGroupAppearance(), &a.expanded.appearance, func() {
+					curLocale := c.Locale()
+					a.renderChoiceGroup(c, msgs.SettingsLanguage(), []choiceOption{
+						{label: msgs.SettingsLangZh(), a11y: msgs.SettingsLangZh(), active: curLocale != "zh-Hant" && curLocale != "en", onClick: func() { a.setLanguage("zh-Hans") }},
+						{label: msgs.SettingsLangTw(), a11y: msgs.SettingsLangTw(), active: curLocale == "zh-Hant", onClick: func() { a.setLanguage("zh-Hant") }},
+						{label: msgs.SettingsLangEn(), a11y: msgs.SettingsLangEn(), active: curLocale == "en", onClick: func() { a.setLanguage("en") }},
 					})
-					a.renderChoiceGroup(c, "颜色模式", []choiceOption{
-						{label: "跟随系统", a11y: "外观系统", active: a.settings.ColorMode == "system", onClick: func() { a.setColorMode("system") }},
-						{label: "浅色", a11y: "外观浅色", active: a.settings.ColorMode == "light", onClick: func() { a.setColorMode("light") }},
-						{label: "深色", a11y: "外观深色", active: a.settings.ColorMode == "dark", onClick: func() { a.setColorMode("dark") }},
+					a.renderChoiceGroup(c, msgs.SettingsBackdrop(), []choiceOption{
+						{label: msgs.SettingsBackdropMica(), a11y: msgs.SettingsBackdropMicaA11y(), active: a.settings.BackdropMode == "mica", onClick: func() { a.setBackdropMode("mica") }},
+						{label: msgs.SettingsBackdropAcrylic(), a11y: msgs.SettingsBackdropAcrylicA11y(), active: a.settings.BackdropMode == "acrylic", onClick: func() { a.setBackdropMode("acrylic") }},
+						{label: msgs.SettingsBackdropSolid(), a11y: msgs.SettingsBackdropSolidA11y(), active: a.settings.BackdropMode == "solid", onClick: func() { a.setBackdropMode("solid") }},
 					})
-					a.renderSwitchRow(c, "紧凑卡片模式", "", &a.settings.CompactMode, func(bool) {
+					a.renderChoiceGroup(c, msgs.SettingsColorMode(), []choiceOption{
+						{label: msgs.SettingsColorSystem(), a11y: msgs.SettingsColorSystemA11y(), active: a.settings.ColorMode == "system", onClick: func() { a.setColorMode("system") }},
+						{label: msgs.SettingsColorLight(), a11y: msgs.SettingsColorLightA11y(), active: a.settings.ColorMode == "light", onClick: func() { a.setColorMode("light") }},
+						{label: msgs.SettingsColorDark(), a11y: msgs.SettingsColorDarkA11y(), active: a.settings.ColorMode == "dark", onClick: func() { a.setColorMode("dark") }},
+					})
+					a.renderSwitchRow(c, msgs.SettingsCompactMode(), "", &a.settings.CompactMode, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "悬停显示卡片操作", "", &a.settings.HideCardActions, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsHideCardActions(), "", &a.settings.HideCardActions, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, "显示来源应用图标", "", &a.settings.ShowSourceIcon, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsShowSourceIcon(), "", &a.settings.ShowSourceIcon, func(bool) {
 						a.persistSettings()
 					})
 				})
 
 				// 4. 默认打开程序
-				a.renderSettingsGroup(c, "默认打开程序", &a.expanded.openApps, func() {
-					a.renderOpenAppRow(c, "文本", &a.settings.OpenAppText)
-					a.renderOpenAppRow(c, "富文本", &a.settings.OpenAppRichText)
-					a.renderOpenAppRow(c, "图片", &a.settings.OpenAppImage)
+				a.renderSettingsGroup(c, msgs.SettingsGroupOpenApps(), &a.expanded.openApps, func() {
+					a.renderOpenAppRow(c, msgs.TabText(), &a.settings.OpenAppText)
+					a.renderOpenAppRow(c, msgs.TabRichText(), &a.settings.OpenAppRichText)
+					a.renderOpenAppRow(c, msgs.TabImage(), &a.settings.OpenAppImage)
 				})
 
-				// 4. 数据管理
-				a.renderSettingsGroup(c, "数据管理", &a.expanded.data, func() {
+				// 5. 数据管理
+				a.renderSettingsGroup(c, msgs.SettingsGroupData(), &a.expanded.data, func() {
 					dataDir := ""
 					if a.store != nil {
 						dataDir = a.store.BaseDir()
 					}
-					a.renderSettingRow(c, "本地存储目录", dataDir, func() {
-						btn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label("打开目录")
+					a.renderSettingRow(c, msgs.SettingsDataDir(), dataDir, func() {
+						btn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label(msgs.SettingsOpenDir())
 						bg := t.Surface
 						if btn.Hovered() {
 							bg = t.SurfaceHover
@@ -184,35 +192,35 @@ func (a *clipApp) settingsView(c *ui.Context) {
 							OnClick(func() {
 								if dataDir != "" {
 									if err := mygo.Shell.OpenPath(dataDir); err != nil {
-										a.settingsNotice = "打开目录失败: " + err.Error()
+										a.settingsNotice = msgs.SettingsOpenDirErr(err.Error())
 									}
 								}
 							}).
 							Children(func() {
-								ui.Text(c, "打开目录").FontSize(13).FontWeight(600).TextColor(t.Text)
+								ui.Text(c, msgs.SettingsOpenDir()).FontSize(13).FontWeight(600).TextColor(t.Text)
 							})
 					})
-					a.renderConfirmActionRow(c, "清空未置顶记录", "", "clear_unpinned", "清空", "确认清空", func() {
+					a.renderConfirmActionRow(c, msgs.SettingsClearUnpinned(), "", "clear_unpinned", msgs.SettingsClearBtn(), msgs.SettingsClearConfirm(), func() {
 						a.clearUnpinned()
-						a.settingsNotice = "已清空未置顶剪贴板记录"
+						a.settingsNotice = msgs.SettingsClearUnpinnedDone()
 					})
-					a.renderConfirmActionRow(c, "清空全部记录", "", "clear_all", "清空全部", "确认清空全部", func() {
+					a.renderConfirmActionRow(c, msgs.SettingsClearAll(), "", "clear_all", msgs.SettingsClearAllBtn(), msgs.SettingsClearAllConfirm(), func() {
 						a.clearAll()
-						a.settingsNotice = "已清空全部剪贴板记录"
+						a.settingsNotice = msgs.SettingsClearAllDone()
 					})
 				})
 
 				// 底部恢复初始设置与版本信息
 				ui.Column(c).FillWidth().AlignItems(ui.Center).Padding(12, 0, 4, 0).Gap(12).Children(func() {
-					resetLabel := "恢复初始设置"
+					resetLabel := msgs.SettingsResetAll()
 					resetBg, resetBorder, resetText := t.Surface, t.Border, t.Text
 					if a.confirmAction == "reset_settings" {
-						resetLabel = "再次点击确认恢复"
+						resetLabel = msgs.SettingsResetAllConfirm()
 						resetBg = t.Surface.Mix(t.Danger, 0.1)
 						resetBorder = t.Danger
 						resetText = t.Danger
 					}
-					resetBtn := ui.ButtonBase(c).Height(38).Padding(0, 18).Radius(radiusCard).Label("恢复初始设置")
+					resetBtn := ui.ButtonBase(c).Height(38).Padding(0, 18).Radius(radiusCard).Label(msgs.SettingsResetAll())
 					if resetBtn.Hovered() && a.confirmAction != "reset_settings" {
 						resetBg = t.SurfaceHover
 						resetBorder = t.Border.Mix(t.TextMuted, 0.35)
@@ -240,7 +248,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 
 					ui.Column(c).AlignItems(ui.Center).Gap(3).Children(func() {
 						ui.Text(c, "MyTieZ v0.1.0").FontSize(13).TextColor(t.TextMuted)
-						ui.Text(c, "让复制与粘贴，保持有序").FontSize(13).TextColor(t.TextMuted)
+						ui.Text(c, msgs.SettingsTagline()).FontSize(13).TextColor(t.TextMuted)
 					})
 				})
 			})
@@ -266,6 +274,12 @@ func (a *clipApp) setBackdropMode(mode string) {
 func (a *clipApp) setQuickPasteModifier(mod string) {
 	a.settings.QuickPasteModifier = mod
 	a.persistSettings()
+}
+
+func (a *clipApp) setLanguage(locale string) {
+	if mygo.App.IsReady() {
+		mygo.App.SetLocale(locale)
+	}
 }
 
 func (a *clipApp) setColorMode(mode string) {
@@ -333,8 +347,9 @@ func (a *clipApp) renderChoiceGroup(c *ui.Context, title string, opts []choiceOp
 }
 
 func (a *clipApp) renderSwitchRow(c *ui.Context, title, desc string, val *bool, onChanged func(bool)) {
+	msgs := locales.In(c.Locale())
 	a.renderSettingRow(c, title, desc, func() {
-		if a.renderSwitch(c, val, "切换"+title) {
+		if a.renderSwitch(c, val, msgs.SettingsSwitchA11y(title)) {
 			a.confirmAction = ""
 			if onChanged != nil {
 				onChanged(*val)
@@ -434,14 +449,15 @@ func (a *clipApp) renderConfirmActionRow(c *ui.Context, title, desc, actionKey, 
 
 func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) {
 	t := c.Theme()
+	msgs := locales.In(c.Locale())
 	current := ""
 	if target != nil {
 		current = *target
 	}
-	a.renderSettingRow(c, title, openAppDisplayName(current), func() {
+	a.renderSettingRow(c, title, openAppDisplayName(msgs, current), func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 			if current != "" {
-				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label("恢复" + title + "默认打开方式")
+				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.OpenAppResetA11y(title))
 				rBg := t.Surface
 				if resetBtn.Hovered() {
 					rBg = t.SurfaceHover
@@ -450,16 +466,16 @@ func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) 
 					OnClick(func() {
 						if target != nil {
 							*target = ""
-							a.settingsNotice = title + "已恢复为系统默认打开方式"
+							a.settingsNotice = msgs.OpenAppResetNotice(title)
 							a.persistSettings()
 						}
 					}).
 					Children(func() {
-						ui.Text(c, "恢复默认").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, msgs.OpenAppResetBtn()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 					})
 			}
 
-			pickBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label("选择" + title + "打开程序")
+			pickBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label(msgs.OpenAppPickA11y(title))
 			pBg := t.Surface
 			if pickBtn.Hovered() {
 				pBg = t.SurfaceHover
@@ -469,7 +485,7 @@ func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) 
 					a.pickOpenApp(title, target)
 				}).
 				Children(func() {
-					ui.Text(c, "选择程序").FontSize(13).FontWeight(600).TextColor(t.Text)
+					ui.Text(c, msgs.OpenAppPickBtn()).FontSize(13).FontWeight(600).TextColor(t.Text)
 				})
 		})
 	})
@@ -477,6 +493,7 @@ func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) 
 
 func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 	t := c.Theme()
+	msgs := locales.In(c.Locale())
 	defaultHotkey := store.DefaultSettings().Hotkey
 
 	if a.hotkeyFocusPending {
@@ -486,15 +503,15 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 		a.cancelHotkeyRecording()
 	}
 
-	desc := "点击右侧按钮后按下组合键"
+	desc := msgs.SettingsHotkeyDesc()
 	if a.recordingHotkey {
-		desc = "按下目标组合键，按 Esc 取消"
+		desc = msgs.SettingsHotkeyDescRecording()
 	}
 
-	a.renderSettingRow(c, "呼出快捷键", desc, func() {
+	a.renderSettingRow(c, msgs.SettingsHotkey(), desc, func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 			if a.recordingHotkey {
-				cancelBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label("取消录制快捷键")
+				cancelBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsHotkeyCancelA11y())
 				cBg := t.Surface
 				if cancelBtn.Hovered() {
 					cBg = t.SurfaceHover
@@ -505,10 +522,10 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 						a.settingsNotice = ""
 					}).
 					Children(func() {
-						ui.Text(c, "取消").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, msgs.SettingsHotkeyCancel()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 					})
 			} else if a.settings.Hotkey != defaultHotkey {
-				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label("恢复默认快捷键")
+				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsHotkeyResetA11y())
 				rBg := t.Surface
 				if resetBtn.Hovered() {
 					rBg = t.SurfaceHover
@@ -518,7 +535,7 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 						a.applyHotkey(defaultHotkey)
 					}).
 					Children(func() {
-						ui.Text(c, "恢复默认").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, msgs.SettingsHotkeyReset()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
 					})
 			}
 
@@ -527,12 +544,12 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 				labelText = defaultHotkey
 			}
 			if a.recordingHotkey {
-				labelText = recordingHotkeyLabel(a.hotkeyMods)
+				labelText = recordingHotkeyLabel(msgs, a.hotkeyMods)
 			}
 
 			recBtn := ui.ButtonBase(c.Key("hotkey-recorder")).Bind(&a.hotkeyHandle).
 				Height(pillHeight).MinWidth(132).Padding(0, 12).Radius(radiusGroup).
-				Center().Label("录制呼出快捷键").
+				Center().Label(msgs.SettingsHotkeyRecA11y()).
 				HandleInput(a.handleHotkeyInput)
 
 			bg, border, borderW, fg := t.Surface, t.Border.Alpha(0.7), float32(1), t.Text

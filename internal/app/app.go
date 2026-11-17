@@ -6,6 +6,7 @@ import (
 
 	"mytiez/internal/store"
 	"mytiez/internal/sys"
+	"mytiez/locales"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -335,44 +336,18 @@ func (a *clipApp) ready() {
 func (a *clipApp) setupTray() {
 	tray, err := mygo.NewTray(mygo.TrayOptions{
 		Icon:    a.iconPNG,
-		ToolTip: "MyTieZ 剪贴板",
+		ToolTip: locales.TrayTooltip(),
 	})
 	if err != nil {
 		log.Printf("create tray: %v", err)
 		return
 	}
 	a.tray = tray
-	a.trayOpenItem = &mygo.MenuItem{
-		Label:       "打开剪贴板",
-		Accelerator: a.shortcut,
-		Click:       func(*mygo.MenuItem, *mygo.Window) { a.showPanel() },
-	}
-	menu := mygo.NewMenu([]*mygo.MenuItem{
-		a.trayOpenItem,
-		{
-			Label: "清空未置顶记录",
-			Click: func(*mygo.MenuItem, *mygo.Window) {
-				if a.panel != nil {
-					a.panel.Update(a.clearUnpinned)
-				}
-			},
-		},
-		mygo.Separator(),
-		{
-			Label:   "开机自启动",
-			Type:    mygo.MenuItemCheckbox,
-			Checked: mygo.App.OpenAtLogin(),
-			Click: func(it *mygo.MenuItem, _ *mygo.Window) {
-				if err := mygo.App.SetOpenAtLogin(it.Checked); err != nil {
-					log.Printf("set open at login: %v", err)
-				}
-			},
-		},
-		mygo.Separator(),
-		{Role: mygo.RoleQuit, Label: "退出"},
-	})
-	a.tray.SetMenu(menu)
+	a.updateTrayMenu()
 	a.tray.OnClick(func() { a.togglePanel() })
+	mygo.App.OnLocaleChanged(func(string) {
+		a.updateTrayMenu()
+	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		if a.resizeTimer != nil {
 			a.resizeTimer.Stop()
@@ -389,6 +364,42 @@ func (a *clipApp) setupTray() {
 			a.tray.Destroy()
 		}
 	})
+}
+
+func (a *clipApp) updateTrayMenu() {
+	if a.tray == nil {
+		return
+	}
+	a.trayOpenItem = &mygo.MenuItem{
+		Label:       locales.TrayOpen(),
+		Accelerator: a.shortcut,
+		Click:       func(*mygo.MenuItem, *mygo.Window) { a.showPanel() },
+	}
+	menu := mygo.NewMenu([]*mygo.MenuItem{
+		a.trayOpenItem,
+		{
+			Label: locales.TrayClearUnpinned(),
+			Click: func(*mygo.MenuItem, *mygo.Window) {
+				if a.panel != nil {
+					a.panel.Update(a.clearUnpinned)
+				}
+			},
+		},
+		mygo.Separator(),
+		{
+			Label:   locales.TrayAutostart(),
+			Type:    mygo.MenuItemCheckbox,
+			Checked: mygo.App.OpenAtLogin(),
+			Click: func(it *mygo.MenuItem, _ *mygo.Window) {
+				if err := mygo.App.SetOpenAtLogin(it.Checked); err != nil {
+					log.Printf("set open at login: %v", err)
+				}
+			},
+		},
+		mygo.Separator(),
+		{Role: mygo.RoleQuit, Label: locales.TrayQuit()},
+	})
+	a.tray.SetMenu(menu)
 }
 
 func (a *clipApp) startForegroundTracker() {

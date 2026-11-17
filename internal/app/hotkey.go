@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"mytiez/locales"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -49,11 +51,11 @@ func (a *clipApp) applyHotkey(combo string) {
 				_ = mygo.GlobalShortcut.Register(a.shortcut, a.togglePanel)
 			}
 		}
-		a.settingsNotice = "快捷键 " + combo + " 被占用或不支持，已保持原设置"
+		a.settingsNotice = locales.SettingsHotkeyOccupied(combo)
 		return
 	}
 	a.settings.Hotkey = combo
-	a.settingsNotice = "全局快捷键已更新为 " + combo
+	a.settingsNotice = locales.SettingsHotkeyUpdated(combo)
 	a.persistSettings()
 }
 
@@ -82,12 +84,12 @@ func (a *clipApp) handleHotkeyInput(ev ui.InputEvent) bool {
 		}
 		keyName, ok := keyToAcceleratorName(ev.Key)
 		if !ok {
-			a.settingsNotice = "不支持该按键，请重新按下快捷键"
+			a.settingsNotice = locales.SettingsHotkeyUnsupported()
 			return true
 		}
 		hasPrimaryMod := ev.Mods&(ui.Ctrl|ui.Alt|ui.Super) != 0
 		if !hasPrimaryMod && !isFunctionKey(ev.Key) {
-			a.settingsNotice = "全局快捷键需搭配 Ctrl、Alt 或 Win 键（或使用 F1-F12）"
+			a.settingsNotice = locales.SettingsHotkeyNeedMod()
 			return true
 		}
 		combo := formatHotkey(ev.Mods, keyName)
@@ -98,10 +100,10 @@ func (a *clipApp) handleHotkeyInput(ev ui.InputEvent) bool {
 	}
 }
 
-func recordingHotkeyLabel(mods ui.Modifiers) string {
+func recordingHotkeyLabel(msgs locales.Messages, mods ui.Modifiers) string {
 	parts := modifierParts(mods)
 	if len(parts) == 0 {
-		return "请按下快捷键..."
+		return msgs.SettingsHotkeyPrompt()
 	}
 	return strings.Join(parts, "+") + "+..."
 }

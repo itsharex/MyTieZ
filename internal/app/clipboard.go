@@ -11,6 +11,7 @@ import (
 
 	"mytiez/internal/store"
 	"mytiez/internal/sys"
+	"mytiez/locales"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
@@ -157,7 +158,7 @@ func (a *clipApp) resetSettings() {
 	if a.panel != nil {
 		a.panel.SetSize(a.settings.WindowWidth, a.settings.WindowHeight)
 	}
-	a.settingsNotice = "已恢复默认设置"
+	a.settingsNotice = locales.SettingsResetDone()
 }
 
 func (a *clipApp) pasteSelected() {
@@ -192,7 +193,7 @@ func (a *clipApp) pasteSelected() {
 		}
 	}
 	if a.settings.ClickCopyOnly {
-		a.statusMsg = "已复制到剪贴板"
+		a.statusMsg = locales.StatusCopied()
 		a.statusUntil = time.Now().Add(2 * time.Second)
 		return
 	}

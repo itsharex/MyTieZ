@@ -1,6 +1,6 @@
 {
   "name": "MyTieZ",
-  "identifier": "com.example.mytiez",
+  "identifier": "io.github.llxo.mytiez",
   "version": "0.1.0",
   "out": "build",
   "i18n": {

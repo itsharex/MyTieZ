@@ -179,7 +179,7 @@ func (a *clipApp) pasteSelected() {
 		a.statusUntil = time.Now().Add(2 * time.Second)
 		return
 	}
-	if a.panel != nil {
+	if a.panel != nil && !a.winPinned {
 		a.panel.Hide()
 	}
 	go func() {

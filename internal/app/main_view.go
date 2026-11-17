@@ -242,16 +242,10 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 	c := row.Context
 	t := c.Theme()
 	item := a.items[row.Index]
-	selected := a.selected >= 0 && row.Index == a.selected
 
 	bg := t.Surface
 	borderColor := t.Border
-	var borderWidth float32 = 1
 	switch {
-	case selected:
-		bg = t.Surface.Mix(t.Text, 0.035)
-		borderColor = t.Accent
-		borderWidth = 1.5
 	case row.Pressed():
 		bg = t.SurfacePressed
 		borderColor = t.Border.Mix(t.TextMuted, 0.4)
@@ -269,7 +263,7 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 	}
 
 	card := ui.Column(c).Padding(padTop, padX, padBottom, padX).Gap(gap).Radius(radiusCard).
-		Background(bg).Border(borderWidth, borderColor).Transition(colorTransition).
+		Background(bg).Border(1, borderColor).Transition(colorTransition).
 		Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
 				kindIcon, _ := kindMeta(item.Kind)
@@ -294,6 +288,7 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 				a.renderCardActionBtn(c, iconPaste, "粘贴", false, func() {
 					a.selected = row.Index
 					a.pasteSelected()
+					a.selected = -1
 				})
 				a.renderCardActionBtn(c, iconPin, "置顶", item.Pinned, func() {
 					a.togglePin(item.ID)
@@ -323,10 +318,8 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 
 	if card.RowClicked() {
 		a.selected = row.Index
-	}
-	if card.RowDoubleClicked() {
-		a.selected = row.Index
 		a.pasteSelected()
+		a.selected = -1
 	}
 }
 

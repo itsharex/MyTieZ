@@ -49,6 +49,7 @@ type clipApp struct {
 	ignoreUntil time.Time
 	winPinned   bool
 	pickingApp  bool
+	quitting    bool
 	resizeTimer *time.Timer
 
 	showSettings      bool
@@ -318,9 +319,12 @@ func (a *clipApp) ready() {
 		})
 	})
 	a.panel.OnClose(func(e *mygo.CloseEvent) {
-		e.PreventDefault()
 		a.cancelHotkeyRecording()
 		a.saveWindowSize()
+		if a.quitting || !a.panel.IsVisible() {
+			return
+		}
+		e.PreventDefault()
 		a.hidePanel()
 	})
 	a.panel.OnBlur(func() {
@@ -370,6 +374,12 @@ func (a *clipApp) setupTray() {
 	mygo.App.OnLocaleChanged(func(string) {
 		a.updateTrayMenu()
 	})
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.quitting = true
+	})
+	mygo.App.OnQuitCanceled(func() {
+		a.quitting = false
+	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		if a.resizeTimer != nil {
 			a.resizeTimer.Stop()
@@ -399,25 +409,6 @@ func (a *clipApp) updateTrayMenu() {
 	}
 	menu := mygo.NewMenu([]*mygo.MenuItem{
 		a.trayOpenItem,
-		{
-			Label: locales.TrayClearUnpinned(),
-			Click: func(*mygo.MenuItem, *mygo.Window) {
-				if a.panel != nil {
-					a.panel.Update(a.clearUnpinned)
-				}
-			},
-		},
-		mygo.Separator(),
-		{
-			Label:   locales.TrayAutostart(),
-			Type:    mygo.MenuItemCheckbox,
-			Checked: mygo.App.OpenAtLogin(),
-			Click: func(it *mygo.MenuItem, _ *mygo.Window) {
-				if err := mygo.App.SetOpenAtLogin(it.Checked); err != nil {
-					log.Printf("set open at login: %v", err)
-				}
-			},
-		},
 		mygo.Separator(),
 		{Role: mygo.RoleQuit, Label: locales.TrayQuit()},
 	})

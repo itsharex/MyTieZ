@@ -149,12 +149,25 @@ func TestSettingsViewInteractions(t *testing.T) {
 	if a.settings.Deduplicate {
 		t.Fatal("expected Deduplicate toggled to false")
 	}
+	if !a.settings.CaptureRichText {
+		t.Fatal("expected CaptureRichText to default to true")
+	}
+	if err := tt.Click("切换捕获带格式的文本"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.CaptureRichText {
+		t.Fatal("expected CaptureRichText toggled to false")
+	}
 	if err := tt.Click("上限200"); err != nil {
 		t.Fatal(err)
 	}
 	if a.settings.MaxHistory != 200 {
 		t.Fatalf("expected MaxHistory=200, got %d", a.settings.MaxHistory)
 	}
+	if err := tt.Click("剪贴板设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
 
 	// 展开“界面设置”切换窗口材质，并验证 Vibrancy 模式下渲染正常
 	tt.SetVibrancy(true)

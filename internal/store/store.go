@@ -30,6 +30,7 @@ type ClipItem struct {
 	Kind       ClipKind
 	Hash       string
 	Text       string
+	HTML       string
 	ImagePath  string
 	Files      []string
 	Preview    string
@@ -51,6 +52,7 @@ type Settings struct {
 	Deduplicate      bool   `json:"deduplicate"`
 	MaxHistory       int    `json:"max_history"`
 	CaptureFiles     bool   `json:"capture_files"`
+	CaptureRichText  bool   `json:"capture_rich_text"`
 	ClickCopyOnly    bool   `json:"click_copy_only"`
 	MoveToTopOnPaste bool   `json:"move_to_top_on_paste"`
 	ColorMode        string `json:"color_mode"`    // "system" | "light" | "dark"
@@ -70,6 +72,7 @@ func DefaultSettings() Settings {
 		Deduplicate:      true,
 		MaxHistory:       500,
 		CaptureFiles:     true,
+		CaptureRichText:  true,
 		ClickCopyOnly:    false,
 		MoveToTopOnPaste: true,
 		ColorMode:        "system",
@@ -85,6 +88,7 @@ type SaveOptions struct {
 	MaxHistory  int
 	SourceApp   string
 	SourcePath  string
+	HTML        string
 }
 
 type Store struct {
@@ -149,6 +153,7 @@ CREATE TABLE IF NOT EXISTS clip_items (
 	kind TEXT NOT NULL,
 	content_hash TEXT NOT NULL,
 	text_content TEXT NOT NULL DEFAULT '',
+	html_content TEXT NOT NULL DEFAULT '',
 	image_path TEXT NOT NULL DEFAULT '',
 	files_json TEXT NOT NULL DEFAULT '[]',
 	preview TEXT NOT NULL DEFAULT '',
@@ -255,16 +260,24 @@ func (s *Store) UpsertFiles(paths []string) (ClipItem, error) {
 	return s.SaveFiles(paths, SaveOptions{Deduplicate: true})
 }
 
+func TextContentHash(text, html string) string {
+	if html == "" {
+		return hashBytes([]byte(text))
+	}
+	return hashBytes([]byte(text + "\x00html\x00" + html))
+}
+
 func (s *Store) SaveText(text string, opts SaveOptions) (ClipItem, error) {
 	if strings.TrimSpace(text) == "" {
 		return ClipItem{}, fmt.Errorf("empty text")
 	}
 	return s.save(ClipItem{
 		Kind:     KindText,
-		Hash:     hashBytes([]byte(text)),
+		Hash:     TextContentHash(text, opts.HTML),
 		Text:     text,
+		HTML:     opts.HTML,
 		Preview:  makeTextPreview(text),
-		ByteSize: int64(len(text)),
+		ByteSize: int64(len(text) + len(opts.HTML)),
 	}, opts)
 }
 
@@ -350,9 +363,9 @@ SELECT id, source_app, source_path FROM clip_items WHERE kind = ? AND content_ha
 			}
 			if _, err := s.db.Exec(`
 UPDATE clip_items
-SET text_content = ?, image_path = ?, files_json = ?, preview = ?, source_app = ?, source_path = ?, byte_size = ?, updated_at = ?
+SET text_content = ?, html_content = ?, image_path = ?, files_json = ?, preview = ?, source_app = ?, source_path = ?, byte_size = ?, updated_at = ?
 WHERE id = ?
-`, item.Text, item.ImagePath, filesJSON, item.Preview, keepApp, keepPath, item.ByteSize, now, existingID); err != nil {
+`, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, keepApp, keepPath, item.ByteSize, now, existingID); err != nil {
 				return ClipItem{}, err
 			}
 			targetID = existingID
@@ -363,9 +376,9 @@ WHERE id = ?
 
 	if targetID == 0 {
 		res, err := s.db.Exec(`
-INSERT INTO clip_items (kind, content_hash, text_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-`, string(item.Kind), item.Hash, item.Text, item.ImagePath, filesJSON, item.Preview, sourceApp, sourcePath, item.ByteSize, now, now)
+INSERT INTO clip_items (kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+`, string(item.Kind), item.Hash, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, sourceApp, sourcePath, item.ByteSize, now, now)
 		if err != nil {
 			return ClipItem{}, err
 		}
@@ -380,7 +393,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 	}
 
 	row := s.db.QueryRow(`
-SELECT id, kind, content_hash, text_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at
+SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at
 FROM clip_items WHERE id = ?
 `, targetID)
 	return scanItem(row)
@@ -411,10 +424,10 @@ func (s *Store) List(query string, kind ClipKind, limit int) ([]ClipItem, error)
 	args = append(args, limit)
 
 	rows, err := s.db.Query(`
-SELECT id, kind, content_hash, text_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at
+SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at
 FROM clip_items
 `+where+`
-ORDER BY pinned DESC, updated_at DESC
+ORDER BY pinned DESC, updated_at DESC, id DESC
 LIMIT ?
 `, args...)
 	if err != nil {
@@ -521,6 +534,7 @@ func scanItem(r rowScanner) (ClipItem, error) {
 		&kindStr,
 		&it.Hash,
 		&it.Text,
+		&it.HTML,
 		&it.ImagePath,
 		&filesJSON,
 		&it.Preview,

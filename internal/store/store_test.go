@@ -204,3 +204,34 @@ func TestWindowSizeSettingsFallback(t *testing.T) {
 		t.Fatalf("expected fallback window size 420x600, got %dx%d", loaded.WindowWidth, loaded.WindowHeight)
 	}
 }
+
+func TestSaveRichTextHTML(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	plain, err := st.SaveText("Hello", SaveOptions{Deduplicate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rich, err := st.SaveText("Hello", SaveOptions{
+		Deduplicate: true,
+		HTML:        "<b>Hello</b>",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rich.ID == plain.ID || rich.HTML != "<b>Hello</b>" {
+		t.Fatalf("expected separate rich text item with HTML preserved, got id=%d (plain=%d), html=%q", rich.ID, plain.ID, rich.HTML)
+	}
+
+	items, err := st.List("", KindText, 10)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("expected 2 text items, got %d, err=%v", len(items), err)
+	}
+	if items[0].HTML != "<b>Hello</b>" || items[0].Preview != "Hello" {
+		t.Fatalf("unexpected rich item fields: html=%q preview=%q", items[0].HTML, items[0].Preview)
+	}
+}

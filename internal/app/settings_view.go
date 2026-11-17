@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -21,8 +22,8 @@ func (a *clipApp) settingsView(c *ui.Context) {
 	t := c.Theme()
 
 	ui.Column(c.Key("settings-page")).Fill().Children(func() {
-		// 设置页顶部导航栏（与主页顶栏同构：外层 Padding(10, 16) + 内层 Height(36)）
-		ui.Column(c).FillWidth().Padding(10, 16).Children(func() {
+		// 设置页顶部导航栏（与主页顶栏同构）
+		ui.Column(c).FillWidth().Padding(8, 16, 4, 16).Children(func() {
 			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(8).DragWindow().Children(func() {
 				a.renderHeaderIconBtn(c, iconBack, "返回", false, false, func() {
 					a.showSettings = false
@@ -30,16 +31,18 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.settingsNotice = ""
 				})
 
-				ui.Text(c, "设置").FontSize(22).Bold().TextColor(t.Text)
+				ui.Text(c, "设置").FontSize(18).Bold().TextColor(t.Text)
 				ui.Box(c).Grow(1)
-				a.renderWindowActionButtons(c)
+				ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
+					a.renderWindowActionButtons(c)
+				})
 			})
 		})
 
 		ui.Divider(c)
 
 		ui.Scroll(c.Key("settings-scroll")).Grow(1).Children(func() {
-			ui.Column(c).FillWidth().Padding(12, 12, 16, 12).Gap(8).Children(func() {
+			ui.Column(c).FillWidth().Padding(18, 12, 18, 12).Gap(10).Children(func() {
 				if a.settingsNotice != "" {
 					ui.Text(c, a.settingsNotice).FontSize(13).TextColor(t.Accent).
 						FillWidth().Padding(10, 14).Radius(radiusGroup).
@@ -91,6 +94,9 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, "记录文件路径", "", &a.settings.CaptureFiles, func(bool) {
 						a.persistSettings()
 					})
+					a.renderSwitchRow(c, "捕获带格式的文本", "", &a.settings.CaptureRichText, func(bool) {
+						a.persistSettings()
+					})
 					a.renderChoiceGroup(c, "保留历史上限", []choiceOption{
 						{label: "200", a11y: "上限200", active: a.settings.MaxHistory == 200, onClick: func() { a.setMaxHistory(200) }},
 						{label: "500", a11y: "上限500", active: a.settings.MaxHistory == 500, onClick: func() { a.setMaxHistory(500) }},
@@ -130,11 +136,11 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					}
 					a.renderSettingRow(c, "本地存储目录", dataDir, func() {
 						btn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label("打开目录")
-						bg := t.SurfaceHover
+						bg := t.Surface
 						if btn.Hovered() {
-							bg = t.SurfacePressed
+							bg = t.SurfaceHover
 						}
-						btn.Background(bg).Border(1, t.Border.Alpha(0.6)).Transition(colorTransition).
+						btn.Background(bg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 							OnClick(func() {
 								if dataDir != "" {
 									if err := mygo.Shell.OpenPath(dataDir); err != nil {
@@ -143,7 +149,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 								}
 							}).
 							Children(func() {
-								ui.Text(c, "打开目录").FontSize(13.5).TextColor(t.Text)
+								ui.Text(c, "打开目录").FontSize(13).FontWeight(600).TextColor(t.Text)
 							})
 					})
 					a.renderConfirmActionRow(c, "清空未置顶记录", "", "clear_unpinned", "清空", "确认清空", func() {
@@ -234,13 +240,9 @@ func (a *clipApp) renderSettingsGroup(c *ui.Context, title string, expanded *boo
 	ui.Column(c).FillWidth().Radius(radiusGroup).Clip().Background(t.Surface).Border(1, t.Border.Alpha(0.45)).Children(func() {
 		p := ui.CollapsibleBase(c, expanded)
 		tr := p.Trigger.FillWidth().MinHeight(settingGroupMinH).Padding(0, 16).Justify(ui.SpaceBetween).AlignItems(ui.Center).Label(title)
-		bg := t.Surface
-		if tr.Hovered() {
-			bg = t.SurfaceHover
-		}
-		tr.Background(bg).Transition(colorTransition).Children(func() {
-			ui.Text(c, title).FontSize(15).Bold().TextColor(t.Text)
-			ui.Icon(c, iconChevronRight).FontSize(18).TextColor(t.TextMuted).Rotate(90 * p.Progress())
+		tr.Background(t.Surface).Children(func() {
+			ui.Text(c, title).FontSize(15).FontWeight(700).TextColor(t.Text)
+			ui.Icon(c, iconChevronRight).FontSize(17).TextColor(t.TextMuted).Rotate(90 * p.Progress())
 		})
 
 		if panel := p.Panel(func() {
@@ -256,9 +258,9 @@ func (a *clipApp) renderSettingRow(c *ui.Context, title, desc string, control fu
 	t := c.Theme()
 	ui.Row(c).FillWidth().MinHeight(44).Padding(8, 16).Gap(16).AlignItems(ui.Center).Children(func() {
 		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			ui.Text(c, title).FontSize(14).FontWeight(500).TextColor(t.Text)
+			ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(t.Text)
 			if desc != "" {
-				ui.Text(c, desc).FontSize(12.5).TextColor(t.TextMuted).Wrap().MaxLines(2)
+				ui.Text(c, desc).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
 			}
 		})
 		control()
@@ -268,7 +270,7 @@ func (a *clipApp) renderSettingRow(c *ui.Context, title, desc string, control fu
 func (a *clipApp) renderChoiceGroup(c *ui.Context, title string, opts []choiceOption) {
 	t := c.Theme()
 	ui.Column(c).FillWidth().Padding(8, 16).Gap(8).Children(func() {
-		ui.Text(c, title).FontSize(14).FontWeight(500).TextColor(t.Text)
+		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(t.Text)
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
 			for _, opt := range opts {
 				a.renderChoicePill(c, opt.label, opt.a11y, opt.active, opt.onClick)
@@ -279,7 +281,7 @@ func (a *clipApp) renderChoiceGroup(c *ui.Context, title string, opts []choiceOp
 
 func (a *clipApp) renderSwitchRow(c *ui.Context, title, desc string, val *bool, onChanged func(bool)) {
 	a.renderSettingRow(c, title, desc, func() {
-		if ui.Switch(c, val).Label("切换" + title).Changed() {
+		if a.renderSwitch(c, val, "切换"+title) {
 			a.confirmAction = ""
 			if onChanged != nil {
 				onChanged(*val)
@@ -288,10 +290,45 @@ func (a *clipApp) renderSwitchRow(c *ui.Context, title, desc string, val *bool, 
 	})
 }
 
+func (a *clipApp) renderSwitch(c *ui.Context, val *bool, label string) bool {
+	t := c.Theme()
+	sw := ui.SwitchBase(c, val).Size(38, 21).Radius(10.5).Label(label)
+	pos := sw.Animate("knob", b2f(*val), 140*time.Millisecond)
+
+	offBg := t.Border.Mix(t.Accent, 0.08)
+	if t.Dark {
+		offBg = t.Text.Alpha(0.18)
+	}
+	onBg := t.Accent
+	if sw.Hovered() {
+		onBg = t.AccentHover
+	}
+	if pos > 0 {
+		sw.Background(offBg.Mix(onBg, pos))
+	} else {
+		sw.Background(offBg)
+	}
+	sw.Draw(func(p *ui.Painter, r ui.Rect) {
+		const inset float32 = 2.5
+		d := r.H - 2*inset
+		knob := ui.Rect{X: r.X + inset + pos*(r.W-r.H), Y: r.Y + inset, W: d, H: d}
+		p.Shadow(knob, d/2, 0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.16))
+		p.Fill(knob, ui.RGB(255, 255, 255), d/2)
+	})
+	return sw.Changed()
+}
+
+func b2f(b bool) float32 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel string, active bool, onClick func()) {
 	t := c.Theme()
-	pill := ui.ButtonBase(c).Grow(1).Height(34).Center().Radius(radiusGroup).Label(a11yLabel)
-	bg, border, fg := t.Background, t.Border.Alpha(0.55), t.Text
+	pill := ui.ButtonBase(c).Grow(1).Height(32).Center().Radius(radiusGroup).Label(a11yLabel)
+	bg, border, fg := t.Surface, t.Border.Alpha(0.65), t.Text
 	if active {
 		bg = t.Accent
 		border = t.Accent
@@ -306,7 +343,7 @@ func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel string, active
 			onClick()
 		}).
 		Children(func() {
-			ui.Text(c, text).FontSize(13.5).FontWeight(600).TextColor(fg)
+			ui.Text(c, text).FontSize(13).FontWeight(600).TextColor(fg)
 		})
 }
 
@@ -314,7 +351,7 @@ func (a *clipApp) renderConfirmActionRow(c *ui.Context, title, desc, actionKey, 
 	t := c.Theme()
 	confirming := a.confirmAction == actionKey
 	text := label
-	bg, border, fg := t.SurfaceHover, t.Border, t.Text
+	bg, border, fg := t.Surface, t.Border.Alpha(0.7), t.Text
 	if confirming {
 		text = confirmLabel
 		bg = t.Surface.Mix(t.Danger, 0.12)
@@ -324,7 +361,8 @@ func (a *clipApp) renderConfirmActionRow(c *ui.Context, title, desc, actionKey, 
 	a.renderSettingRow(c, title, desc, func() {
 		btn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusControl).Label(title)
 		if btn.Hovered() && !confirming {
-			bg = t.SurfacePressed
+			bg = t.SurfaceHover
+			border = t.Border
 		}
 		btn.Background(bg).Border(1, border).Transition(colorTransition).
 			OnClick(func() {
@@ -336,7 +374,7 @@ func (a *clipApp) renderConfirmActionRow(c *ui.Context, title, desc, actionKey, 
 				onConfirm()
 			}).
 			Children(func() {
-				ui.Text(c, text).FontSize(14).TextColor(fg)
+				ui.Text(c, text).FontSize(13).FontWeight(600).TextColor(fg)
 			})
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -192,6 +193,12 @@ func (a *clipApp) pasteSelected() {
 func writeClipItem(item store.ClipItem) error {
 	switch item.Kind {
 	case store.KindText:
+		if item.HTML != "" {
+			return mygo.Clipboard.Write(transfer.New(transfer.NewItem(
+				transfer.Bytes(transfer.Text, []byte(item.Text)),
+				transfer.Bytes(transfer.HTML, []byte(item.HTML)),
+			)))
+		}
 		return mygo.Clipboard.Write(transfer.New(transfer.NewItem(
 			transfer.Bytes(transfer.Text, []byte(item.Text)),
 		)))
@@ -215,7 +222,7 @@ func (a *clipApp) onClipboardChanged() {
 	if len(formats) == 0 {
 		return
 	}
-	pref, ok := transfer.PreferredFormat(formats, transfer.FileList, transfer.URIList, transfer.PNG, transfer.Text)
+	pref, ok := transfer.PreferredFormat(formats, transfer.FileList, transfer.URIList, transfer.PNG, transfer.HTML, transfer.Text)
 	if !ok {
 		return
 	}
@@ -255,7 +262,7 @@ func (a *clipApp) onClipboardChanged() {
 			it, err := a.store.SaveImage(data, opts)
 			return it.Hash, err
 		})
-	case transfer.Text:
+	case transfer.HTML, transfer.Text:
 		data, err := mygo.Clipboard.ReadFormat(transfer.Text)
 		if err != nil || len(data) == 0 {
 			return
@@ -264,11 +271,17 @@ func (a *clipApp) onClipboardChanged() {
 		if strings.TrimSpace(text) == "" {
 			return
 		}
-		sum := sha256.Sum256([]byte(text))
-		h := hex.EncodeToString(sum[:])
+		var htmlStr string
+		if a.settings.CaptureRichText && slices.Contains(formats, transfer.HTML) {
+			if htmlData, err := mygo.Clipboard.ReadFormat(transfer.HTML); err == nil && len(htmlData) > 0 {
+				htmlStr = string(htmlData)
+			}
+		}
+		h := store.TextContentHash(text, htmlStr)
 		if a.shouldIgnore(h) {
 			return
 		}
+		opts.HTML = htmlStr
 		a.saveAsync(func() (string, error) {
 			it, err := a.store.SaveText(text, opts)
 			return it.Hash, err

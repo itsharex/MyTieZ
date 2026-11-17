@@ -14,6 +14,7 @@ var availableHotkeys = []string{"Alt+V", "Ctrl+Shift+V", "Alt+Shift+V", "Ctrl+Al
 type settingsGroupExpanded struct {
 	general    bool
 	clipboard  bool
+	openApps   bool
 	appearance bool
 	data       bool
 }
@@ -111,7 +112,14 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					})
 				})
 
-				// 3. 界面设置
+				// 3. 打开方式
+				a.renderSettingsGroup(c, "打开方式", &a.expanded.openApps, func() {
+					a.renderOpenAppRow(c, "文本", &a.settings.OpenAppText)
+					a.renderOpenAppRow(c, "富文本", &a.settings.OpenAppRichText)
+					a.renderOpenAppRow(c, "图片", &a.settings.OpenAppImage)
+				})
+
+				// 4. 界面设置
 				a.renderSettingsGroup(c, "界面设置", &a.expanded.appearance, func() {
 					a.renderChoiceGroup(c, "窗口材质", []choiceOption{
 						{label: "云母", a11y: "材质云母", active: a.settings.BackdropMode == "mica", onClick: func() { a.setBackdropMode("mica") }},
@@ -379,5 +387,48 @@ func (a *clipApp) renderConfirmActionRow(c *ui.Context, title, desc, actionKey, 
 			Children(func() {
 				ui.Text(c, text).FontSize(13).FontWeight(600).TextColor(fg)
 			})
+	})
+}
+
+func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) {
+	t := c.Theme()
+	current := ""
+	if target != nil {
+		current = *target
+	}
+	a.renderSettingRow(c, title, openAppDisplayName(current), func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+			if current != "" {
+				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label("恢复" + title + "默认打开方式")
+				rBg := t.Surface
+				if resetBtn.Hovered() {
+					rBg = t.SurfaceHover
+				}
+				resetBtn.Background(rBg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+					OnClick(func() {
+						if target != nil {
+							*target = ""
+							a.settingsNotice = title + "已恢复为系统默认打开方式"
+							a.persistSettings()
+						}
+					}).
+					Children(func() {
+						ui.Text(c, "恢复默认").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+					})
+			}
+
+			pickBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label("选择" + title + "打开程序")
+			pBg := t.Surface
+			if pickBtn.Hovered() {
+				pBg = t.SurfaceHover
+			}
+			pickBtn.Background(pBg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+				OnClick(func() {
+					a.pickOpenApp(title, target)
+				}).
+				Children(func() {
+					ui.Text(c, "选择程序").FontSize(13).FontWeight(600).TextColor(t.Text)
+				})
+		})
 	})
 }

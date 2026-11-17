@@ -36,6 +36,7 @@ type clipApp struct {
 	ignoreHash  string
 	ignoreUntil time.Time
 	winPinned   bool
+	pickingApp  bool
 	resizeTimer *time.Timer
 
 	showSettings      bool
@@ -235,7 +236,7 @@ func (a *clipApp) ready() {
 		a.panel.Hide()
 	})
 	a.panel.OnBlur(func() {
-		if !a.winPinned {
+		if !a.winPinned && !a.pickingApp {
 			a.saveWindowSize()
 			a.panel.Hide()
 		}

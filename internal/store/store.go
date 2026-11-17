@@ -60,6 +60,9 @@ type Settings struct {
 	BackdropMode     string `json:"backdrop_mode"` // "mica" | "acrylic" | "solid"
 	CompactMode      bool   `json:"compact_mode"`
 	HideCardActions  bool   `json:"hide_card_actions"`
+	OpenAppText      string `json:"open_app_text"`
+	OpenAppRichText  string `json:"open_app_rich_text"`
+	OpenAppImage     string `json:"open_app_image"`
 	WindowWidth      int    `json:"window_width"`
 	WindowHeight     int    `json:"window_height"`
 }

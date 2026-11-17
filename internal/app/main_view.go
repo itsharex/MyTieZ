@@ -302,10 +302,8 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 				ui.Box(c).Grow(1)
 
 				if !a.settings.HideCardActions || hovered {
-					a.renderCardActionBtn(c, iconPaste, "粘贴", false, func() {
-						a.selected = row.Index
-						a.pasteSelected()
-						a.selected = -1
+					a.renderCardActionBtn(c, iconOpen, "打开", false, func() {
+						a.openItem(item)
 					})
 					a.renderCardActionBtn(c, iconPin, "置顶", item.Pinned, func() {
 						a.togglePin(item.ID)

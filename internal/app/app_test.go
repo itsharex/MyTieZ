@@ -169,6 +169,26 @@ func TestSettingsViewInteractions(t *testing.T) {
 	}
 	tt.Advance(250 * time.Millisecond)
 
+	// 展开“打开方式”，验证默认显示与恢复默认交互
+	a.settings.OpenAppText = `C:\Windows\System32\notepad.exe`
+	if err := tt.Click("打开方式"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if !a.expanded.openApps || !tt.HasText("notepad") || !tt.HasText("系统默认") {
+		t.Fatalf("expected openApps group expanded with notepad and 系统默认, texts=%q", tt.Texts())
+	}
+	if err := tt.Click("恢复文本默认打开方式"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.OpenAppText != "" {
+		t.Fatalf("expected OpenAppText cleared after reset, got %q", a.settings.OpenAppText)
+	}
+	if err := tt.Click("打开方式"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+
 	// 展开“界面设置”切换窗口材质，并验证 Vibrancy 模式下渲染正常
 	tt.SetVibrancy(true)
 	if err := tt.Click("界面设置"); err != nil {
@@ -349,5 +369,20 @@ func TestRichTextPreviewAndFilter(t *testing.T) {
 	}
 	if tt.HasText("plain only item") || !tt.HasText("Bold") {
 		t.Fatalf("expected only rich_text item visible, texts=%q", tt.Texts())
+	}
+}
+
+func TestOpenHelpers(t *testing.T) {
+	if !isHTTPURL("https://example.com/a?b=1") || !isHTTPURL("http://localhost:8080") {
+		t.Fatal("expected http/https URLs to be recognized")
+	}
+	if isHTTPURL("not a url") || isHTTPURL("https://example.com\nsecond") || isHTTPURL("ftp://example.com") {
+		t.Fatal("expected non-http or multiline text not to be recognized as http URL")
+	}
+	if got := openAppDisplayName(""); got != "系统默认" {
+		t.Fatalf("expected empty app path to display 系统默认, got %q", got)
+	}
+	if got := openAppDisplayName(`C:\Program Files\Notepad++\notepad++.exe`); got != "notepad++" {
+		t.Fatalf("expected exe suffix stripped, got %q", got)
 	}
 }

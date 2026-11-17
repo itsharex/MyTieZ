@@ -36,11 +36,11 @@ type Messages struct{ locale string }
 // source language.
 func In(locale string) Messages { return Messages{locale} }
 
-// TrayTooltip says "MyTieZ 剪贴板"
+// TrayTooltip says "MyTieZ"
 // in the language the app shows.
 func TrayTooltip() string { return In(i18n.Locale()).TrayTooltip() }
 
-// TrayTooltip says "MyTieZ 剪贴板"
+// TrayTooltip says "MyTieZ"
 // in the language of msgs.
 func (msgs Messages) TrayTooltip() string {
 	return Catalog.Format(msgs.locale, "trayTooltip", nil)

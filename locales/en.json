@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
 
-  "trayTooltip": "MyTieZ Clipboard",
+  "trayTooltip": "MyTieZ",
   "trayOpen": "Open Clipboard",
   "trayClearUnpinned": "Clear Unpinned",
   "trayAutostart": "Launch at Login",

@@ -1,7 +1,7 @@
 {
   "@@locale": "zh-Hant",
 
-  "trayTooltip": "MyTieZ 剪貼簿",
+  "trayTooltip": "MyTieZ",
   "trayOpen": "開啟剪貼簿",
   "trayClearUnpinned": "清空未釘選紀錄",
   "trayAutostart": "開機自動啟動",

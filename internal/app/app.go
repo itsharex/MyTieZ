@@ -26,9 +26,14 @@ type clipApp struct {
 	query        string
 	filterIdx    int // 0: 全部, 1: 文本, 2: 图片, 3: 文件
 	selected     int
-	list         ui.ListState
-	listScroll   ui.ScrollState
-	searchHandle ui.Handle
+	list           ui.ListState
+	listScroll     ui.ScrollState
+	searchHandle   ui.Handle
+	editingTagsID   int64
+	tagInput        string
+	tagInputHandle  ui.Handle
+	tagFocusPending bool
+	allTags         []string
 
 	thumbs   *bitmapCache
 	appIcons *bitmapCache

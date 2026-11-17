@@ -11,6 +11,7 @@ import (
 	_ "image/png"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ type ClipItem struct {
 	SourcePath string
 	ByteSize   int64
 	Pinned     bool
+	Tags       []string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
@@ -167,6 +169,7 @@ CREATE TABLE IF NOT EXISTS clip_items (
 	source_path TEXT NOT NULL DEFAULT '',
 	byte_size INTEGER NOT NULL DEFAULT 0,
 	pinned INTEGER NOT NULL DEFAULT 0,
+	tags_json TEXT NOT NULL DEFAULT '[]',
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL
 );
@@ -177,7 +180,34 @@ CREATE TABLE IF NOT EXISTS app_settings (
 	value TEXT NOT NULL
 );
 `
-	_, err := db.Exec(schema)
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+	return ensureColumn(db, "clip_items", "tags_json", "TEXT NOT NULL DEFAULT '[]'")
+}
+
+func ensureColumn(db *sql.DB, table, col, def string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == col {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + col + " " + def)
 	return err
 }
 
@@ -403,7 +433,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 	}
 
 	row := s.db.QueryRow(`
-SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at
+SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at
 FROM clip_items WHERE id = ?
 `, targetID)
 	return scanItem(row)
@@ -420,11 +450,16 @@ func (s *Store) List(query string, kind ClipKind, limit int) ([]ClipItem, error)
 		conds = append(conds, "kind = ?")
 		args = append(args, string(kind))
 	}
-	q := strings.TrimSpace(query)
-	if q != "" {
-		like := "%" + q + "%"
-		conds = append(conds, "(text_content LIKE ? OR preview LIKE ? OR files_json LIKE ? OR source_app LIKE ?)")
-		args = append(args, like, like, like, like)
+	tagFilters, kw := splitQueryTags(query)
+	for _, tag := range tagFilters {
+		conds = append(conds, "tags_json LIKE ?")
+		encoded, _ := json.Marshal(tag)
+		args = append(args, "%"+string(encoded)+"%")
+	}
+	if kw != "" {
+		like := "%" + kw + "%"
+		conds = append(conds, "(text_content LIKE ? OR preview LIKE ? OR files_json LIKE ? OR source_app LIKE ? OR tags_json LIKE ?)")
+		args = append(args, like, like, like, like, like)
 	}
 
 	where := ""
@@ -434,7 +469,7 @@ func (s *Store) List(query string, kind ClipKind, limit int) ([]ClipItem, error)
 	args = append(args, limit)
 
 	rows, err := s.db.Query(`
-SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at
+SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at
 FROM clip_items
 `+where+`
 ORDER BY pinned DESC, updated_at DESC, id DESC
@@ -470,6 +505,96 @@ func (s *Store) TogglePin(id int64) (bool, error) {
 		return false, err
 	}
 	return pinned != 0, nil
+}
+
+func normalizeTags(tags []string) []string {
+	seen := make(map[string]struct{}, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, raw := range tags {
+		t := strings.TrimSpace(raw)
+		if t == "" {
+			continue
+		}
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	return out
+}
+
+func (s *Store) UpdateTags(id int64, tags []string) ([]string, error) {
+	cleaned := normalizeTags(tags)
+	raw := "[]"
+	if len(cleaned) > 0 {
+		b, err := json.Marshal(cleaned)
+		if err != nil {
+			return nil, err
+		}
+		raw = string(b)
+	}
+	if _, err := s.db.Exec(`UPDATE clip_items SET tags_json = ? WHERE id = ?`, raw, id); err != nil {
+		return nil, err
+	}
+	return cleaned, nil
+}
+
+func (s *Store) ListAllTags() ([]string, error) {
+	rows, err := s.db.Query(`SELECT tags_json FROM clip_items WHERE tags_json != '[]' AND tags_json != ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var tags []string
+		if err := json.Unmarshal([]byte(raw), &tags); err != nil {
+			continue
+		}
+		for _, t := range tags {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				counts[t]++
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]string, 0, len(counts))
+	for t := range counts {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if counts[out[i]] != counts[out[j]] {
+			return counts[out[i]] > counts[out[j]]
+		}
+		return out[i] < out[j]
+	})
+	return out, nil
+}
+
+func splitQueryTags(query string) (tags []string, keyword string) {
+	fields := strings.Fields(strings.TrimSpace(query))
+	if len(fields) == 0 {
+		return nil, ""
+	}
+	var words []string
+	for _, f := range fields {
+		if strings.HasPrefix(f, "#") && len(f) > 1 {
+			tags = append(tags, strings.TrimPrefix(f, "#"))
+		} else {
+			words = append(words, f)
+		}
+	}
+	return tags, strings.Join(words, " ")
 }
 
 func (s *Store) Delete(id int64) error {
@@ -536,7 +661,7 @@ type rowScanner interface {
 
 func scanItem(r rowScanner) (ClipItem, error) {
 	var it ClipItem
-	var kindStr, filesJSON string
+	var kindStr, filesJSON, tagsJSON string
 	var pinnedInt int
 	var createdMs, updatedMs int64
 	if err := r.Scan(
@@ -552,6 +677,7 @@ func scanItem(r rowScanner) (ClipItem, error) {
 		&it.SourcePath,
 		&it.ByteSize,
 		&pinnedInt,
+		&tagsJSON,
 		&createdMs,
 		&updatedMs,
 	); err != nil {
@@ -563,6 +689,9 @@ func scanItem(r rowScanner) (ClipItem, error) {
 	it.UpdatedAt = time.UnixMilli(updatedMs)
 	if filesJSON != "" && filesJSON != "[]" {
 		_ = json.Unmarshal([]byte(filesJSON), &it.Files)
+	}
+	if tagsJSON != "" && tagsJSON != "[]" {
+		_ = json.Unmarshal([]byte(tagsJSON), &it.Tags)
 	}
 	return it, nil
 }

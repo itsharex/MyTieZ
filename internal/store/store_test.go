@@ -235,3 +235,48 @@ func TestSaveRichTextHTML(t *testing.T) {
 		t.Fatalf("unexpected rich item fields: html=%q preview=%q", items[0].HTML, items[0].Preview)
 	}
 }
+
+func TestTagsCRUDAndFilter(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a, err := st.UpsertText("alpha snippet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := st.UpsertText("beta snippet")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tags, err := st.UpdateTags(a.ID, []string{" 工作 ", "代码", "工作", ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) != 2 || tags[0] != "工作" || tags[1] != "代码" {
+		t.Fatalf("unexpected normalized tags: %#v", tags)
+	}
+	if _, err := st.UpdateTags(b.ID, []string{"工作"}); err != nil {
+		t.Fatal(err)
+	}
+
+	allTags, err := st.ListAllTags()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allTags) != 2 || allTags[0] != "工作" || allTags[1] != "代码" {
+		t.Fatalf("expected allTags ordered by frequency [工作 代码], got %#v", allTags)
+	}
+
+	got, err := st.List("#代码", "", 10)
+	if err != nil || len(got) != 1 || got[0].ID != a.ID {
+		t.Fatalf("expected #代码 filter to return item a only, got %+v err=%v", got, err)
+	}
+	got, err = st.List("#工作 beta", "", 10)
+	if err != nil || len(got) != 1 || got[0].ID != b.ID {
+		t.Fatalf("expected #工作 beta filter to return item b only, got %+v err=%v", got, err)
+	}
+}

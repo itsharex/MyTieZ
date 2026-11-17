@@ -386,3 +386,52 @@ func TestOpenHelpers(t *testing.T) {
 		t.Fatalf("expected exe suffix stripped, got %q", got)
 	}
 }
+
+func TestCardTagsInteractions(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	if _, err := st.UpsertText("first tagged entry"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("second plain entry"); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	// 打开第 0 张卡片（second plain entry）的标签编辑器并添加标签
+	if err := tt.Click("标签"); err != nil {
+		t.Fatal(err)
+	}
+	if a.editingTagsID == 0 || !tt.HasText("添加") {
+		t.Fatalf("expected inline tag editor visible, editingTagsID=%d texts=%q", a.editingTagsID, tt.Texts())
+	}
+	if err := tt.Click("标签输入框"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("工作")
+	tt.Key(0, ui.KeyEnter)
+	if len(a.items[0].Tags) != 1 || a.items[0].Tags[0] != "工作" {
+		t.Fatalf("expected tag 工作 added on Enter, got %#v", a.items[0].Tags)
+	}
+
+	// 完成编辑后点击标签胶囊按 #工作 筛选
+	if err := tt.Click("完成标签编辑"); err != nil {
+		t.Fatal(err)
+	}
+	if a.editingTagsID != 0 {
+		t.Fatalf("expected editingTagsID=0 after done, got %d", a.editingTagsID)
+	}
+	if err := tt.Click("#工作"); err != nil {
+		t.Fatal(err)
+	}
+	if a.query != "#工作" || !tt.HasText("second plain entry") || tt.HasText("first tagged entry") {
+		t.Fatalf("expected tag filter #工作 to show only tagged item, query=%q texts=%q", a.query, tt.Texts())
+	}
+}

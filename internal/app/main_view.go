@@ -88,7 +88,10 @@ func (a *clipApp) view(c *ui.Context) {
 		return
 	}
 
-	if a.query != "" && c.Shortcut(0, ui.KeyEscape) {
+	if a.editingTagsID != 0 && c.Shortcut(0, ui.KeyEscape) {
+		a.editingTagsID = 0
+		a.tagInput = ""
+	} else if a.query != "" && c.Shortcut(0, ui.KeyEscape) {
 		a.query = ""
 		a.reload()
 	} else if a.selected >= 0 && c.Shortcut(0, ui.KeyEscape) {
@@ -305,6 +308,9 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 					a.renderCardActionBtn(c, iconOpen, "打开", false, func() {
 						a.openItem(item)
 					})
+					a.renderCardActionBtn(c, iconTag, "标签", len(item.Tags) > 0 || a.editingTagsID == item.ID, func() {
+						a.toggleTagEditor(item.ID)
+					})
 					a.renderCardActionBtn(c, iconPin, "置顶", item.Pinned, func() {
 						a.togglePin(item.ID)
 					})
@@ -336,6 +342,8 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 			case store.KindFile:
 				a.renderFilesPreview(c, item)
 			}
+
+			a.renderCardTags(c, t, item)
 		})
 
 	if card.RowClicked() {

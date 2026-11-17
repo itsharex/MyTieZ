@@ -46,6 +46,9 @@ func (a *clipApp) reload() {
 		return
 	}
 	a.items = items
+	if tags, err := a.store.ListAllTags(); err == nil {
+		a.allTags = tags
+	}
 	if len(a.items) == 0 {
 		a.selected = -1
 	} else if a.selected >= len(a.items) {

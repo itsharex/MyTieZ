@@ -63,6 +63,7 @@ type Settings struct {
 	ClickCopyOnly      bool   `json:"click_copy_only"`
 	MoveToTopOnPaste   bool   `json:"move_to_top_on_paste"`
 	DeleteAfterPaste   bool   `json:"delete_after_paste"`
+	PasteMethod        string `json:"paste_method"`         // "shift_insert" | "ctrl_v" | "game_mode"
 	QuickPasteModifier string `json:"quick_paste_modifier"` // "none" | "alt" | "ctrl"
 	ColorMode          string `json:"color_mode"`           // "system" | "light" | "dark"
 	BackdropMode       string `json:"backdrop_mode"`        // "mica" | "acrylic" | "solid"
@@ -92,6 +93,7 @@ func DefaultSettings() Settings {
 		ClickCopyOnly:      false,
 		MoveToTopOnPaste:   true,
 		DeleteAfterPaste:   false,
+		PasteMethod:        "shift_insert",
 		QuickPasteModifier: "none",
 		ColorMode:          "system",
 		BackdropMode:       "solid",
@@ -255,6 +257,9 @@ func (s *Store) LoadSettings() (Settings, error) {
 	}
 	if cfg.BackdropMode != "mica" && cfg.BackdropMode != "acrylic" && cfg.BackdropMode != "solid" {
 		cfg.BackdropMode = "solid"
+	}
+	if cfg.PasteMethod != "shift_insert" && cfg.PasteMethod != "ctrl_v" && cfg.PasteMethod != "game_mode" {
+		cfg.PasteMethod = "shift_insert"
 	}
 	if cfg.QuickPasteModifier != "none" && cfg.QuickPasteModifier != "alt" && cfg.QuickPasteModifier != "ctrl" {
 		cfg.QuickPasteModifier = "none"

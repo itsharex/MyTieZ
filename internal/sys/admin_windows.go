@@ -8,12 +8,19 @@ import (
 	"path/filepath"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 var (
 	shell32           = syscall.NewLazyDLL("shell32.dll")
 	procShellExecuteW = shell32.NewProc("ShellExecuteW")
 )
+
+// IsAdmin reports whether the current process is running with elevated privileges.
+func IsAdmin() bool {
+	return windows.GetCurrentProcessToken().IsElevated()
+}
 
 // RestartAsAdmin launches a new elevated instance of the current executable via UAC.
 func RestartAsAdmin() error {

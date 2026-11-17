@@ -133,6 +133,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, msgs.SettingsDeleteAfterPaste(), "", &a.settings.DeleteAfterPaste, func(bool) {
 						a.persistSettings()
 					})
+					a.renderPasteMethodGroup(c, msgs)
 					a.renderChoiceGroup(c, msgs.SettingsQuickPaste(), []choiceOption{
 						{label: msgs.SettingsQuickPasteOff(), a11y: msgs.SettingsQuickPasteOffA11y(), active: a.settings.QuickPasteModifier == "none", onClick: func() { a.setQuickPasteModifier("none") }},
 						{label: "Alt+1~9", a11y: msgs.SettingsQuickPasteAltA11y(), active: a.settings.QuickPasteModifier == "alt", onClick: func() { a.setQuickPasteModifier("alt") }},
@@ -274,6 +275,38 @@ func (a *clipApp) setBackdropMode(mode string) {
 func (a *clipApp) setQuickPasteModifier(mod string) {
 	a.settings.QuickPasteModifier = mod
 	a.persistSettings()
+}
+
+func (a *clipApp) setPasteMethod(method string) {
+	a.settings.PasteMethod = method
+	a.persistSettings()
+}
+
+func (a *clipApp) renderPasteMethodGroup(c *ui.Context, msgs locales.Messages) {
+	t := c.Theme()
+	desc := msgs.SettingsPasteMethodShiftInsertDesc()
+	switch a.settings.PasteMethod {
+	case "ctrl_v":
+		desc = msgs.SettingsPasteMethodCtrlVDesc()
+	case "game_mode":
+		desc = msgs.SettingsPasteMethodGameModeDesc()
+	}
+	opts := []choiceOption{
+		{label: msgs.SettingsPasteMethodShiftInsert(), a11y: msgs.SettingsPasteMethodShiftInsert(), active: a.settings.PasteMethod == "shift_insert", onClick: func() { a.setPasteMethod("shift_insert") }},
+		{label: msgs.SettingsPasteMethodCtrlV(), a11y: msgs.SettingsPasteMethodCtrlV(), active: a.settings.PasteMethod == "ctrl_v", onClick: func() { a.setPasteMethod("ctrl_v") }},
+		{label: msgs.SettingsPasteMethodGameMode(), a11y: msgs.SettingsPasteMethodGameMode(), active: a.settings.PasteMethod == "game_mode", onClick: func() { a.setPasteMethod("game_mode") }},
+	}
+	ui.Column(c).FillWidth().Padding(8, 16).Gap(8).Children(func() {
+		ui.Column(c).Gap(2).Children(func() {
+			ui.Text(c, msgs.SettingsPasteMethod()).FontSize(14).FontWeight(600).TextColor(t.Text)
+			ui.Text(c, desc).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
+		})
+		ui.Row(c).FillWidth().Gap(8).Children(func() {
+			for _, opt := range opts {
+				a.renderChoicePill(c, opt.label, opt.a11y, opt.active, opt.onClick)
+			}
+		})
+	})
 }
 
 func (a *clipApp) setLanguage(locale string) {

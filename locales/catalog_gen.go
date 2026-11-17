@@ -1144,6 +1144,82 @@ func (msgs Messages) SettingsQuickPasteCtrlA11y() string {
 	return Catalog.Format(msgs.locale, "settingsQuickPasteCtrlA11y", nil)
 }
 
+// SettingsPasteMethod says "粘贴方案"
+// in the language the app shows.
+func SettingsPasteMethod() string { return In(i18n.Locale()).SettingsPasteMethod() }
+
+// SettingsPasteMethod says "粘贴方案"
+// in the language of msgs.
+func (msgs Messages) SettingsPasteMethod() string {
+	return Catalog.Format(msgs.locale, "settingsPasteMethod", nil)
+}
+
+// SettingsPasteMethodShiftInsert says "Shift+Insert"
+// in the language the app shows.
+func SettingsPasteMethodShiftInsert() string {
+	return In(i18n.Locale()).SettingsPasteMethodShiftInsert()
+}
+
+// SettingsPasteMethodShiftInsert says "Shift+Insert"
+// in the language of msgs.
+func (msgs Messages) SettingsPasteMethodShiftInsert() string {
+	return Catalog.Format(msgs.locale, "settingsPasteMethodShiftInsert", nil)
+}
+
+// SettingsPasteMethodCtrlV says "Ctrl+V"
+// in the language the app shows.
+func SettingsPasteMethodCtrlV() string { return In(i18n.Locale()).SettingsPasteMethodCtrlV() }
+
+// SettingsPasteMethodCtrlV says "Ctrl+V"
+// in the language of msgs.
+func (msgs Messages) SettingsPasteMethodCtrlV() string {
+	return Catalog.Format(msgs.locale, "settingsPasteMethodCtrlV", nil)
+}
+
+// SettingsPasteMethodGameMode says "游戏模式"
+// in the language the app shows.
+func SettingsPasteMethodGameMode() string { return In(i18n.Locale()).SettingsPasteMethodGameMode() }
+
+// SettingsPasteMethodGameMode says "游戏模式"
+// in the language of msgs.
+func (msgs Messages) SettingsPasteMethodGameMode() string {
+	return Catalog.Format(msgs.locale, "settingsPasteMethodGameMode", nil)
+}
+
+// SettingsPasteMethodShiftInsertDesc says "标准粘贴方式，兼容性最强 (推荐)"
+// in the language the app shows.
+func SettingsPasteMethodShiftInsertDesc() string {
+	return In(i18n.Locale()).SettingsPasteMethodShiftInsertDesc()
+}
+
+// SettingsPasteMethodShiftInsertDesc says "标准粘贴方式，兼容性最强 (推荐)"
+// in the language of msgs.
+func (msgs Messages) SettingsPasteMethodShiftInsertDesc() string {
+	return Catalog.Format(msgs.locale, "settingsPasteMethodShiftInsertDesc", nil)
+}
+
+// SettingsPasteMethodCtrlVDesc says "模拟 Ctrl+V，适用于部分编辑器或旧应用"
+// in the language the app shows.
+func SettingsPasteMethodCtrlVDesc() string { return In(i18n.Locale()).SettingsPasteMethodCtrlVDesc() }
+
+// SettingsPasteMethodCtrlVDesc says "模拟 Ctrl+V，适用于部分编辑器或旧应用"
+// in the language of msgs.
+func (msgs Messages) SettingsPasteMethodCtrlVDesc() string {
+	return Catalog.Format(msgs.locale, "settingsPasteMethodCtrlVDesc", nil)
+}
+
+// SettingsPasteMethodGameModeDesc says "逐字符模拟键盘输入（仅文本），适合全屏游戏"
+// in the language the app shows.
+func SettingsPasteMethodGameModeDesc() string {
+	return In(i18n.Locale()).SettingsPasteMethodGameModeDesc()
+}
+
+// SettingsPasteMethodGameModeDesc says "逐字符模拟键盘输入（仅文本），适合全屏游戏"
+// in the language of msgs.
+func (msgs Messages) SettingsPasteMethodGameModeDesc() string {
+	return Catalog.Format(msgs.locale, "settingsPasteMethodGameModeDesc", nil)
+}
+
 // SettingsLanguage says "语言"
 // in the language the app shows.
 func SettingsLanguage() string { return In(i18n.Locale()).SettingsLanguage() }

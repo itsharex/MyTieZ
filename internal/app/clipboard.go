@@ -216,6 +216,9 @@ func (a *clipApp) pasteSelected() {
 		a.hidePanel()
 	}
 	if mygo.App.IsReady() {
+		method := a.settings.PasteMethod
+		text := item.Text
+		isTextKind := item.Kind == store.KindText || item.Kind == store.KindRichText || item.Kind == store.KindURL || item.Kind == store.KindCode
 		go func() {
 			if restoreFocus {
 				sys.RestoreForegroundWindow()
@@ -223,7 +226,16 @@ func (a *clipApp) pasteSelected() {
 			} else {
 				time.Sleep(60 * time.Millisecond)
 			}
-			if err := runWithTimeout(pasteTimeout, sys.SendPaste); err != nil {
+			sendFn := func() error {
+				return sys.SendPasteWith(method, text, isTextKind)
+			}
+			var err error
+			if method == "game_mode" && isTextKind && text != "" {
+				err = sendFn()
+			} else {
+				err = runWithTimeout(pasteTimeout, sendFn)
+			}
+			if err != nil {
 				log.Printf("send paste: %v", err)
 			}
 		}()

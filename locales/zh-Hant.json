@@ -119,6 +119,13 @@
   "settingsQuickPasteOffA11y": "快捷貼上關閉",
   "settingsQuickPasteAltA11y": "快捷貼上Alt",
   "settingsQuickPasteCtrlA11y": "快捷貼上Ctrl",
+  "settingsPasteMethod": "貼上方案",
+  "settingsPasteMethodShiftInsert": "Shift+Insert",
+  "settingsPasteMethodCtrlV": "Ctrl+V",
+  "settingsPasteMethodGameMode": "遊戲模式",
+  "settingsPasteMethodShiftInsertDesc": "標準貼上方式，相容性最強 (推薦)",
+  "settingsPasteMethodCtrlVDesc": "模擬 Ctrl+V，適用於部分編輯器或舊應用",
+  "settingsPasteMethodGameModeDesc": "逐字元模擬鍵盤輸入（僅文字），適合全螢幕遊戲",
 
   "settingsLanguage": "語言",
   "settingsLangZh": "简体",

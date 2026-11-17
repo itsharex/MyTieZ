@@ -726,6 +726,18 @@ func TestLightweightSettings(t *testing.T) {
 	}
 	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
 	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("Ctrl+V"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.PasteMethod != "ctrl_v" {
+		t.Fatalf("expected PasteMethod=ctrl_v, got %q", a.settings.PasteMethod)
+	}
+	if err := tt.Click("游戏模式"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.PasteMethod != "game_mode" {
+		t.Fatalf("expected PasteMethod=game_mode, got %q", a.settings.PasteMethod)
+	}
 	if err := tt.Click("快捷粘贴Alt"); err != nil {
 		t.Fatal(err)
 	}

@@ -119,6 +119,13 @@
   "settingsQuickPasteOffA11y": "Quick paste off",
   "settingsQuickPasteAltA11y": "Quick paste Alt",
   "settingsQuickPasteCtrlA11y": "Quick paste Ctrl",
+  "settingsPasteMethod": "Paste Scheme",
+  "settingsPasteMethodShiftInsert": "Shift+Insert",
+  "settingsPasteMethodCtrlV": "Ctrl+V",
+  "settingsPasteMethodGameMode": "Game Mode",
+  "settingsPasteMethodShiftInsertDesc": "Standard paste shortcut, best compatibility (Recommended)",
+  "settingsPasteMethodCtrlVDesc": "Simulates Ctrl+V, useful for some editors or legacy apps",
+  "settingsPasteMethodGameModeDesc": "Simulates Unicode keystrokes for text, suited for fullscreen games",
 
   "settingsLanguage": "Language",
   "settingsLangZh": "简体",

@@ -139,6 +139,13 @@
   "settingsQuickPasteOffA11y": "快捷粘贴关闭",
   "settingsQuickPasteAltA11y": "快捷粘贴Alt",
   "settingsQuickPasteCtrlA11y": "快捷粘贴Ctrl",
+  "settingsPasteMethod": "粘贴方案",
+  "settingsPasteMethodShiftInsert": "Shift+Insert",
+  "settingsPasteMethodCtrlV": "Ctrl+V",
+  "settingsPasteMethodGameMode": "游戏模式",
+  "settingsPasteMethodShiftInsertDesc": "标准粘贴方式，兼容性最强 (推荐)",
+  "settingsPasteMethodCtrlVDesc": "模拟 Ctrl+V，适用于部分编辑器或旧应用",
+  "settingsPasteMethodGameModeDesc": "逐字符模拟键盘输入（仅文本），适合全屏游戏",
 
   "settingsLanguage": "语言",
   "settingsLangZh": "简体",

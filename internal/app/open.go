@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"mytiez/internal/store"
 	"mytiez/locales"
@@ -17,8 +16,7 @@ import (
 )
 
 func (a *clipApp) setStatus(msg string) {
-	a.statusMsg = msg
-	a.statusUntil = time.Now().Add(2500 * time.Millisecond)
+	a.pendingToast = msg
 }
 
 func (a *clipApp) openAppForKind(kind store.ClipKind) string {

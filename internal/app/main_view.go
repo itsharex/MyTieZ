@@ -22,7 +22,7 @@ const (
 
 func (a *clipApp) renderHeaderIconBtn(c *ui.Context, icon *ui.SVG, label string, active, danger bool, onClick func()) {
 	t := c.Theme()
-	btn := ui.ButtonBase(c).Size(headerBtnSize, headerBtnSize).Center().Radius(headerBtnRadius).Label(label)
+	btn := ui.ButtonBase(c).Size(headerBtnSize, headerBtnSize).Center().Radius(headerBtnRadius).Label(label).Tooltip(label)
 	bg := t.Surface
 	border := t.Border
 	fg := t.Text
@@ -245,10 +245,9 @@ func (a *clipApp) view(c *ui.Context) {
 			a.renderScrollTopButton(c, t)
 		})
 
-		if a.statusMsg != "" && time.Now().Before(a.statusUntil) {
-			ui.Row(c).Padding(6, 14).Justify(ui.Center).Background(t.Surface).Border(1, t.Border).Children(func() {
-				ui.Text(c, a.statusMsg).FontSize(12).TextColor(t.Accent)
-			})
+		if a.pendingToast != "" {
+			c.Toast(a.pendingToast)
+			a.pendingToast = ""
 		}
 
 		a.renderSearchTagPopover(c, t)
@@ -484,9 +483,10 @@ func (a *clipApp) renderScrollTopButton(c *ui.Context, t *ui.Theme) {
 	if t.Dark {
 		shadowAlpha = 0.32
 	}
+	scrollTopLabel := locales.In(c.Locale()).ScrollTop()
 	btn := ui.ButtonBase(c.Key("scroll-top-btn")).
 		Absolute().Right(16).Bottom(16).ZIndex(20).
-		Size(34, 34).Center().Radius(17).Label(locales.In(c.Locale()).ScrollTop())
+		Size(34, 34).Center().Radius(17).Label(scrollTopLabel).Tooltip(scrollTopLabel)
 	bg := t.Surface
 	fg := t.Text
 	if btn.Hovered() {
@@ -586,7 +586,7 @@ func (a *clipApp) handleListWheel(ev ui.InputEvent) bool {
 
 func (a *clipApp) renderCardActionBtn(c *ui.Context, icon *ui.SVG, label string, active bool, onClick func()) {
 	t := c.Theme()
-	btn := ui.ButtonBase(c).Size(cardActionSize, cardActionSize).Center().Radius(cardActionSize / 2).Label(label)
+	btn := ui.ButtonBase(c).Size(cardActionSize, cardActionSize).Center().Radius(cardActionSize / 2).Label(label).Tooltip(label)
 	bg := t.Surface
 	border := t.Border
 	fg := t.Text.Mix(t.TextMuted, 0.55)

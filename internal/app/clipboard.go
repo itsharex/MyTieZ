@@ -208,8 +208,7 @@ func (a *clipApp) pasteSelected() {
 		}
 	}
 	if a.settings.ClickCopyOnly {
-		a.statusMsg = locales.StatusCopied()
-		a.statusUntil = time.Now().Add(2 * time.Second)
+		a.setStatus(locales.StatusCopied())
 		return
 	}
 	restoreFocus := a.winPinned

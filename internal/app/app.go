@@ -63,8 +63,7 @@ type clipApp struct {
 	hotkeyFocusPending bool
 	hotkeyMods         ui.Modifiers
 	hotkeyHandle       ui.Handle
-	statusMsg          string
-	statusUntil        time.Time
+	pendingToast string
 }
 
 func newClipApp(st *store.Store, iconPNG []byte) *clipApp {

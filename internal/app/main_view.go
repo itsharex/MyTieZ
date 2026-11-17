@@ -326,12 +326,12 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 
 			switch item.Kind {
 			case store.KindText:
-				ui.Text(c, item.Preview).FontSize(bodySize).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(maxLines)
+				a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
 			case store.KindRichText:
 				if spans := parseHTMLPreviewSpans(item.HTML, t); len(spans) > 0 {
-					ui.RichText(c, spans...).FontSize(bodySize).TextColor(t.Text).Wrap().MaxLines(maxLines)
+					a.renderCardTextPreview(c, t, item.Preview, spans, bodySize, maxLines)
 				} else {
-					ui.Text(c, item.Preview).FontSize(bodySize).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(maxLines)
+					a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
 				}
 			case store.KindImage:
 				a.renderImagePreview(c, item)
@@ -345,6 +345,66 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 		a.pasteSelected()
 		a.selected = -1
 	}
+}
+
+func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string, spans []ui.Span, bodySize float32, maxLines int) {
+	const lineHeight = 1.45
+	if a.settings.CompactMode {
+		if len(spans) > 0 {
+			ui.RichText(c, spans...).FontSize(bodySize).LineHeight(lineHeight).TextColor(t.Text).Wrap().MaxLines(maxLines)
+		} else {
+			ui.Text(c, text).FontSize(bodySize).LineHeight(lineHeight).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(maxLines)
+		}
+		return
+	}
+
+	// 约 3.55 行高度：前 3 行完整显示，第 4 行露出约半行并渐隐
+	maxPreviewH := bodySize * lineHeight * 3.55
+	winW := float32(a.settings.WindowWidth)
+	if a.panel != nil {
+		if w, _ := a.panel.Size(); w > 0 {
+			winW = float32(w)
+		}
+	}
+	contentW := max(120, winW-58)
+
+	var measureSpans []ui.Span
+	if len(spans) > 0 {
+		measureSpans = make([]ui.Span, len(spans))
+		for i, sp := range spans {
+			if sp.Size == 0 {
+				sp.Size = bodySize
+			}
+			if sp.Font == "" {
+				sp.Font = t.Font
+			}
+			measureSpans[i] = sp
+		}
+	} else {
+		measureSpans = []ui.Span{{Text: text, Font: t.Font, Size: bodySize}}
+	}
+	_, measuredH := c.MeasureText(contentW, measureSpans...)
+	overflows := measuredH > bodySize*4.0
+
+	box := ui.Box(c).FillWidth().MaxHeight(maxPreviewH).Clip()
+	if overflows {
+		black := ui.RGB(0, 0, 0)
+		box.MaskLinearGradient(ui.LinearGradient{
+			Angle: 180,
+			Stops: []ui.GradientStop{
+				{Color: black, At: 0},
+				{Color: black, At: 0.68},
+				{Color: ui.Transparent, At: 1},
+			},
+		})
+	}
+	box.Children(func() {
+		if len(spans) > 0 {
+			ui.RichText(c, spans...).FontSize(bodySize).LineHeight(lineHeight).TextColor(t.Text).Wrap().MaxLines(5)
+		} else {
+			ui.Text(c, text).FontSize(bodySize).LineHeight(lineHeight).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(5)
+		}
+	})
 }
 
 func (a *clipApp) canAutoCollapseControls() bool {

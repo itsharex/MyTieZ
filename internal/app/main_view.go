@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"mytiez/internal/store"
@@ -327,6 +328,9 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 		a.pasteSelected()
 		a.selected = -1
 	}
+	if shouldShowCardHoverPreview(item, a.settings.CompactMode) {
+		a.renderCardHoverPreview(c, card, item)
+	}
 }
 
 func (a *clipApp) canAutoCollapseControls() bool {
@@ -405,6 +409,83 @@ func (a *clipApp) handleListWheel(ev ui.InputEvent) bool {
 		a.upScrollAccum = 0
 	}
 	return false
+}
+
+func shouldShowCardHoverPreview(item store.ClipItem, compact bool) bool {
+	switch item.Kind {
+	case store.KindImage:
+		return item.ImagePath != ""
+	case store.KindFile:
+		return len(item.Files) > 1 || compact || (len(item.Files) == 1 && len([]rune(item.Files[0])) > 35)
+	case store.KindText, store.KindRichText:
+		return compact || len([]rune(item.Text)) > 80 || strings.Contains(item.Text, "\n")
+	default:
+		return false
+	}
+}
+
+func hoverPreviewText(s string, maxChars int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= maxChars {
+		return string(r)
+	}
+	return string(r[:maxChars]) + "…"
+}
+
+func (a *clipApp) renderCardHoverPreview(c *ui.Context, card ui.Element, item store.ClipItem) {
+	t := c.Theme()
+	solidBg := myTiezLightTheme.Surface
+	if t.Dark {
+		solidBg = myTiezDarkTheme.Surface
+	}
+	ui.TooltipBase(c, card, func(tip ui.Element) {
+		tip.MaxWidth(368).MaxHeight(300).Padding(10, 12).Radius(radiusGroup).
+			Background(solidBg).Border(1, t.Border).
+			Shadow(0, 8, 24, 0, ui.RGBA(15, 23, 42, 0.16)).
+			Children(func() {
+				ui.Column(c).Gap(6).Children(func() {
+					_, kindLabel := kindMeta(item.Kind)
+					sourceName := item.SourceApp
+					if sourceName == "" {
+						sourceName = "Unknown"
+					}
+					ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+						ui.Text(c, sourceName+" · "+kindLabel).FontSize(11).FontWeight(600).TextColor(t.TextMuted).SingleLine().Grow(1)
+						ui.Text(c, relativeTime(item.UpdatedAt)).FontSize(11).TextColor(t.TextMuted).SingleLine()
+					})
+					ui.Box(c).FillWidth().Height(1).Background(t.Text.Alpha(0.06))
+
+					switch item.Kind {
+					case store.KindImage:
+						if bmp := a.getOrLoadThumb(item.ImagePath); bmp != nil {
+							w, h := fitImageSize(bmp, 340, 210)
+							ui.Image(c, bmp).Size(w, h).Fit(ui.Contain).Radius(radiusControl).Border(1, t.Border)
+						}
+						if item.Preview != "" {
+							ui.Text(c, item.Preview).FontSize(11.5).TextColor(t.TextMuted)
+						}
+					case store.KindFile:
+						maxShow := min(8, len(item.Files))
+						ui.Column(c).Gap(3).Children(func() {
+							for i := 0; i < maxShow; i++ {
+								ui.Text(c, item.Files[i]).FontSize(12.5).TextColor(t.Text).Wrap().MaxLines(2)
+							}
+							if len(item.Files) > maxShow {
+								ui.Textf(c, "等共 %d 个文件", len(item.Files)).FontSize(11.5).TextColor(t.TextMuted)
+							}
+						})
+					case store.KindRichText:
+						if spans := parseHTMLPreviewSpans(item.HTML, t); len(spans) > 0 {
+							ui.RichText(c, spans...).FontSize(13).TextColor(t.Text).Wrap().MaxLines(14)
+						} else {
+							ui.Text(c, hoverPreviewText(item.Text, 800)).FontSize(13).TextColor(t.Text).Wrap().MaxLines(14)
+						}
+					default:
+						ui.Text(c, hoverPreviewText(item.Text, 800)).FontSize(13).TextColor(t.Text).Wrap().MaxLines(14)
+					}
+				})
+			})
+	})
 }
 
 func (a *clipApp) renderCardActionBtn(c *ui.Context, icon *ui.SVG, label string, active bool, onClick func()) {

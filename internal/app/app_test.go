@@ -345,3 +345,41 @@ func TestRichTextPreviewAndFilter(t *testing.T) {
 		t.Fatalf("expected only rich_text item visible, texts=%q", tt.Texts())
 	}
 }
+
+func TestCardHoverPreview(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	longText := "Line 1 header\nLine 2 details\nLine 3 more details\nLine 4 extra\nLine 5 tail marker"
+	if _, err := st.UpsertText(longText); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("short note"); err != nil {
+		t.Fatal(err)
+	}
+
+	if shouldShowCardHoverPreview(store.ClipItem{Kind: store.KindText, Text: "short note"}, false) {
+		t.Fatal("expected short single-line text not to trigger hover preview in normal mode")
+	}
+	if !shouldShowCardHoverPreview(store.ClipItem{Kind: store.KindText, Text: "short note"}, true) {
+		t.Fatal("expected short text to trigger hover preview in compact mode")
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	// Move pointer onto the long text card and wait past tooltip hover delay.
+	bounds, ok := tt.Find(a.items[1].Preview)
+	if !ok {
+		t.Fatalf("expected long text card visible, preview=%q, texts=%q", a.items[1].Preview, tt.Texts())
+	}
+	tt.Move(bounds.X+bounds.W/2, bounds.Y+bounds.H/2)
+	tt.Advance(700 * time.Millisecond)
+	if !tt.HasText("Unknown · 文本") || !tt.HasText("Line 5 tail marker") {
+		t.Fatalf("expected hover preview tooltip with full content, texts=%q", tt.Texts())
+	}
+}

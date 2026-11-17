@@ -149,9 +149,9 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						{label: msgs.SettingsLangEn(), a11y: msgs.SettingsLangEn(), active: curLocale == "en", onClick: func() { a.setLanguage("en") }},
 					})
 					a.renderChoiceGroup(c, msgs.SettingsBackdrop(), []choiceOption{
+						{label: msgs.SettingsBackdropSolid(), a11y: msgs.SettingsBackdropSolidA11y(), active: a.settings.BackdropMode == "solid", onClick: func() { a.setBackdropMode("solid") }},
 						{label: msgs.SettingsBackdropMica(), a11y: msgs.SettingsBackdropMicaA11y(), active: a.settings.BackdropMode == "mica", onClick: func() { a.setBackdropMode("mica") }},
 						{label: msgs.SettingsBackdropAcrylic(), a11y: msgs.SettingsBackdropAcrylicA11y(), active: a.settings.BackdropMode == "acrylic", onClick: func() { a.setBackdropMode("acrylic") }},
-						{label: msgs.SettingsBackdropSolid(), a11y: msgs.SettingsBackdropSolidA11y(), active: a.settings.BackdropMode == "solid", onClick: func() { a.setBackdropMode("solid") }},
 					})
 					a.renderChoiceGroup(c, msgs.SettingsColorMode(), []choiceOption{
 						{label: msgs.SettingsColorSystem(), a11y: msgs.SettingsColorSystemA11y(), active: a.settings.ColorMode == "system", onClick: func() { a.setColorMode("system") }},

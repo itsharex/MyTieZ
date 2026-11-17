@@ -94,7 +94,7 @@ func DefaultSettings() Settings {
 		DeleteAfterPaste:   false,
 		QuickPasteModifier: "none",
 		ColorMode:          "system",
-		BackdropMode:       "mica",
+		BackdropMode:       "solid",
 		CompactMode:        false,
 		HideCardActions:    false,
 		ShowSourceIcon:     true,
@@ -254,7 +254,7 @@ func (s *Store) LoadSettings() (Settings, error) {
 		cfg.ColorMode = "system"
 	}
 	if cfg.BackdropMode != "mica" && cfg.BackdropMode != "acrylic" && cfg.BackdropMode != "solid" {
-		cfg.BackdropMode = "mica"
+		cfg.BackdropMode = "solid"
 	}
 	if cfg.QuickPasteModifier != "none" && cfg.QuickPasteModifier != "alt" && cfg.QuickPasteModifier != "ctrl" {
 		cfg.QuickPasteModifier = "none"

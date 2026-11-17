@@ -1,0 +1,206 @@
+package store
+
+import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func makeTestPNG(t *testing.T, c color.RGBA) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	img.Set(0, 0, c)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestStoreLifecycle(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	txt1, err := st.UpsertText("hello world")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+
+	pngBytes := makeTestPNG(t, color.RGBA{R: 255, A: 255})
+	imgItem, err := st.UpsertImage(pngBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(imgItem.ImagePath); err != nil {
+		t.Fatalf("expected image file at %s: %v", imgItem.ImagePath, err)
+	}
+	time.Sleep(5 * time.Millisecond)
+
+	fileItem, err := st.UpsertFiles([]string{filepath.Join("C:\\", "tmp", "demo.txt")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 去重并顶置
+	time.Sleep(5 * time.Millisecond)
+	txt1Again, err := st.UpsertText("hello world")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if txt1Again.ID != txt1.ID {
+		t.Fatalf("expected dedup ID %d, got %d", txt1.ID, txt1Again.ID)
+	}
+
+	all, err := st.List("", "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 || all[0].ID != txt1.ID {
+		t.Fatalf("expected 3 items with deduped text first, got %+v", all)
+	}
+
+	// 置顶图片后应排在最前
+	pinned, err := st.TogglePin(imgItem.ID)
+	if err != nil || !pinned {
+		t.Fatalf("expected pinned=true, got %v, err=%v", pinned, err)
+	}
+	all, err = st.List("", "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all[0].ID != imgItem.ID {
+		t.Fatalf("expected pinned image first, got %+v", all[0])
+	}
+
+	// 按分类和关键词查询
+	filesOnly, err := st.List("demo", KindFile, 50)
+	if err != nil || len(filesOnly) != 1 || filesOnly[0].ID != fileItem.ID {
+		t.Fatalf("expected 1 file item, got %+v, err=%v", filesOnly, err)
+	}
+
+	// 清空未置顶：只剩置顶的 imgItem
+	if err := st.ClearUnpinned(); err != nil {
+		t.Fatal(err)
+	}
+	remaining, err := st.List("", "", 50)
+	if err != nil || len(remaining) != 1 || remaining[0].ID != imgItem.ID {
+		t.Fatalf("expected only pinned image left, got %+v, err=%v", remaining, err)
+	}
+
+	// 删除最后一条图片记录应清理缓存图片文件
+	if err := st.Delete(imgItem.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(imgItem.ImagePath); !os.IsNotExist(err) {
+		t.Fatalf("expected orphan image file removed, err=%v", err)
+	}
+}
+
+func TestStoreSettingsAndLimits(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	cfg, err := st.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Deduplicate || cfg.MaxHistory != 500 || cfg.Hotkey != "Alt+V" {
+		t.Fatalf("unexpected default settings: %+v", cfg)
+	}
+
+	cfg.Deduplicate = false
+	cfg.CompactMode = true
+	cfg.ColorMode = "dark"
+	if err := st.SaveSettings(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := st.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Deduplicate || !loaded.CompactMode || loaded.ColorMode != "dark" {
+		t.Fatalf("unexpected loaded settings: %+v", loaded)
+	}
+
+	// 关闭去重时允许同内容重复入库
+	if _, err := st.SaveText("dup", SaveOptions{Deduplicate: false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SaveText("dup", SaveOptions{Deduplicate: false}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := st.List("", "", 50)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("expected 2 items without dedup, got %d, err=%v", len(items), err)
+	}
+
+	// 置顶 1 条，并测试 MaxHistory=1 只保留 1 条未置顶 + 所有置顶
+	if _, err := st.TogglePin(items[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SaveText("third", SaveOptions{Deduplicate: true, MaxHistory: 1}); err != nil {
+		t.Fatal(err)
+	}
+	items, err = st.List("", "", 50)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("expected 1 pinned + 1 unpinned (2 total), got %d (%+v), err=%v", len(items), items, err)
+	}
+
+	// 清空全部应连置顶一起删除
+	if err := st.ClearAll(); err != nil {
+		t.Fatal(err)
+	}
+	items, err = st.List("", "", 50)
+	if err != nil || len(items) != 0 {
+		t.Fatalf("expected 0 items after ClearAll, got %d, err=%v", len(items), err)
+	}
+}
+
+func TestWindowSizeSettingsFallback(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	cfg := DefaultSettings()
+	cfg.WindowWidth = 512
+	cfg.WindowHeight = 720
+	if err := st.SaveSettings(cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := st.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.WindowWidth != 512 || loaded.WindowHeight != 720 {
+		t.Fatalf("expected persisted window size 512x720, got %dx%d", loaded.WindowWidth, loaded.WindowHeight)
+	}
+
+	// 低于最小尺寸时自动回退默认尺寸
+	cfg.WindowWidth = 100
+	cfg.WindowHeight = 100
+	if err := st.SaveSettings(cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = st.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.WindowWidth != 420 || loaded.WindowHeight != 600 {
+		t.Fatalf("expected fallback window size 420x600, got %dx%d", loaded.WindowWidth, loaded.WindowHeight)
+	}
+}

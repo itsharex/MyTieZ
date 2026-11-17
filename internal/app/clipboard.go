@@ -45,12 +45,13 @@ func (a *clipApp) reload() {
 	if a.settings.MaxHistory > 0 {
 		limit = max(a.settings.MaxHistory, 200)
 	}
-	items, err := a.store.List(a.query, a.currentKind(), limit)
+	items, err := a.store.ListSummaries(a.query, a.currentKind(), limit)
 	if err != nil {
 		log.Printf("list clipboard items: %v", err)
 		return
 	}
 	a.items = items
+	a.richSpans = nil
 	if tags, err := a.store.ListAllTags(); err == nil {
 		a.allTags = tags
 	}
@@ -161,6 +162,20 @@ func (a *clipApp) resetSettings() {
 	a.settingsNotice = locales.SettingsResetDone()
 }
 
+func (a *clipApp) hydrateItem(item store.ClipItem) store.ClipItem {
+	if a.store == nil || item.ID == 0 {
+		return item
+	}
+	needsText := item.Text == "" && (item.Kind == store.KindText || item.Kind == store.KindURL || item.Kind == store.KindCode || item.Kind == store.KindRichText)
+	if !needsText && item.Kind != store.KindRichText {
+		return item
+	}
+	if full, err := a.store.GetByID(item.ID); err == nil {
+		return full
+	}
+	return item
+}
+
 func (a *clipApp) pasteSelected() {
 	if len(a.items) == 0 {
 		return
@@ -169,7 +184,7 @@ func (a *clipApp) pasteSelected() {
 	if idx < 0 || idx >= len(a.items) {
 		idx = 0
 	}
-	item := a.items[idx]
+	item := a.hydrateItem(a.items[idx])
 	a.ignoreHash = item.Hash
 	a.ignoreUntil = time.Now().Add(1500 * time.Millisecond)
 
@@ -199,7 +214,7 @@ func (a *clipApp) pasteSelected() {
 	}
 	restoreFocus := a.winPinned
 	if a.panel != nil && !a.winPinned {
-		a.panel.Hide()
+		a.hidePanel()
 	}
 	if mygo.App.IsReady() {
 		go func() {

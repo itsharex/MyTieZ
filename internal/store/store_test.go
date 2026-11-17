@@ -315,3 +315,41 @@ func TestDetectTextKind(t *testing.T) {
 		t.Fatalf("expected KindCode, got %+v err=%v", c, err)
 	}
 }
+
+func TestListSummariesAndGetByID(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	longText := string(bytes.Repeat([]byte("a"), 2048))
+	if _, err := st.UpsertText(longText); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("short"); err != nil {
+		t.Fatal(err)
+	}
+
+	summaries, err := st.ListSummaries("", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summaries) != 2 {
+		t.Fatalf("expected 2 summaries, got %d", len(summaries))
+	}
+	if summaries[0].Text != "short" {
+		t.Fatalf("expected short text kept in summary, got %q", summaries[0].Text)
+	}
+	if summaries[1].Text != "" || summaries[1].Preview == "" {
+		t.Fatalf("expected large text omitted in summary with preview kept, got text=%d preview=%d", len(summaries[1].Text), len(summaries[1].Preview))
+	}
+
+	full, err := st.GetByID(summaries[1].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full.Text != longText {
+		t.Fatalf("expected full text length %d, got %d", len(longText), len(full.Text))
+	}
+}

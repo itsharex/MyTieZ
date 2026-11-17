@@ -35,6 +35,7 @@ func (a *clipApp) openAppForKind(kind store.ClipKind) string {
 }
 
 func (a *clipApp) openItem(item store.ClipItem) {
+	item = a.hydrateItem(item)
 	appPath := a.openAppForKind(item.Kind)
 
 	switch item.Kind {

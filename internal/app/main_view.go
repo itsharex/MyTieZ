@@ -67,9 +67,7 @@ func (a *clipApp) renderWindowActionButtons(c *ui.Context) {
 		a.toggleWindowPin()
 	})
 	a.renderHeaderIconBtn(c, iconClear, msgs.HeaderHide(), false, true, func() {
-		if a.panel != nil {
-			a.panel.Hide()
-		}
+		a.hidePanel()
 	})
 }
 
@@ -103,7 +101,7 @@ func (a *clipApp) view(c *ui.Context) {
 	} else if a.selected >= 0 && c.Shortcut(0, ui.KeyEscape) {
 		a.selected = -1
 	} else if c.Shortcut(0, ui.KeyEscape) && a.panel != nil {
-		a.panel.Hide()
+		a.hidePanel()
 	}
 	if c.Shortcut(0, ui.KeyDown) {
 		a.moveSelection(1)
@@ -355,7 +353,7 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 			case store.KindURL:
 				a.renderCardTextPreview(c, t, item.Preview, []ui.Span{{Text: item.Preview, Color: t.Accent}}, bodySize, maxLines)
 			case store.KindRichText:
-				if spans := parseHTMLPreviewSpans(item.HTML, t); len(spans) > 0 {
+				if spans := a.getRichPreviewSpans(item, t); len(spans) > 0 {
 					a.renderCardTextPreview(c, t, item.Preview, spans, bodySize, maxLines)
 				} else {
 					a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
@@ -657,9 +655,29 @@ func (a *clipApp) renderFilesPreview(c *ui.Context, item store.ClipItem) {
 	})
 }
 
+func (a *clipApp) getRichPreviewSpans(item store.ClipItem, t *ui.Theme) []ui.Span {
+	if item.HTML == "" {
+		return nil
+	}
+	if a.richSpans == nil || a.richSpansDark != t.Dark {
+		a.richSpans = make(map[int64][]ui.Span)
+		a.richSpansDark = t.Dark
+	}
+	if spans, ok := a.richSpans[item.ID]; ok {
+		return spans
+	}
+	spans := parseHTMLPreviewSpans(item.HTML, t)
+	a.richSpans[item.ID] = spans
+	return spans
+}
+
 func (a *clipApp) getOrLoadThumb(path string) *ui.Bitmap {
-	return a.thumbs.get(a.panel, path, 120, func() ([]byte, error) {
-		return os.ReadFile(path)
+	return a.thumbs.getBitmap(a.panel, path, 32, func() (*ui.Bitmap, error) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		return decodeThumbBitmap(data, 720, 200)
 	})
 }
 

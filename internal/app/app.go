@@ -2,6 +2,8 @@ package app
 
 import (
 	"log"
+	"os"
+	"runtime/debug"
 	"time"
 
 	"mytiez/internal/store"
@@ -38,8 +40,10 @@ type clipApp struct {
 	tagFocusPending bool
 	allTags         []string
 
-	thumbs   *bitmapCache
-	appIcons *bitmapCache
+	thumbs        *bitmapCache
+	appIcons      *bitmapCache
+	richSpans     map[int64][]ui.Span
+	richSpansDark bool
 
 	ignoreHash  string
 	ignoreUntil time.Time
@@ -84,6 +88,9 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 
 // Run starts the clipboard manager application.
 func Run(iconPNG []byte) {
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(50)
+	}
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
@@ -234,12 +241,28 @@ func centeredPanelTarget(w, h int, workArea mygo.Rectangle) (int, int) {
 	return x, y
 }
 
+func (a *clipApp) hidePanel() {
+	if a.panel != nil {
+		a.panel.Hide()
+	}
+	if a.thumbs != nil {
+		a.thumbs.clear()
+	}
+	a.richSpans = nil
+	if mygo.App.IsReady() {
+		go func() {
+			debug.FreeOSMemory()
+			sys.TrimMemory()
+		}()
+	}
+}
+
 func (a *clipApp) togglePanel() {
 	if a.panel == nil {
 		return
 	}
 	if a.panel.IsVisible() {
-		a.panel.Hide()
+		a.hidePanel()
 	} else {
 		a.showPanel()
 	}
@@ -299,13 +322,13 @@ func (a *clipApp) ready() {
 		e.PreventDefault()
 		a.cancelHotkeyRecording()
 		a.saveWindowSize()
-		a.panel.Hide()
+		a.hidePanel()
 	})
 	a.panel.OnBlur(func() {
 		a.cancelHotkeyRecording()
 		if !a.winPinned && !a.pickingApp {
 			a.saveWindowSize()
-			a.panel.Hide()
+			a.hidePanel()
 		}
 	})
 

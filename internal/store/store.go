@@ -527,7 +527,26 @@ FROM clip_items WHERE id = ?
 	return scanItem(row)
 }
 
+// GetByID returns the full clipboard item for id, including complete text and HTML.
+func (s *Store) GetByID(id int64) (ClipItem, error) {
+	row := s.db.QueryRow(`
+SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at
+FROM clip_items WHERE id = ?
+`, id)
+	return scanItem(row)
+}
+
 func (s *Store) List(query string, kind ClipKind, limit int) ([]ClipItem, error) {
+	return s.listItems(query, kind, limit, false)
+}
+
+// ListSummaries returns matching items for UI list display without loading
+// large text/HTML payloads into memory.
+func (s *Store) ListSummaries(query string, kind ClipKind, limit int) ([]ClipItem, error) {
+	return s.listItems(query, kind, limit, true)
+}
+
+func (s *Store) listItems(query string, kind ClipKind, limit int, summary bool) ([]ClipItem, error) {
 	if limit <= 0 {
 		limit = 200
 	}
@@ -556,8 +575,13 @@ func (s *Store) List(query string, kind ClipKind, limit int) ([]ClipItem, error)
 	}
 	args = append(args, limit)
 
+	cols := "id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
+	if summary {
+		cols = "id, kind, content_hash, CASE WHEN length(text_content) <= 1024 THEN text_content ELSE '' END, CASE WHEN kind = 'richtext' THEN substr(html_content, 1, 8192) ELSE '' END, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
+	}
+
 	rows, err := s.db.Query(`
-SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at
+SELECT `+cols+`
 FROM clip_items
 `+where+`
 ORDER BY pinned DESC, updated_at DESC, id DESC

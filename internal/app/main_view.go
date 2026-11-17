@@ -170,7 +170,7 @@ func (a *clipApp) view(c *ui.Context) {
 					})
 
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					tabs := []string{"文本", "富文本", "图片", "文件"}
+					tabs := []string{"文本", "富文本", "链接", "代码", "图片", "文件"}
 					for i, label := range tabs {
 						tabIdx := i + 1
 						active := a.filterIdx == tabIdx
@@ -328,8 +328,10 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 			}
 
 			switch item.Kind {
-			case store.KindText:
+			case store.KindText, store.KindCode:
 				a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
+			case store.KindURL:
+				a.renderCardTextPreview(c, t, item.Preview, []ui.Span{{Text: item.Preview, Color: t.Accent}}, bodySize, maxLines)
 			case store.KindRichText:
 				if spans := parseHTMLPreviewSpans(item.HTML, t); len(spans) > 0 {
 					a.renderCardTextPreview(c, t, item.Preview, spans, bodySize, maxLines)
@@ -596,6 +598,10 @@ func kindMeta(kind store.ClipKind) (*ui.SVG, string) {
 	switch kind {
 	case store.KindRichText:
 		return iconRichText, "富文本"
+	case store.KindURL:
+		return iconLink, "链接"
+	case store.KindCode:
+		return iconCode, "代码"
 	case store.KindImage:
 		return iconImage, "图片"
 	case store.KindFile:

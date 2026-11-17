@@ -637,3 +637,39 @@ func TestFollowMouseTarget(t *testing.T) {
 		t.Fatalf("expected clamped bottom %d, got (%d, %d)", 1040-h-8, x, y)
 	}
 }
+
+func TestURLAndCodeFilter(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	if _, err := st.UpsertText("plain note entry"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("https://example.com/path"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("const x = 1; return x;"); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	if err := tt.Click("链接"); err != nil {
+		t.Fatal(err)
+	}
+	if a.currentKind() != store.KindURL || !tt.HasText("https://example.com/path") || tt.HasText("plain note entry") {
+		t.Fatalf("expected 链接 filter to show URL only, kind=%q texts=%q", a.currentKind(), tt.Texts())
+	}
+
+	if err := tt.Click("代码"); err != nil {
+		t.Fatal(err)
+	}
+	if a.currentKind() != store.KindCode || !tt.HasText("const x = 1; return x;") || tt.HasText("https://example.com/path") {
+		t.Fatalf("expected 代码 filter to show code only, kind=%q texts=%q", a.currentKind(), tt.Texts())
+	}
+}

@@ -23,6 +23,8 @@ type ClipKind string
 const (
 	KindText     ClipKind = "text"
 	KindRichText ClipKind = "rich_text"
+	KindURL      ClipKind = "url"
+	KindCode     ClipKind = "code"
 	KindImage    ClipKind = "image"
 	KindFile     ClipKind = "file"
 )
@@ -307,7 +309,7 @@ func (s *Store) SaveText(text string, opts SaveOptions) (ClipItem, error) {
 	if strings.TrimSpace(text) == "" {
 		return ClipItem{}, fmt.Errorf("empty text")
 	}
-	kind := KindText
+	kind := DetectTextKind(text)
 	if opts.HTML != "" {
 		kind = KindRichText
 	}
@@ -319,6 +321,79 @@ func (s *Store) SaveText(text string, opts SaveOptions) (ClipItem, error) {
 		Preview:  makeTextPreview(text),
 		ByteSize: int64(len(text) + len(opts.HTML)),
 	}, opts)
+}
+
+var codeKeywords = []string{
+	"import ",
+	"const ",
+	"let ",
+	"var ",
+	"function ",
+	"class ",
+	"func ",
+	"pub fn ",
+	"impl ",
+	"#include",
+	"package ",
+	"interface ",
+	"namespace ",
+	"void ",
+	"return ",
+	"if (",
+	"for (",
+	"while (",
+	"=>",
+}
+
+// DetectTextKind classifies plain text into URL, code, or text using tiez-clipboard heuristics.
+func DetectTextKind(text string) ClipKind {
+	trimmed := strings.TrimSpace(text)
+	if trimmed != "" && !strings.ContainsAny(trimmed, " \t\r\n") {
+		if strings.HasPrefix(strings.ToLower(trimmed), "www.") || hasValidURLScheme(trimmed) {
+			return KindURL
+		}
+	}
+
+	score := 0
+	for _, kw := range codeKeywords {
+		if strings.Contains(text, kw) {
+			score++
+		}
+	}
+	if strings.Contains(text, ";") {
+		score++
+	}
+	if strings.Contains(text, "{") && strings.Contains(text, "}") {
+		score++
+	}
+	if strings.Contains(text, "</") && strings.Contains(text, ">") {
+		score += 2
+	}
+	if score >= 2 {
+		return KindCode
+	}
+
+	if strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}") &&
+		strings.Contains(text, ":") && strings.Contains(text, "\"") {
+		return KindCode
+	}
+
+	return KindText
+}
+
+func hasValidURLScheme(s string) bool {
+	scheme, _, ok := strings.Cut(s, "://")
+	if !ok || scheme == "" {
+		return false
+	}
+	for i := 0; i < len(scheme); i++ {
+		c := scheme[i]
+		isAlphaNum := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+		if !isAlphaNum && c != '+' && c != '-' && c != '.' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) SaveImage(pngData []byte, opts SaveOptions) (ClipItem, error) {

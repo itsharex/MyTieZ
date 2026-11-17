@@ -22,7 +22,7 @@ func (a *clipApp) setStatus(msg string) {
 
 func (a *clipApp) openAppForKind(kind store.ClipKind) string {
 	switch kind {
-	case store.KindText:
+	case store.KindText, store.KindURL, store.KindCode:
 		return strings.TrimSpace(a.settings.OpenAppText)
 	case store.KindRichText:
 		return strings.TrimSpace(a.settings.OpenAppRichText)
@@ -37,10 +37,14 @@ func (a *clipApp) openItem(item store.ClipItem) {
 	appPath := a.openAppForKind(item.Kind)
 
 	switch item.Kind {
-	case store.KindText:
+	case store.KindText, store.KindURL, store.KindCode:
 		trimmed := strings.TrimSpace(item.Text)
-		if isHTTPURL(trimmed) {
-			if err := launchURLTarget(appPath, trimmed); err != nil {
+		if item.Kind == store.KindURL || isHTTPURL(trimmed) {
+			targetURL := trimmed
+			if strings.HasPrefix(strings.ToLower(targetURL), "www.") {
+				targetURL = "https://" + targetURL
+			}
+			if err := launchURLTarget(appPath, targetURL); err != nil {
 				a.setStatus("打开链接失败: " + err.Error())
 			}
 			return

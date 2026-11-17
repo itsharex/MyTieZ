@@ -280,3 +280,38 @@ func TestTagsCRUDAndFilter(t *testing.T) {
 		t.Fatalf("expected #工作 beta filter to return item b only, got %+v err=%v", got, err)
 	}
 }
+
+func TestDetectTextKind(t *testing.T) {
+	cases := []struct {
+		text string
+		want ClipKind
+	}{
+		{"https://github.com/egoist/mygo", KindURL},
+		{"www.example.com/docs", KindURL},
+		{"func main() {\n\treturn 1;\n}", KindCode},
+		{`{"name": "mytiez", "version": 1}`, KindCode},
+		{"<div>hello</div>", KindCode},
+		{"今天下午三点开会讨论需求", KindText},
+		{"访问 https://example.com 查看详情", KindText},
+	}
+	for _, tc := range cases {
+		if got := DetectTextKind(tc.text); got != tc.want {
+			t.Errorf("DetectTextKind(%q) = %q, want %q", tc.text, got, tc.want)
+		}
+	}
+
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	u, err := st.UpsertText("https://example.org")
+	if err != nil || u.Kind != KindURL {
+		t.Fatalf("expected KindURL, got %+v err=%v", u, err)
+	}
+	c, err := st.UpsertText("package main\nimport \"fmt\"\nfunc main() {}")
+	if err != nil || c.Kind != KindCode {
+		t.Fatalf("expected KindCode, got %+v err=%v", c, err)
+	}
+}

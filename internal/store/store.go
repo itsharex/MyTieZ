@@ -20,9 +20,10 @@ import (
 type ClipKind string
 
 const (
-	KindText  ClipKind = "text"
-	KindImage ClipKind = "image"
-	KindFile  ClipKind = "file"
+	KindText     ClipKind = "text"
+	KindRichText ClipKind = "rich_text"
+	KindImage    ClipKind = "image"
+	KindFile     ClipKind = "file"
 )
 
 type ClipItem struct {
@@ -271,8 +272,12 @@ func (s *Store) SaveText(text string, opts SaveOptions) (ClipItem, error) {
 	if strings.TrimSpace(text) == "" {
 		return ClipItem{}, fmt.Errorf("empty text")
 	}
+	kind := KindText
+	if opts.HTML != "" {
+		kind = KindRichText
+	}
 	return s.save(ClipItem{
-		Kind:     KindText,
+		Kind:     kind,
 		Hash:     TextContentHash(text, opts.HTML),
 		Text:     text,
 		HTML:     opts.HTML,

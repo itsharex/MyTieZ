@@ -22,8 +22,10 @@ func (a *clipApp) currentKind() store.ClipKind {
 	case 1:
 		return store.KindText
 	case 2:
-		return store.KindImage
+		return store.KindRichText
 	case 3:
+		return store.KindImage
+	case 4:
 		return store.KindFile
 	default:
 		return ""
@@ -192,7 +194,7 @@ func (a *clipApp) pasteSelected() {
 
 func writeClipItem(item store.ClipItem) error {
 	switch item.Kind {
-	case store.KindText:
+	case store.KindText, store.KindRichText:
 		if item.HTML != "" {
 			return mygo.Clipboard.Write(transfer.New(transfer.NewItem(
 				transfer.Bytes(transfer.Text, []byte(item.Text)),

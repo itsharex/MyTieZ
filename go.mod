@@ -4,7 +4,12 @@ go 1.27.4
 
 tool github.com/egoist/mygo/cmd/mygo
 
-require github.com/egoist/mygo v0.9.2
+require (
+	github.com/egoist/mygo v0.9.2
+	golang.org/x/net v0.59.0
+	golang.org/x/sys v0.49.0
+	modernc.org/sqlite v1.62.0
+)
 
 require (
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
@@ -21,11 +26,8 @@ require (
 	go.digitalxero.dev/rpm v0.3.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/image v0.46.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	modernc.org/libc v1.80.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
-	modernc.org/sqlite v1.62.0 // indirect
 )

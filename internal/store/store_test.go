@@ -223,13 +223,13 @@ func TestSaveRichTextHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rich.ID == plain.ID || rich.HTML != "<b>Hello</b>" {
-		t.Fatalf("expected separate rich text item with HTML preserved, got id=%d (plain=%d), html=%q", rich.ID, plain.ID, rich.HTML)
+	if rich.ID == plain.ID || rich.Kind != KindRichText || rich.HTML != "<b>Hello</b>" {
+		t.Fatalf("expected separate rich_text item with HTML preserved, got id=%d (plain=%d), kind=%q, html=%q", rich.ID, plain.ID, rich.Kind, rich.HTML)
 	}
 
-	items, err := st.List("", KindText, 10)
-	if err != nil || len(items) != 2 {
-		t.Fatalf("expected 2 text items, got %d, err=%v", len(items), err)
+	items, err := st.List("", KindRichText, 10)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("expected 1 rich_text item, got %d, err=%v", len(items), err)
 	}
 	if items[0].HTML != "<b>Hello</b>" || items[0].Preview != "Hello" {
 		t.Fatalf("unexpected rich item fields: html=%q preview=%q", items[0].HTML, items[0].Preview)

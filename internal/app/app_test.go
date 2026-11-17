@@ -293,3 +293,41 @@ func TestNewItemAppearsAtTop(t *testing.T) {
 		t.Fatalf("expected new top entry visible without scrolling, texts=%q", tt.Texts())
 	}
 }
+
+func TestRichTextPreviewAndFilter(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	if _, err := st.UpsertText("plain only item"); err != nil {
+		t.Fatal(err)
+	}
+	cfHTML := "Version:0.9\r\nStartHTML:000000\r\n<!--StartFragment--><style>.x{color:pink}</style><b>Bold</b> <span style=\"color:#dc2626\">Red</span> <u>Line</u><!--EndFragment-->"
+	if _, err := st.SaveText("Bold Red Line", store.SaveOptions{
+		Deduplicate: true,
+		HTML:        cfHTML,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	spans := parseHTMLPreviewSpans(cfHTML, myTiezLightTheme)
+	if len(spans) < 3 || spans[0].Weight != 700 || spans[0].Text != "Bold" {
+		t.Fatalf("unexpected parsed rich spans: %+v", spans)
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	if err := tt.Click("富文本"); err != nil {
+		t.Fatal(err)
+	}
+	if a.currentKind() != store.KindRichText {
+		t.Fatalf("expected KindRichText filter, got %q", a.currentKind())
+	}
+	if tt.HasText("plain only item") || !tt.HasText("Bold") {
+		t.Fatalf("expected only rich_text item visible, texts=%q", tt.Texts())
+	}
+}

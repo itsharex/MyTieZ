@@ -200,8 +200,8 @@ func TestWindowSizeSettingsFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.WindowWidth != 420 || loaded.WindowHeight != 600 {
-		t.Fatalf("expected fallback window size 420x600, got %dx%d", loaded.WindowWidth, loaded.WindowHeight)
+	if loaded.WindowWidth != 400 || loaded.WindowHeight != 660 {
+		t.Fatalf("expected fallback window size 400x660, got %dx%d", loaded.WindowWidth, loaded.WindowHeight)
 	}
 }
 

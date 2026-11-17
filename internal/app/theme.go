@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	panelWidth     = 420
-	panelHeight    = 600
+	panelWidth     = 400
+	panelHeight    = 660
 	minPanelWidth  = 360
 	minPanelHeight = 420
 

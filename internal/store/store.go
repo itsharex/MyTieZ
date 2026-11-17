@@ -100,8 +100,8 @@ func DefaultSettings() Settings {
 		CompactMode:        false,
 		HideCardActions:    false,
 		ShowSourceIcon:     true,
-		WindowWidth:        420,
-		WindowHeight:       600,
+		WindowWidth:        400,
+		WindowHeight:       660,
 	}
 }
 

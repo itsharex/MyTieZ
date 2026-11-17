@@ -19,8 +19,9 @@ const (
 	radiusMicro   float32 = 6
 
 	headerBtnSize    float32 = 32
+	headerBtnRadius  float32 = 10
 	searchBoxHeight  float32 = 46
-	filterPillHeight float32 = 26
+	filterPillHeight float32 = 28
 	pillHeight       float32 = 30
 	cardActionSize   float32 = 22
 	settingGroupMinH float32 = 52

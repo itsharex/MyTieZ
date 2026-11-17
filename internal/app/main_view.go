@@ -22,10 +22,10 @@ const (
 
 func (a *clipApp) renderHeaderIconBtn(c *ui.Context, icon *ui.SVG, label string, active, danger bool, onClick func()) {
 	t := c.Theme()
-	btn := ui.ButtonBase(c).Size(headerBtnSize, headerBtnSize).Center().Radius(headerBtnSize / 2).Label(label)
+	btn := ui.ButtonBase(c).Size(headerBtnSize, headerBtnSize).Center().Radius(headerBtnRadius).Label(label)
 	bg := t.Surface
 	border := t.Border
-	fg := t.TextMuted
+	fg := t.Text
 	if active {
 		bg = t.Accent
 		border = t.Accent
@@ -50,7 +50,13 @@ func (a *clipApp) renderHeaderIconBtn(c *ui.Context, icon *ui.SVG, label string,
 	} else {
 		btn.AnimatePose(ui.Pose{}, ui.Snappy)
 	}
-	btn.Background(bg).Border(1, border).Transition(colorTransition).
+	shadowAlpha := float32(0.06)
+	if t.Dark {
+		shadowAlpha = 0.22
+	}
+	btn.Background(bg).Border(1, border).
+		Shadow(0, 1, 3, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+		Transition(colorTransition).
 		OnClick(onClick).
 		Children(func() { ui.Icon(c, icon).FontSize(16).TextColor(fg) })
 }
@@ -116,7 +122,7 @@ func (a *clipApp) view(c *ui.Context) {
 	page.Children(func() {
 		// 顶部标题栏（常驻固定；搜索栏展开时收紧下边距，收起时保持 10px 平衡高度）
 		ui.Column(c).Padding(8, 16, 10-5*p, 16).Children(func() {
-			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(4).DragWindow().Children(func() {
+			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(5).DragWindow().Children(func() {
 				ui.Text(c, "MyTieZ").FontSize(18).Bold().TextColor(t.Text)
 				ui.Box(c).Grow(1)
 
@@ -142,7 +148,7 @@ func (a *clipApp) view(c *ui.Context) {
 		// 搜索框与分类筛选栏（离开顶部时收起，滚回最顶部再向上滚展开）
 		ctrlWrap := ui.Column(c.Key("header-controls")).FillWidth()
 		if p < 1 {
-			const controlsFullHeight float32 = 90 // 2(top pad) + 46(search) + 8(gap) + 26(tabs) + 8(bottom pad)
+			const controlsFullHeight float32 = 92 // 2(top pad) + 46(search) + 8(gap) + 28(tabs) + 8(bottom pad)
 			ctrlWrap.ClipY().Height(p * controlsFullHeight).Opacity(p)
 		}
 		if p > 0 {
@@ -195,7 +201,7 @@ func (a *clipApp) view(c *ui.Context) {
 								a.reload()
 							}).
 							Children(func() {
-								ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(tabText)
+								ui.Text(c, label).FontSize(12).FontWeight(400).TextColor(tabText)
 							})
 					}
 				})

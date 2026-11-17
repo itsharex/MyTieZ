@@ -23,8 +23,8 @@ func (a *clipApp) settingsView(c *ui.Context) {
 	t := c.Theme()
 
 	ui.Column(c.Key("settings-page")).Fill().Children(func() {
-		// 设置页顶部导航栏（与主页顶栏同构，无硬分割线直接过渡到分组卡片）
-		ui.Column(c).FillWidth().Padding(10, 16, 6, 16).Children(func() {
+		// 设置页顶部导航栏（与主页顶栏同构，下方带左右留白的细分割线）
+		ui.Column(c).FillWidth().Padding(10, 16, 8, 16).Children(func() {
 			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(8).DragWindow().Children(func() {
 				a.renderHeaderIconBtn(c, iconBack, "返回", false, false, func() {
 					a.cancelHotkeyRecording()
@@ -41,8 +41,12 @@ func (a *clipApp) settingsView(c *ui.Context) {
 			})
 		})
 
+		ui.Box(c).FillWidth().Padding(0, 14, 0, 14).Children(func() {
+			ui.Box(c).FillWidth().Height(1).Background(t.Border.Alpha(0.45))
+		})
+
 		ui.Scroll(c.Key("settings-scroll")).Grow(1).Children(func() {
-			ui.Column(c).FillWidth().Padding(8, 14, 18, 14).Gap(10).Children(func() {
+			ui.Column(c).FillWidth().Padding(22, 14, 18, 14).Gap(10).Children(func() {
 				if a.settingsNotice != "" {
 					ui.Text(c.Key("settings-notice"), a.settingsNotice).FontSize(13).TextColor(t.Accent).
 						FillWidth().Padding(10, 14).Radius(radiusGroup).
@@ -245,11 +249,7 @@ func (a *clipApp) renderSettingsGroup(c *ui.Context, title string, expanded *boo
 			p := ui.CollapsibleBase(c, expanded)
 			tr := p.Trigger.FillWidth().MinHeight(50).Padding(0, 16).Radius(radiusCard).
 				Justify(ui.SpaceBetween).AlignItems(ui.Center).Label(title)
-			bg := t.Surface
-			if tr.Hovered() {
-				bg = t.SurfaceHover
-			}
-			tr.Background(bg).Transition(colorTransition).Children(func() {
+			tr.Background(t.Surface).Children(func() {
 				ui.Text(c, title).FontSize(14.5).FontWeight(700).TextColor(t.Text)
 				ui.Icon(c, iconChevronRight).FontSize(15).TextColor(t.TextMuted).Rotate(90 * p.Progress())
 			})
@@ -301,7 +301,7 @@ func (a *clipApp) renderSwitchRow(c *ui.Context, title, desc string, val *bool, 
 
 func (a *clipApp) renderSwitch(c *ui.Context, val *bool, label string) bool {
 	t := c.Theme()
-	sw := ui.SwitchBase(c, val).Size(38, 21).Radius(10.5).Label(label)
+	sw := ui.SwitchBase(c, val).Size(46, 25).Radius(12.5).Label(label)
 	pos := sw.Animate("knob", b2f(*val), 140*time.Millisecond)
 
 	offBg := t.Border.Mix(t.Accent, 0.08)
@@ -318,7 +318,7 @@ func (a *clipApp) renderSwitch(c *ui.Context, val *bool, label string) bool {
 		sw.Background(offBg)
 	}
 	sw.Draw(func(p *ui.Painter, r ui.Rect) {
-		const inset float32 = 2.5
+		const inset float32 = 3
 		d := r.H - 2*inset
 		knob := ui.Rect{X: r.X + inset + pos*(r.W-r.H), Y: r.Y + inset, W: d, H: d}
 		p.Shadow(knob, d/2, 0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.16))

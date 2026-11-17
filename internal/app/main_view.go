@@ -110,6 +110,7 @@ func (a *clipApp) view(c *ui.Context) {
 	if c.Shortcut(0, ui.KeyUp) {
 		a.moveSelection(-1)
 	}
+	a.handleQuickPasteShortcut(c)
 	enterPressed := c.Shortcut(0, ui.KeyEnter)
 
 	page := ui.Column(c.Key("main-page")).Fill()
@@ -234,6 +235,7 @@ func (a *clipApp) view(c *ui.Context) {
 			if enterPressed || list.Submitted() {
 				a.pasteSelected()
 			}
+			a.renderScrollTopButton(c, t)
 		})
 
 		if a.statusMsg != "" && time.Now().Before(a.statusUntil) {
@@ -291,8 +293,12 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 		Children(func() {
 			ui.Row(c).MinHeight(cardActionSize).AlignItems(ui.Center).Gap(4).Children(func() {
 				kindIcon, _ := kindMeta(item.Kind)
-				if appBmp := a.getOrLoadAppIcon(item.SourcePath); appBmp != nil {
-					ui.Image(c, appBmp).Size(14, 14).Fit(ui.Contain).Radius(3)
+				if a.settings.ShowSourceIcon {
+					if appBmp := a.getOrLoadAppIcon(item.SourcePath); appBmp != nil {
+						ui.Image(c, appBmp).Size(14, 14).Fit(ui.Contain).Radius(3)
+					} else {
+						ui.Icon(c, kindIcon).FontSize(13).TextColor(t.TextMuted)
+					}
 				} else {
 					ui.Icon(c, kindIcon).FontSize(13).TextColor(t.TextMuted)
 				}
@@ -437,7 +443,63 @@ func (a *clipApp) clearSearch(c *ui.Context) {
 }
 
 func (a *clipApp) canAutoCollapseControls() bool {
-	return len(a.items) > 0 && a.query == "" && a.filterIdx == 0
+	return !a.settings.PinSearchBox && len(a.items) > 0 && a.query == "" && a.filterIdx == 0
+}
+
+func (a *clipApp) handleQuickPasteShortcut(c *ui.Context) {
+	var mod ui.Modifiers
+	switch a.settings.QuickPasteModifier {
+	case "alt":
+		mod = ui.Alt
+	case "ctrl":
+		mod = ui.Ctrl
+	default:
+		return
+	}
+	for i := 0; i < 9; i++ {
+		if c.Shortcut(mod, ui.Key(int(ui.Key1)+i)) {
+			if i < len(a.items) {
+				a.selected = i
+				a.pasteSelected()
+				a.selected = -1
+			}
+			return
+		}
+	}
+}
+
+func (a *clipApp) renderScrollTopButton(c *ui.Context, t *ui.Theme) {
+	if !a.settings.ScrollTopButton || a.listScroll.Y <= 120 {
+		return
+	}
+	shadowAlpha := float32(0.12)
+	if t.Dark {
+		shadowAlpha = 0.32
+	}
+	btn := ui.ButtonBase(c.Key("scroll-top-btn")).
+		Absolute().Right(16).Bottom(16).ZIndex(20).
+		Size(34, 34).Center().Radius(17).Label("回到顶部")
+	bg := t.Surface
+	fg := t.Text
+	if btn.Hovered() {
+		bg = t.Accent
+		fg = t.AccentText
+	}
+	btn.Background(bg).Border(1, t.Border).
+		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+		Transition(colorTransition).
+		OnClick(func() {
+			a.listScroll.Y = 0
+			a.atTop = true
+			a.controlsCollapsed = false
+			a.upScrollAccum = 0
+			if len(a.items) > 0 {
+				a.list.ScrollTo(0, ui.Start)
+			}
+		}).
+		Children(func() {
+			ui.Icon(c, iconArrowUp).FontSize(16).TextColor(fg)
+		})
 }
 
 func (a *clipApp) updateControlsCollapse(c *ui.Context) {

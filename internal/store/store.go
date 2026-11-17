@@ -49,47 +49,57 @@ type ClipItem struct {
 
 // Settings holds persisted user preferences for the clipboard manager.
 type Settings struct {
-	AutoStart        bool   `json:"auto_start"`
-	SilentStart      bool   `json:"silent_start"`
-	FollowMouse      bool   `json:"follow_mouse"`
-	AutoHideOnBlur   bool   `json:"auto_hide_on_blur"`
-	Hotkey           string `json:"hotkey"`
-	Deduplicate      bool   `json:"deduplicate"`
-	MaxHistory       int    `json:"max_history"`
-	CaptureFiles     bool   `json:"capture_files"`
-	CaptureRichText  bool   `json:"capture_rich_text"`
-	ClickCopyOnly    bool   `json:"click_copy_only"`
-	MoveToTopOnPaste bool   `json:"move_to_top_on_paste"`
-	ColorMode        string `json:"color_mode"`    // "system" | "light" | "dark"
-	BackdropMode     string `json:"backdrop_mode"` // "mica" | "acrylic" | "solid"
-	CompactMode      bool   `json:"compact_mode"`
-	HideCardActions  bool   `json:"hide_card_actions"`
-	OpenAppText      string `json:"open_app_text"`
-	OpenAppRichText  string `json:"open_app_rich_text"`
-	OpenAppImage     string `json:"open_app_image"`
-	WindowWidth      int    `json:"window_width"`
-	WindowHeight     int    `json:"window_height"`
+	AutoStart          bool   `json:"auto_start"`
+	SilentStart        bool   `json:"silent_start"`
+	FollowMouse        bool   `json:"follow_mouse"`
+	AutoHideOnBlur     bool   `json:"auto_hide_on_blur"`
+	PinSearchBox       bool   `json:"pin_search_box"`
+	ScrollTopButton    bool   `json:"scroll_top_button"`
+	Hotkey             string `json:"hotkey"`
+	Deduplicate        bool   `json:"deduplicate"`
+	MaxHistory         int    `json:"max_history"`
+	CaptureFiles       bool   `json:"capture_files"`
+	CaptureRichText    bool   `json:"capture_rich_text"`
+	ClickCopyOnly      bool   `json:"click_copy_only"`
+	MoveToTopOnPaste   bool   `json:"move_to_top_on_paste"`
+	DeleteAfterPaste   bool   `json:"delete_after_paste"`
+	QuickPasteModifier string `json:"quick_paste_modifier"` // "none" | "alt" | "ctrl"
+	ColorMode          string `json:"color_mode"`           // "system" | "light" | "dark"
+	BackdropMode       string `json:"backdrop_mode"`        // "mica" | "acrylic" | "solid"
+	CompactMode        bool   `json:"compact_mode"`
+	HideCardActions    bool   `json:"hide_card_actions"`
+	ShowSourceIcon     bool   `json:"show_source_icon"`
+	OpenAppText        string `json:"open_app_text"`
+	OpenAppRichText    string `json:"open_app_rich_text"`
+	OpenAppImage       string `json:"open_app_image"`
+	WindowWidth        int    `json:"window_width"`
+	WindowHeight       int    `json:"window_height"`
 }
 
 func DefaultSettings() Settings {
 	return Settings{
-		AutoStart:        false,
-		SilentStart:      false,
-		FollowMouse:      false,
-		AutoHideOnBlur:   true,
-		Hotkey:           "Alt+V",
-		Deduplicate:      true,
-		MaxHistory:       500,
-		CaptureFiles:     true,
-		CaptureRichText:  true,
-		ClickCopyOnly:    false,
-		MoveToTopOnPaste: true,
-		ColorMode:        "system",
-		BackdropMode:     "mica",
-		CompactMode:      false,
-		HideCardActions:  false,
-		WindowWidth:      420,
-		WindowHeight:     600,
+		AutoStart:          false,
+		SilentStart:        false,
+		FollowMouse:        false,
+		AutoHideOnBlur:     true,
+		PinSearchBox:       false,
+		ScrollTopButton:    true,
+		Hotkey:             "Alt+V",
+		Deduplicate:        true,
+		MaxHistory:         500,
+		CaptureFiles:       true,
+		CaptureRichText:    true,
+		ClickCopyOnly:      false,
+		MoveToTopOnPaste:   true,
+		DeleteAfterPaste:   false,
+		QuickPasteModifier: "none",
+		ColorMode:          "system",
+		BackdropMode:       "mica",
+		CompactMode:        false,
+		HideCardActions:    false,
+		ShowSourceIcon:     true,
+		WindowWidth:        420,
+		WindowHeight:       600,
 	}
 }
 
@@ -245,6 +255,9 @@ func (s *Store) LoadSettings() (Settings, error) {
 	}
 	if cfg.BackdropMode != "mica" && cfg.BackdropMode != "acrylic" && cfg.BackdropMode != "solid" {
 		cfg.BackdropMode = "mica"
+	}
+	if cfg.QuickPasteModifier != "none" && cfg.QuickPasteModifier != "alt" && cfg.QuickPasteModifier != "ctrl" {
+		cfg.QuickPasteModifier = "none"
 	}
 	if cfg.Hotkey == "" {
 		cfg.Hotkey = DefaultSettings().Hotkey

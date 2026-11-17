@@ -172,11 +172,19 @@ func (a *clipApp) pasteSelected() {
 	a.ignoreHash = item.Hash
 	a.ignoreUntil = time.Now().Add(1500 * time.Millisecond)
 
-	if err := writeClipItem(item); err != nil {
-		log.Printf("write clipboard: %v", err)
-		return
+	if mygo.App.IsReady() {
+		if err := writeClipItem(item); err != nil {
+			log.Printf("write clipboard: %v", err)
+			return
+		}
 	}
-	if a.settings.MoveToTopOnPaste && a.store != nil {
+	if !a.settings.ClickCopyOnly && a.settings.DeleteAfterPaste && a.store != nil {
+		if err := a.store.Delete(item.ID); err != nil {
+			log.Printf("delete after paste: %v", err)
+		} else {
+			a.reload()
+		}
+	} else if a.settings.MoveToTopOnPaste && a.store != nil {
 		if err := a.store.TouchItem(item.ID); err != nil {
 			log.Printf("touch item: %v", err)
 		} else {
@@ -192,17 +200,19 @@ func (a *clipApp) pasteSelected() {
 	if a.panel != nil && !a.winPinned {
 		a.panel.Hide()
 	}
-	go func() {
-		if restoreFocus {
-			sys.RestoreForegroundWindow()
-			time.Sleep(70 * time.Millisecond)
-		} else {
-			time.Sleep(60 * time.Millisecond)
-		}
-		if err := runWithTimeout(pasteTimeout, sys.SendPaste); err != nil {
-			log.Printf("send paste: %v", err)
-		}
-	}()
+	if mygo.App.IsReady() {
+		go func() {
+			if restoreFocus {
+				sys.RestoreForegroundWindow()
+				time.Sleep(70 * time.Millisecond)
+			} else {
+				time.Sleep(60 * time.Millisecond)
+			}
+			if err := runWithTimeout(pasteTimeout, sys.SendPaste); err != nil {
+				log.Printf("send paste: %v", err)
+			}
+		}()
+	}
 }
 
 func writeClipItem(item store.ClipItem) error {

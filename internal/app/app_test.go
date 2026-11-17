@@ -673,3 +673,107 @@ func TestURLAndCodeFilter(t *testing.T) {
 		t.Fatalf("expected 代码 filter to show code only, kind=%q texts=%q", a.currentKind(), tt.Texts())
 	}
 }
+
+func TestLightweightSettings(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	for i := 0; i < 15; i++ {
+		if _, err := st.SaveText(
+			string(rune('A'+i))+" lightweight setting entry",
+			store.SaveOptions{Deduplicate: false},
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	// 1. 设置页开关与选项验证
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("常规设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if !tt.HasText("以管理员身份重启") {
+		t.Fatalf("expected restart as admin row in general settings, texts=%q", tt.Texts())
+	}
+	if err := tt.Click("切换固定显示搜索栏"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.settings.PinSearchBox {
+		t.Fatal("expected PinSearchBox toggled to true")
+	}
+	if err := tt.Click("常规设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+
+	if err := tt.Click("剪贴板设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("切换粘贴后删除"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("快捷粘贴Alt"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.settings.DeleteAfterPaste || a.settings.QuickPasteModifier != "alt" {
+		t.Fatalf("expected DeleteAfterPaste=true and QuickPasteModifier=alt, got %+v", a.settings)
+	}
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, -200)
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("剪贴板设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+
+	if err := tt.Click("界面设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("切换显示来源应用图标"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.ShowSourceIcon {
+		t.Fatal("expected ShowSourceIcon toggled to false")
+	}
+
+	if err := tt.Click("返回"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. PinSearchBox=true 时滚动不收起搜索栏，且出现“回到顶部”按钮
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 260)
+	tt.Advance(250 * time.Millisecond)
+	if a.controlsCollapsed {
+		t.Fatal("expected controls not collapsed when PinSearchBox=true")
+	}
+	if !tt.HasText("回到顶部") {
+		t.Fatalf("expected scroll-top button visible after scrolling down, texts=%q", tt.Texts())
+	}
+	if err := tt.Click("回到顶部"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.listScroll.Y != 0 || !a.atTop {
+		t.Fatalf("expected scrolled back to top, scrollY=%v atTop=%v", a.listScroll.Y, a.atTop)
+	}
+
+	// 3. Alt+2 快捷粘贴第 2 条并触发 DeleteAfterPaste 删除
+	secondText := a.items[1].Text
+	tt.Key(ui.Alt, ui.Key2)
+	if tt.HasText(secondText) {
+		t.Fatalf("expected second item %q deleted after Alt+2 quick paste", secondText)
+	}
+}

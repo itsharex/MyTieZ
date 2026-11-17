@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"mytiez/internal/store"
+	"mytiez/internal/sys"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -74,6 +75,33 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						a.applyAutoHide(on)
 						a.persistSettings()
 					})
+					a.renderSwitchRow(c, "固定显示搜索栏", "", &a.settings.PinSearchBox, func(on bool) {
+						if on {
+							a.controlsCollapsed = false
+						}
+						a.persistSettings()
+					})
+					a.renderSwitchRow(c, "显示回到顶部按钮", "", &a.settings.ScrollTopButton, func(bool) {
+						a.persistSettings()
+					})
+					a.renderSettingRow(c, "以管理员身份重启", "用于向管理员权限窗口粘贴内容", func() {
+						btn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 12).Radius(radiusGroup).Label("以管理员身份重启")
+						bg := t.Surface
+						if btn.Hovered() {
+							bg = t.SurfaceHover
+						}
+						btn.Background(bg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+							OnClick(func() {
+								if err := sys.RestartAsAdmin(); err != nil {
+									a.settingsNotice = "以管理员身份重启失败: " + err.Error()
+									return
+								}
+								mygo.App.Quit()
+							}).
+							Children(func() {
+								ui.Text(c, "重启").FontSize(13).FontWeight(600).TextColor(t.Text)
+							})
+					})
 				})
 
 				// 2. 剪贴板设置
@@ -100,6 +128,14 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, "粘贴后移到顶部", "", &a.settings.MoveToTopOnPaste, func(bool) {
 						a.persistSettings()
 					})
+					a.renderSwitchRow(c, "粘贴后删除", "", &a.settings.DeleteAfterPaste, func(bool) {
+						a.persistSettings()
+					})
+					a.renderChoiceGroup(c, "数字键快捷粘贴", []choiceOption{
+						{label: "关闭", a11y: "快捷粘贴关闭", active: a.settings.QuickPasteModifier == "none", onClick: func() { a.setQuickPasteModifier("none") }},
+						{label: "Alt+1~9", a11y: "快捷粘贴Alt", active: a.settings.QuickPasteModifier == "alt", onClick: func() { a.setQuickPasteModifier("alt") }},
+						{label: "Ctrl+1~9", a11y: "快捷粘贴Ctrl", active: a.settings.QuickPasteModifier == "ctrl", onClick: func() { a.setQuickPasteModifier("ctrl") }},
+					})
 				})
 
 				// 3. 界面设置
@@ -118,6 +154,9 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						a.persistSettings()
 					})
 					a.renderSwitchRow(c, "悬停显示卡片操作", "", &a.settings.HideCardActions, func(bool) {
+						a.persistSettings()
+					})
+					a.renderSwitchRow(c, "显示来源应用图标", "", &a.settings.ShowSourceIcon, func(bool) {
 						a.persistSettings()
 					})
 				})
@@ -221,6 +260,11 @@ func (a *clipApp) setMaxHistory(val int) {
 func (a *clipApp) setBackdropMode(mode string) {
 	a.settings.BackdropMode = mode
 	a.applyBackdrop()
+	a.persistSettings()
+}
+
+func (a *clipApp) setQuickPasteModifier(mod string) {
+	a.settings.QuickPasteModifier = mod
 	a.persistSettings()
 }
 

@@ -22,23 +22,26 @@
 
 ## 开发与测试
 
-环境要求：Go `1.27+`
+环境要求：Go `1.27+`，并安装 [MyGo CLI](https://github.com/egoist/mygo)：
 
 ```powershell
+# 安装 mygo CLI
+go install github.com/egoist/mygo/cmd/mygo@latest
+
 # 开发预览
-go tool mygo dev
+mygo dev
 
 # 修改 locales/*.json 后重新生成多语言目录
-go tool mygo generate
+mygo generate
 
 # 运行单元测试
 go test -count=1 ./internal/...
 
 # 静态检查
-go tool mygo vet .
+mygo vet .
 
 # 打包发布
-go tool mygo build
+mygo build
 ```
 
 ## 目录结构

@@ -353,3 +353,32 @@ func TestListSummariesAndGetByID(t *testing.T) {
 		t.Fatalf("expected full text length %d, got %d", len(longText), len(full.Text))
 	}
 }
+
+func TestPortableDataDir(t *testing.T) {
+	dir := t.TempDir()
+	if _, ok := portableDataDir(dir); ok {
+		t.Fatal("expected portableDataDir=false for empty dir")
+	}
+
+	marker := filepath.Join(dir, "portable")
+	if err := os.WriteFile(marker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := portableDataDir(dir)
+	if !ok || got != filepath.Join(dir, "data") {
+		t.Fatalf("expected portable data dir %q, got %q ok=%v", filepath.Join(dir, "data"), got, ok)
+	}
+	_ = os.Remove(marker)
+
+	dataDir := filepath.Join(dir, "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "mytiez.db"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, ok = portableDataDir(dir)
+	if !ok || got != dataDir {
+		t.Fatalf("expected existing db to trigger portable dir %q, got %q ok=%v", dataDir, got, ok)
+	}
+}

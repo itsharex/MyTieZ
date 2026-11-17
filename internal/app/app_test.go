@@ -7,6 +7,7 @@ import (
 
 	"mytiez/internal/store"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -601,5 +602,38 @@ func TestClearSearchResetsTopAndClosesSearch(t *testing.T) {
 	}
 	if tt.HasText("筛选标签 工作") {
 		t.Fatalf("expected search tag popover closed after clearing search, texts=%q", tt.Texts())
+	}
+}
+
+func TestFollowMouseTarget(t *testing.T) {
+	workArea := mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1040}
+	w, h := 400, 560
+
+	// 1. 光标在中上部：水平居中，位于光标下方 +12
+	x, y := followMouseTarget(mygo.Point{X: 960, Y: 200}, w, h, workArea)
+	if x != 760 || y != 212 {
+		t.Fatalf("expected (760, 212) below cursor, got (%d, %d)", x, y)
+	}
+
+	// 2. 光标靠近底部：下方放不下时自动翻转到光标上方
+	x, y = followMouseTarget(mygo.Point{X: 960, Y: 900}, w, h, workArea)
+	if x != 760 || y != 900-h-12 {
+		t.Fatalf("expected flipped above cursor to (760, %d), got (%d, %d)", 900-h-12, x, y)
+	}
+
+	// 3. 光标靠近左右边缘：保留 8px 安全边距
+	x, _ = followMouseTarget(mygo.Point{X: 30, Y: 200}, w, h, workArea)
+	if x != 8 {
+		t.Fatalf("expected clamped left margin 8, got %d", x)
+	}
+	x, _ = followMouseTarget(mygo.Point{X: 1900, Y: 200}, w, h, workArea)
+	if x != 1920-w-8 {
+		t.Fatalf("expected clamped right margin %d, got %d", 1920-w-8, x)
+	}
+
+	// 4. 上下都放不下时夹紧在工作区底边
+	x, y = followMouseTarget(mygo.Point{X: 960, Y: 520}, w, h, workArea)
+	if x != 760 || y != 1040-h-8 {
+		t.Fatalf("expected clamped bottom %d, got (%d, %d)", 1040-h-8, x, y)
 	}
 }

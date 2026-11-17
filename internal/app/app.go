@@ -154,16 +154,17 @@ func (a *clipApp) showPanel() {
 		cursor := mygo.Screen.CursorScreenPoint()
 		d := mygo.Screen.DisplayNearestPoint(cursor)
 		w, h := a.panel.Size()
-		x := d.WorkArea.X + (d.WorkArea.Width-w)/2
-		y := d.WorkArea.Y + (d.WorkArea.Height-h)/3
+		if w <= 0 {
+			w = max(minPanelWidth, a.settings.WindowWidth)
+		}
+		if h <= 0 {
+			h = max(minPanelHeight, a.settings.WindowHeight)
+		}
+		var x, y int
 		if a.settings.FollowMouse {
-			const margin = 12
-			x = cursor.X - w/2
-			y = cursor.Y + 16
-			maxX := d.WorkArea.X + d.WorkArea.Width - w - margin
-			maxY := d.WorkArea.Y + d.WorkArea.Height - h - margin
-			x = max(d.WorkArea.X+margin, min(x, maxX))
-			y = max(d.WorkArea.Y+margin, min(y, maxY))
+			x, y = followMouseTarget(cursor, w, h, d.WorkArea)
+		} else {
+			x, y = centeredPanelTarget(w, h, d.WorkArea)
 		}
 		a.panel.SetPosition(x, y)
 	}
@@ -179,6 +180,57 @@ func (a *clipApp) showPanel() {
 	a.panel.SetAlwaysOnTop(a.winPinned)
 	a.panel.Show()
 	a.panel.Focus()
+}
+
+func followMouseTarget(cursor mygo.Point, w, h int, workArea mygo.Rectangle) (int, int) {
+	const (
+		cursorGap = 12
+		edgePad   = 8
+	)
+	x := cursor.X - w/2
+	y := cursor.Y + cursorGap
+
+	minX := workArea.X + edgePad
+	maxX := workArea.X + workArea.Width - w - edgePad
+	if maxX < minX {
+		x = workArea.X
+	} else {
+		x = max(minX, min(x, maxX))
+	}
+
+	minY := workArea.Y + edgePad
+	maxY := workArea.Y + workArea.Height - h - edgePad
+	if maxY < minY {
+		return x, workArea.Y
+	}
+	if y > maxY {
+		aboveY := cursor.Y - h - cursorGap
+		if aboveY >= minY {
+			y = aboveY
+		} else {
+			y = maxY
+		}
+	}
+	if y < minY {
+		y = minY
+	}
+	return x, y
+}
+
+func centeredPanelTarget(w, h int, workArea mygo.Rectangle) (int, int) {
+	x := workArea.X + (workArea.Width-w)/2
+	y := workArea.Y + (workArea.Height-h)/3
+	if workArea.Width > w {
+		x = max(workArea.X, min(x, workArea.X+workArea.Width-w))
+	} else {
+		x = workArea.X
+	}
+	if workArea.Height > h {
+		y = max(workArea.Y, min(y, workArea.Y+workArea.Height-h))
+	} else {
+		y = workArea.Y
+	}
+	return x, y
 }
 
 func (a *clipApp) togglePanel() {

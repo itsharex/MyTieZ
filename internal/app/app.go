@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"mytiez/internal/store"
+	"mytiez/internal/sys"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -20,6 +21,7 @@ type clipApp struct {
 	tray         *mygo.Tray
 	shortcut     string
 	stopWatch    func()
+	stopTrack    chan struct{}
 	items        []store.ClipItem
 	query        string
 	filterIdx    int // 0: 全部, 1: 文本, 2: 图片, 3: 文件
@@ -129,6 +131,7 @@ func (a *clipApp) showPanel() {
 	if a.panel == nil {
 		return
 	}
+	sys.TrackForegroundWindow()
 	if !a.panel.IsVisible() {
 		cursor := mygo.Screen.CursorScreenPoint()
 		d := mygo.Screen.DisplayNearestPoint(cursor)
@@ -254,6 +257,7 @@ func (a *clipApp) ready() {
 
 	a.setupTray()
 	a.stopWatch = mygo.Clipboard.OnChanged(a.onClipboardChanged)
+	a.startForegroundTracker()
 	a.reload()
 
 	if !mygo.App.WasOpenedAtLogin() && !a.settings.SilentStart {
@@ -309,8 +313,30 @@ func (a *clipApp) setupTray() {
 		if a.stopWatch != nil {
 			a.stopWatch()
 		}
+		if a.stopTrack != nil {
+			close(a.stopTrack)
+			a.stopTrack = nil
+		}
 		if a.tray != nil {
 			a.tray.Destroy()
 		}
 	})
+}
+
+func (a *clipApp) startForegroundTracker() {
+	sys.TrackForegroundWindow()
+	stop := make(chan struct{})
+	a.stopTrack = stop
+	go func() {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sys.TrackForegroundWindow()
+			case <-stop:
+				return
+			}
+		}
+	}()
 }

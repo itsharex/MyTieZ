@@ -181,11 +181,17 @@ func (a *clipApp) pasteSelected() {
 		a.statusUntil = time.Now().Add(2 * time.Second)
 		return
 	}
+	restoreFocus := a.winPinned
 	if a.panel != nil && !a.winPinned {
 		a.panel.Hide()
 	}
 	go func() {
-		time.Sleep(60 * time.Millisecond)
+		if restoreFocus {
+			sys.RestoreForegroundWindow()
+			time.Sleep(70 * time.Millisecond)
+		} else {
+			time.Sleep(60 * time.Millisecond)
+		}
 		if err := runWithTimeout(pasteTimeout, sys.SendPaste); err != nil {
 			log.Printf("send paste: %v", err)
 		}

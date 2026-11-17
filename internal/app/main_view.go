@@ -22,14 +22,18 @@ const (
 
 func (a *clipApp) renderHeaderIconBtn(c *ui.Context, icon *ui.SVG, label string, active, danger bool, onClick func()) {
 	t := c.Theme()
-	btn := ui.ButtonBase(c).Size(headerBtnSize, headerBtnSize).Center().Radius(radiusControl).Label(label)
+	btn := ui.ButtonBase(c).Size(headerBtnSize, headerBtnSize).Center().Radius(headerBtnSize / 2).Label(label)
 	bg := t.Surface
 	border := t.Border
 	fg := t.TextMuted
 	if active {
-		bg = t.Surface.Mix(t.Accent, 0.14)
+		bg = t.Accent
 		border = t.Accent
-		fg = t.Accent
+		fg = t.AccentText
+		if btn.Hovered() {
+			bg = t.AccentHover
+			border = t.AccentHover
+		}
 	} else if btn.Hovered() {
 		if danger {
 			bg = t.Surface.Mix(t.Danger, 0.14)
@@ -48,7 +52,7 @@ func (a *clipApp) renderHeaderIconBtn(c *ui.Context, icon *ui.SVG, label string,
 	}
 	btn.Background(bg).Border(1, border).Transition(colorTransition).
 		OnClick(onClick).
-		Children(func() { ui.Icon(c, icon).FontSize(19).TextColor(fg) })
+		Children(func() { ui.Icon(c, icon).FontSize(16).TextColor(fg) })
 }
 
 func (a *clipApp) renderWindowActionButtons(c *ui.Context) {
@@ -103,11 +107,14 @@ func (a *clipApp) view(c *ui.Context) {
 	page := ui.Column(c.Key("main-page")).Fill()
 	page.Children(func() {
 		// 顶部标题栏（常驻固定）
-		ui.Column(c).Padding(10, 16).Children(func() {
-			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(6).DragWindow().Children(func() {
-				ui.Text(c, "MyTieZ").FontSize(22).Bold().TextColor(t.Text)
+		ui.Column(c).Padding(8, 16, 4, 16).Children(func() {
+			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(4).DragWindow().Children(func() {
+				ui.Text(c, "MyTieZ").FontSize(18).Bold().TextColor(t.Text)
 				ui.Box(c).Grow(1)
 
+				a.renderHeaderIconBtn(c, iconPin, "固定窗口", a.winPinned, false, func() {
+					a.toggleWindowPin()
+				})
 				a.renderHeaderIconBtn(c, iconTrash, "清空未置顶", false, false, func() {
 					a.clearUnpinned()
 				})
@@ -116,7 +123,11 @@ func (a *clipApp) view(c *ui.Context) {
 					a.confirmAction = ""
 					a.settingsNotice = ""
 				})
-				a.renderWindowActionButtons(c)
+				a.renderHeaderIconBtn(c, iconClear, "隐藏窗口", false, true, func() {
+					if a.panel != nil {
+						a.panel.Hide()
+					}
+				})
 			})
 		})
 
@@ -166,9 +177,9 @@ func (a *clipApp) view(c *ui.Context) {
 						tab := ui.ButtonBase(c).Height(filterPillHeight).Padding(0, 9).Radius(radiusMicro).Label(label)
 						tabBg, tabBorder, tabText := t.Surface, t.Border, t.TextMuted
 						if active {
-							tabBg = t.Surface.Mix(t.Accent, 0.1)
+							tabBg = t.Accent
 							tabBorder = t.Accent
-							tabText = t.Accent
+							tabText = t.AccentText
 						} else if tab.Hovered() {
 							tabBg = t.SurfaceHover
 							tabBorder = t.Border.Mix(t.TextMuted, 0.35)
@@ -402,11 +413,11 @@ func (a *clipApp) renderCardActionBtn(c *ui.Context, icon *ui.SVG, label string,
 	btn := ui.ButtonBase(c).Size(cardActionSize, cardActionSize).Center().Radius(cardActionSize / 2).Label(label)
 	bg := t.Surface
 	border := t.Border
-	fg := t.TextMuted
+	fg := t.Text.Mix(t.TextMuted, 0.55)
 	if active {
-		bg = t.Surface.Mix(t.Accent, 0.12)
+		bg = t.Accent
 		border = t.Accent
-		fg = t.Accent
+		fg = t.AccentText
 	} else if btn.Hovered() {
 		bg = t.SurfaceHover
 		border = t.Border.Mix(t.TextMuted, 0.35)
@@ -415,7 +426,7 @@ func (a *clipApp) renderCardActionBtn(c *ui.Context, icon *ui.SVG, label string,
 	btn.Background(bg).Border(1, border).Transition(colorTransition).
 		OnClick(onClick).
 		Children(func() {
-			ui.Icon(c, icon).FontSize(12).TextColor(fg)
+			ui.Icon(c, icon).FontSize(13).TextColor(fg)
 		})
 }
 

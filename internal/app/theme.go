@@ -34,6 +34,12 @@ var (
 		Colors:   true,
 		Duration: 140 * time.Millisecond,
 	}
+	cardTransition = ui.ElementTransition{
+		Duration: 260 * time.Millisecond,
+		Ease:     ui.EaseOut,
+		Colors:   true,
+		Shadows:  true,
+	}
 )
 
 func buildMyTiezTheme(dark bool) *ui.Theme {

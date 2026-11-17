@@ -59,6 +59,7 @@ type Settings struct {
 	ColorMode        string `json:"color_mode"`    // "system" | "light" | "dark"
 	BackdropMode     string `json:"backdrop_mode"` // "mica" | "acrylic" | "solid"
 	CompactMode      bool   `json:"compact_mode"`
+	HideCardActions  bool   `json:"hide_card_actions"`
 	WindowWidth      int    `json:"window_width"`
 	WindowHeight     int    `json:"window_height"`
 }
@@ -79,6 +80,7 @@ func DefaultSettings() Settings {
 		ColorMode:        "system",
 		BackdropMode:     "mica",
 		CompactMode:      false,
+		HideCardActions:  false,
 		WindowWidth:      420,
 		WindowHeight:     600,
 	}

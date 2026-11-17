@@ -212,7 +212,7 @@ func (a *clipApp) view(c *ui.Context) {
 
 		ui.Column(c).Grow(1).HandleInput(a.handleListWheel).Children(func() {
 			list := ui.List(c, &a.list, len(a.items)).TrackScroll(&a.listScroll).
-				Grow(1).Padding(6, 16, 12, 16).Gap(4).
+				Grow(1).Padding(10, 16, 12, 16).Gap(4).
 				Rows(func(row ui.ListRow) {
 					a.renderCard(row)
 				}).
@@ -243,14 +243,27 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 	t := c.Theme()
 	item := a.items[row.Index]
 
+	hovered := row.Hovered()
+	pressed := row.Pressed()
 	bg := t.Surface
 	borderColor := t.Border
+	var translateY float32
+	shadowAlpha := float32(0)
 	switch {
-	case row.Pressed():
+	case pressed:
 		bg = t.SurfacePressed
-		borderColor = t.Border.Mix(t.TextMuted, 0.4)
-	case row.Hovered():
 		borderColor = t.Border.Mix(t.TextMuted, 0.35)
+		shadowAlpha = 0.04
+		if t.Dark {
+			shadowAlpha = 0.16
+		}
+	case hovered:
+		borderColor = t.Border.Mix(t.TextMuted, 0.28)
+		translateY = -2
+		shadowAlpha = 0.08
+		if t.Dark {
+			shadowAlpha = 0.28
+		}
 	}
 
 	var padTop, padX, padBottom, gap float32 = 10, 12, 11, 0
@@ -263,9 +276,12 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 	}
 
 	card := ui.Column(c).Padding(padTop, padX, padBottom, padX).Gap(gap).Radius(radiusCard).
-		Background(bg).Border(1, borderColor).Transition(colorTransition).
+		Background(bg).Border(1, borderColor).
+		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+		Translate(0, translateY).
+		Transition(cardTransition).
 		Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
+			ui.Row(c).MinHeight(cardActionSize).AlignItems(ui.Center).Gap(4).Children(func() {
 				kindIcon, _ := kindMeta(item.Kind)
 				if appBmp := a.getOrLoadAppIcon(item.SourcePath); appBmp != nil {
 					ui.Image(c, appBmp).Size(14, 14).Fit(ui.Contain).Radius(3)
@@ -285,17 +301,19 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 
 				ui.Box(c).Grow(1)
 
-				a.renderCardActionBtn(c, iconPaste, "粘贴", false, func() {
-					a.selected = row.Index
-					a.pasteSelected()
-					a.selected = -1
-				})
-				a.renderCardActionBtn(c, iconPin, "置顶", item.Pinned, func() {
-					a.togglePin(item.ID)
-				})
-				a.renderCardActionBtn(c, iconClear, "删除", false, func() {
-					a.deleteItem(item.ID)
-				})
+				if !a.settings.HideCardActions || hovered {
+					a.renderCardActionBtn(c, iconPaste, "粘贴", false, func() {
+						a.selected = row.Index
+						a.pasteSelected()
+						a.selected = -1
+					})
+					a.renderCardActionBtn(c, iconPin, "置顶", item.Pinned, func() {
+						a.togglePin(item.ID)
+					})
+					a.renderCardActionBtn(c, iconClear, "删除", false, func() {
+						a.deleteItem(item.ID)
+					})
+				}
 
 				ui.Text(c, relativeTime(item.UpdatedAt)).Width(48).TextAlign(ui.End).
 					FontSize(11).FontWeight(400).TextColor(t.TextMuted).SingleLine()

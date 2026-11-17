@@ -126,6 +126,9 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, "紧凑卡片模式", "", &a.settings.CompactMode, func(bool) {
 						a.persistSettings()
 					})
+					a.renderSwitchRow(c, "悬停显示卡片操作", "", &a.settings.HideCardActions, func(bool) {
+						a.persistSettings()
+					})
 				})
 
 				// 4. 数据管理

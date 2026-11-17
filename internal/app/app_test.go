@@ -181,6 +181,12 @@ func TestSettingsViewInteractions(t *testing.T) {
 	if a.settings.BackdropMode != "acrylic" {
 		t.Fatalf("expected BackdropMode=acrylic, got %q", a.settings.BackdropMode)
 	}
+	if err := tt.Click("切换悬停显示卡片操作"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.settings.HideCardActions {
+		t.Fatal("expected HideCardActions toggled to true")
+	}
 
 	// 返回主列表
 	if err := tt.Click("返回"); err != nil {

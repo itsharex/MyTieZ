@@ -471,3 +471,80 @@ func TestCardTagsInteractions(t *testing.T) {
 		t.Fatalf("expected clicking popover tag to filter by #第五个标签, query=%q texts=%q", a.query, tt.Texts())
 	}
 }
+
+func TestHotkeyRecorder(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("剪贴板设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+
+	if !tt.HasText("Alt+V") {
+		t.Fatalf("expected default hotkey Alt+V shown, texts=%q", tt.Texts())
+	}
+
+	// 点击进入录制状态
+	if err := tt.Click("录制呼出快捷键"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.recordingHotkey || !tt.HasText("请按下快捷键...") {
+		t.Fatalf("expected recording state active, recording=%v texts=%q", a.recordingHotkey, tt.Texts())
+	}
+
+	// 无修饰键的普通字母按键应被拒绝
+	tt.Key(0, ui.KeyA)
+	if !a.recordingHotkey || a.settings.Hotkey != "Alt+V" || a.settingsNotice == "" {
+		t.Fatalf("expected plain key A rejected, recording=%v hotkey=%q notice=%q", a.recordingHotkey, a.settings.Hotkey, a.settingsNotice)
+	}
+
+	// 按 Esc 取消录制
+	tt.Key(0, ui.KeyEscape)
+	if a.recordingHotkey || a.settings.Hotkey != "Alt+V" {
+		t.Fatalf("expected Esc to cancel recording, recording=%v hotkey=%q", a.recordingHotkey, a.settings.Hotkey)
+	}
+
+	// 录制组合键 Ctrl+Shift+K
+	if err := tt.Click("录制呼出快捷键"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Ctrl|ui.Shift, ui.KeyK)
+	if a.recordingHotkey || a.settings.Hotkey != "Ctrl+Shift+K" || a.shortcut != "Ctrl+Shift+K" {
+		t.Fatalf("expected recorded Ctrl+Shift+K, recording=%v hotkey=%q shortcut=%q", a.recordingHotkey, a.settings.Hotkey, a.shortcut)
+	}
+	loaded, err := st.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Hotkey != "Ctrl+Shift+K" {
+		t.Fatalf("expected persisted hotkey Ctrl+Shift+K, got %q", loaded.Hotkey)
+	}
+
+	// 录制功能键 F8
+	if err := tt.Click("录制呼出快捷键"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(0, ui.KeyF8)
+	if a.recordingHotkey || a.settings.Hotkey != "F8" {
+		t.Fatalf("expected recorded F8, recording=%v hotkey=%q", a.recordingHotkey, a.settings.Hotkey)
+	}
+
+	// 点击恢复默认
+	if err := tt.Click("恢复默认快捷键"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.Hotkey != "Alt+V" || a.shortcut != "Alt+V" {
+		t.Fatalf("expected hotkey reset to Alt+V, hotkey=%q shortcut=%q", a.settings.Hotkey, a.shortcut)
+	}
+}

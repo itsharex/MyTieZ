@@ -4,11 +4,11 @@ import (
 	"log"
 	"time"
 
+	"mytiez/internal/store"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
-
-var availableHotkeys = []string{"Alt+V", "Ctrl+Shift+V", "Alt+Shift+V", "Ctrl+Alt+V"}
 
 // Zero value keeps every group collapsed by default.
 type settingsGroupExpanded struct {
@@ -27,6 +27,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 		ui.Column(c).FillWidth().Padding(8, 16, 4, 16).Children(func() {
 			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(8).DragWindow().Children(func() {
 				a.renderHeaderIconBtn(c, iconBack, "返回", false, false, func() {
+					a.cancelHotkeyRecording()
 					a.showSettings = false
 					a.confirmAction = ""
 					a.settingsNotice = ""
@@ -45,7 +46,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 		ui.Scroll(c.Key("settings-scroll")).Grow(1).Children(func() {
 			ui.Column(c).FillWidth().Padding(18, 12, 18, 12).Gap(10).Children(func() {
 				if a.settingsNotice != "" {
-					ui.Text(c, a.settingsNotice).FontSize(13).TextColor(t.Accent).
+					ui.Text(c.Key("settings-notice"), a.settingsNotice).FontSize(13).TextColor(t.Accent).
 						FillWidth().Padding(10, 14).Radius(radiusGroup).
 						Background(t.Surface.Mix(t.Accent, 0.1)).
 						Border(1, t.Accent.Alpha(0.4))
@@ -75,20 +76,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 
 				// 2. 剪贴板设置
 				a.renderSettingsGroup(c, "剪贴板设置", &a.expanded.clipboard, func() {
-					a.renderSettingRow(c, "呼出快捷键", "", func() {
-						if ui.Select(c, &a.settings.Hotkey, availableHotkeys).Label("呼出快捷键").Changed() {
-							chosen := a.settings.Hotkey
-							if err := a.switchHotkey(chosen); err != nil {
-								if a.shortcut != "" {
-									a.settings.Hotkey = a.shortcut
-								}
-								a.settingsNotice = "快捷键 " + chosen + " 被占用，已保持原设置"
-							} else {
-								a.settingsNotice = "全局快捷键已更新为 " + chosen
-								a.persistSettings()
-							}
-						}
-					})
+					a.renderHotkeyRecorder(c)
 					a.renderSwitchRow(c, "自动去重", "", &a.settings.Deduplicate, func(bool) {
 						a.persistSettings()
 					})
@@ -248,7 +236,7 @@ type choiceOption struct {
 
 func (a *clipApp) renderSettingsGroup(c *ui.Context, title string, expanded *bool, body func()) {
 	t := c.Theme()
-	ui.Column(c).FillWidth().Radius(radiusGroup).Clip().Background(t.Surface).Border(1, t.Border.Alpha(0.45)).Children(func() {
+	ui.Column(c.Key("group-"+title)).FillWidth().Radius(radiusGroup).Clip().Background(t.Surface).Border(1, t.Border.Alpha(0.45)).Children(func() {
 		p := ui.CollapsibleBase(c, expanded)
 		tr := p.Trigger.FillWidth().MinHeight(settingGroupMinH).Padding(0, 16).Justify(ui.SpaceBetween).AlignItems(ui.Center).Label(title)
 		tr.Background(t.Surface).Children(func() {
@@ -428,6 +416,88 @@ func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) 
 				}).
 				Children(func() {
 					ui.Text(c, "选择程序").FontSize(13).FontWeight(600).TextColor(t.Text)
+				})
+		})
+	})
+}
+
+func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
+	t := c.Theme()
+	defaultHotkey := store.DefaultSettings().Hotkey
+
+	if a.hotkeyFocusPending {
+		a.hotkeyFocusPending = false
+		a.hotkeyHandle.Focus(c)
+	} else if a.recordingHotkey && !a.hotkeyHandle.Focused(c) {
+		a.cancelHotkeyRecording()
+	}
+
+	desc := "点击右侧按钮后按下组合键"
+	if a.recordingHotkey {
+		desc = "按下目标组合键，按 Esc 取消"
+	}
+
+	a.renderSettingRow(c, "呼出快捷键", desc, func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+			if a.recordingHotkey {
+				cancelBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label("取消录制快捷键")
+				cBg := t.Surface
+				if cancelBtn.Hovered() {
+					cBg = t.SurfaceHover
+				}
+				cancelBtn.Background(cBg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+					OnClick(func() {
+						a.cancelHotkeyRecording()
+						a.settingsNotice = ""
+					}).
+					Children(func() {
+						ui.Text(c, "取消").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+					})
+			} else if a.settings.Hotkey != defaultHotkey {
+				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label("恢复默认快捷键")
+				rBg := t.Surface
+				if resetBtn.Hovered() {
+					rBg = t.SurfaceHover
+				}
+				resetBtn.Background(rBg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+					OnClick(func() {
+						a.applyHotkey(defaultHotkey)
+					}).
+					Children(func() {
+						ui.Text(c, "恢复默认").FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+					})
+			}
+
+			labelText := a.settings.Hotkey
+			if labelText == "" {
+				labelText = defaultHotkey
+			}
+			if a.recordingHotkey {
+				labelText = recordingHotkeyLabel(a.hotkeyMods)
+			}
+
+			recBtn := ui.ButtonBase(c.Key("hotkey-recorder")).Bind(&a.hotkeyHandle).
+				Height(pillHeight).MinWidth(132).Padding(0, 12).Radius(radiusGroup).
+				Center().Label("录制呼出快捷键").
+				HandleInput(a.handleHotkeyInput)
+
+			bg, border, borderW, fg := t.Surface, t.Border.Alpha(0.7), float32(1), t.Text
+			if a.recordingHotkey {
+				bg = t.Surface.Mix(t.Accent, 0.12)
+				border = t.Accent
+				borderW = 1.5
+				fg = t.Accent
+			} else if recBtn.Hovered() {
+				bg = t.SurfaceHover
+				border = t.Border
+			}
+
+			recBtn.Background(bg).Border(borderW, border).Transition(colorTransition).
+				OnClick(func() {
+					a.startHotkeyRecording()
+				}).
+				Children(func() {
+					ui.Text(c, labelText).FontSize(13).FontWeight(600).TextColor(fg)
 				})
 		})
 	})

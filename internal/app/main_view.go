@@ -76,7 +76,7 @@ func (a *clipApp) view(c *ui.Context) {
 	}
 
 	if a.showSettings {
-		if c.Shortcut(0, ui.KeyEscape) {
+		if !a.recordingHotkey && c.Shortcut(0, ui.KeyEscape) {
 			if a.confirmAction != "" {
 				a.confirmAction = ""
 			} else {

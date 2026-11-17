@@ -19,6 +19,7 @@ type clipApp struct {
 	settings     store.Settings
 	panel        *mygo.Window
 	tray         *mygo.Tray
+	trayOpenItem *mygo.MenuItem
 	shortcut     string
 	stopWatch    func()
 	stopTrack    chan struct{}
@@ -49,11 +50,15 @@ type clipApp struct {
 	atTop             bool
 	topReachedAt      time.Time
 	upScrollAccum     float32
-	expanded          settingsGroupExpanded
-	confirmAction     string
-	settingsNotice    string
-	statusMsg         string
-	statusUntil       time.Time
+	expanded           settingsGroupExpanded
+	confirmAction      string
+	settingsNotice     string
+	recordingHotkey    bool
+	hotkeyFocusPending bool
+	hotkeyMods         ui.Modifiers
+	hotkeyHandle       ui.Handle
+	statusMsg          string
+	statusUntil        time.Time
 }
 
 func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
@@ -112,11 +117,14 @@ func (a *clipApp) applyAutoHide(autoHide bool) {
 }
 
 func (a *clipApp) switchHotkey(newKey string) error {
-	if newKey == "" || newKey == a.shortcut {
+	if newKey == "" {
 		return nil
 	}
 	if !mygo.App.IsReady() {
 		a.shortcut = newKey
+		return nil
+	}
+	if newKey == a.shortcut && mygo.GlobalShortcut.IsRegistered(newKey) {
 		return nil
 	}
 	oldKey := a.shortcut
@@ -124,12 +132,15 @@ func (a *clipApp) switchHotkey(newKey string) error {
 		mygo.GlobalShortcut.Unregister(oldKey)
 	}
 	if err := mygo.GlobalShortcut.Register(newKey, a.togglePanel); err != nil {
-		if oldKey != "" {
+		if oldKey != "" && !mygo.GlobalShortcut.IsRegistered(oldKey) {
 			_ = mygo.GlobalShortcut.Register(oldKey, a.togglePanel)
 		}
 		return err
 	}
 	a.shortcut = newKey
+	if a.trayOpenItem != nil {
+		a.trayOpenItem.SetAccelerator(newKey)
+	}
 	return nil
 }
 
@@ -237,10 +248,12 @@ func (a *clipApp) ready() {
 	})
 	a.panel.OnClose(func(e *mygo.CloseEvent) {
 		e.PreventDefault()
+		a.cancelHotkeyRecording()
 		a.saveWindowSize()
 		a.panel.Hide()
 	})
 	a.panel.OnBlur(func() {
+		a.cancelHotkeyRecording()
 		if !a.winPinned && !a.pickingApp {
 			a.saveWindowSize()
 			a.panel.Hide()
@@ -281,12 +294,13 @@ func (a *clipApp) setupTray() {
 		return
 	}
 	a.tray = tray
+	a.trayOpenItem = &mygo.MenuItem{
+		Label:       "打开剪贴板",
+		Accelerator: a.shortcut,
+		Click:       func(*mygo.MenuItem, *mygo.Window) { a.showPanel() },
+	}
 	menu := mygo.NewMenu([]*mygo.MenuItem{
-		{
-			Label:       "打开剪贴板",
-			Accelerator: a.shortcut,
-			Click:       func(*mygo.MenuItem, *mygo.Window) { a.showPanel() },
-		},
+		a.trayOpenItem,
 		{
 			Label: "清空未置顶记录",
 			Click: func(*mygo.MenuItem, *mygo.Window) {

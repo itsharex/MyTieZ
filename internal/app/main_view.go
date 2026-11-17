@@ -238,6 +238,8 @@ func (a *clipApp) view(c *ui.Context) {
 				ui.Text(c, a.statusMsg).FontSize(12).TextColor(t.Accent)
 			})
 		}
+
+		a.renderSearchTagPopover(c, t)
 	})
 }
 

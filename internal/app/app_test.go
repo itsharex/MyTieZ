@@ -453,4 +453,21 @@ func TestCardTagsInteractions(t *testing.T) {
 	if a.editingTagsID != a.items[0].ID || !tt.HasText("第五个标签") {
 		t.Fatalf("expected clicking +N to open full tag editor, editingTagsID=%d texts=%q", a.editingTagsID, tt.Texts())
 	}
+
+	// 退出编辑后聚焦搜索框，弹出标签选择浮层并点击筛选
+	if err := tt.Click("完成标签编辑"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("搜索剪贴板"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("标签") {
+		t.Fatalf("expected search tag popover visible when search focused, texts=%q", tt.Texts())
+	}
+	if err := tt.Click("筛选标签 第五个标签"); err != nil {
+		t.Fatal(err)
+	}
+	if a.query != "#第五个标签" || !tt.HasText("second plain entry") || tt.HasText("first tagged entry") {
+		t.Fatalf("expected clicking popover tag to filter by #第五个标签, query=%q texts=%q", a.query, tt.Texts())
+	}
 }

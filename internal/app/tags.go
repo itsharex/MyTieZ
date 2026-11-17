@@ -294,3 +294,61 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 		}
 	})
 }
+
+func (a *clipApp) renderSearchTagPopover(c *ui.Context, t *ui.Theme) {
+	if !a.searchHandle.Focused(c) || a.controlsCollapsed || len(a.allTags) == 0 {
+		return
+	}
+	q := strings.TrimSpace(a.query)
+	var tags []string
+	if q != "" && !strings.HasPrefix(q, "#") {
+		lq := strings.ToLower(q)
+		for _, tag := range a.allTags {
+			if strings.Contains(strings.ToLower(tag), lq) {
+				tags = append(tags, tag)
+			}
+		}
+		if len(tags) == 0 {
+			return
+		}
+	} else {
+		tags = a.allTags
+	}
+	if len(tags) > 18 {
+		tags = tags[:18]
+	}
+
+	popBg := ui.RGBA(255, 255, 255, 0.42)
+	shadowAlpha := float32(0.08)
+	if t.Dark {
+		popBg = ui.RGBA(36, 36, 36, 0.48)
+		shadowAlpha = 0.24
+	}
+
+	ui.Column(c).Absolute().Left(16).Right(16).Top(98).ZIndex(30).KeepFocus().
+		Padding(10, 12).Gap(7).Radius(radiusGroup).
+		Background(popBg).Border(1, t.Border.Alpha(0.55)).
+		Shadow(0, 8, 20, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+		Children(func() {
+			ui.Text(c, "标签").FontSize(11.5).FontWeight(600).TextColor(t.TextMuted)
+			ui.Row(c).FillWidth().Wrap().AlignItems(ui.Center).Gap(6).Children(func() {
+				for _, tag := range tags {
+					tagName := tag
+					chipBg, chipFg := tagChipColors(tagName, t.Dark)
+					active := q == "#"+tagName
+					btn := ui.ButtonBase(c).Padding(3, 9).Radius(radiusMicro).Label("筛选标签 " + tagName).
+						Background(chipBg)
+					if active {
+						btn.Border(1.5, chipFg)
+					} else {
+						btn.Border(1, chipFg.Alpha(0.25))
+					}
+					btn.OnClick(func() {
+						a.filterByTag(tagName)
+					}).Children(func() {
+						ui.Text(c, tagName).MaxWidth(110).FontSize(11.5).FontWeight(600).TextColor(chipFg).SingleLine()
+					})
+				}
+			})
+		})
+}

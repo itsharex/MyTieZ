@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"strconv"
 	"time"
 
 	"mytiez/internal/store"
@@ -247,14 +248,66 @@ func (a *clipApp) settingsView(c *ui.Context) {
 							})
 						})
 
-					ui.Column(c).AlignItems(ui.Center).Gap(3).Children(func() {
-						ui.Text(c, "MyTieZ v0.1.0").FontSize(13).TextColor(t.TextMuted)
+					ui.Column(c).AlignItems(ui.Center).Gap(6).Children(func() {
+						ui.Text(c, "MyTieZ v"+appVersion()).FontSize(13).TextColor(t.TextMuted)
 						ui.Text(c, msgs.SettingsTagline()).FontSize(13).TextColor(t.TextMuted)
+						a.renderUpdateControls(c, msgs)
 					})
 				})
 			})
 		})
 	})
+}
+
+func (a *clipApp) renderUpdateControls(c *ui.Context, msgs locales.Messages) {
+	t := c.Theme()
+	btnLabel := msgs.SettingsCheckUpdate()
+	accent := false
+	switch {
+	case a.updateReady:
+		btnLabel = msgs.SettingsRestartToUpdate()
+		accent = true
+	case a.updateInstalling:
+		btnLabel = msgs.SettingsDownloadingUpdate(strconv.Itoa(a.updateProgress))
+	case a.updateChecking:
+		btnLabel = msgs.SettingsCheckingUpdate()
+	case a.availableUpdate != nil:
+		btnLabel = msgs.SettingsInstallUpdate()
+		accent = true
+	}
+
+	btn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 14).Radius(radiusControl).Label(btnLabel)
+	bg, border, fg := t.Surface, t.Border.Alpha(0.7), t.Text
+	if accent {
+		bg, border, fg = t.Accent, t.Accent, t.AccentText
+		if btn.Hovered() {
+			bg, border = t.AccentHover, t.AccentHover
+		}
+	} else if btn.Hovered() {
+		bg, border = t.SurfaceHover, t.Border
+	}
+	btn.Background(bg).Border(1, border).Transition(colorTransition).
+		OnClick(func() {
+			switch {
+			case a.updateReady:
+				if mygo.App.IsReady() {
+					mygo.App.Relaunch()
+				}
+			case a.updateChecking || a.updateInstalling:
+				return
+			case a.availableUpdate != nil:
+				a.installAvailableUpdate()
+			default:
+				a.checkForUpdates(true)
+			}
+		}).
+		Children(func() {
+			ui.Text(c, btnLabel).FontSize(12.5).FontWeight(600).TextColor(fg)
+		})
+
+	if a.updateStatus != "" {
+		ui.Text(c, a.updateStatus).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
+	}
 }
 
 func (a *clipApp) setMaxHistory(val int) {

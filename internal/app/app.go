@@ -49,8 +49,15 @@ type clipApp struct {
 	ignoreUntil time.Time
 	winPinned   bool
 	pickingApp  bool
-	quitting    bool
-	resizeTimer *time.Timer
+	quitting         bool
+	resizeTimer      *time.Timer
+	updateTimer      *time.Timer
+	updateChecking   bool
+	updateInstalling bool
+	updateProgress   int
+	updateReady      bool
+	availableUpdate  *mygo.Update
+	updateStatus     string
 
 	showSettings      bool
 	controlsCollapsed bool
@@ -353,6 +360,11 @@ func (a *clipApp) ready() {
 	a.stopWatch = mygo.Clipboard.OnChanged(a.onClipboardChanged)
 	a.startForegroundTracker()
 	a.reload()
+	a.updateTimer = time.AfterFunc(5*time.Second, func() {
+		if a.panel != nil {
+			a.panel.Update(func() { a.checkForUpdates(false) })
+		}
+	})
 
 	if !mygo.App.WasOpenedAtLogin() && !a.settings.SilentStart {
 		a.showPanel()
@@ -383,6 +395,9 @@ func (a *clipApp) setupTray() {
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		if a.resizeTimer != nil {
 			a.resizeTimer.Stop()
+		}
+		if a.updateTimer != nil {
+			a.updateTimer.Stop()
 		}
 		a.saveWindowSize()
 		if a.stopWatch != nil {

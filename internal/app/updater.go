@@ -1,0 +1,119 @@
+package app
+
+import (
+	"context"
+	"strconv"
+	"time"
+
+	"mytiez/locales"
+
+	"github.com/egoist/mygo"
+)
+
+const (
+	updateCheckTimeout   = 10 * time.Second
+	updateInstallTimeout = 5 * time.Minute
+)
+
+func appVersion() string {
+	if mygo.App.IsReady() {
+		if v := mygo.App.Version(); v != "" {
+			return v
+		}
+	}
+	return "0.1.0"
+}
+
+func (a *clipApp) checkForUpdates(manual bool) {
+	if a.updateChecking || a.updateInstalling {
+		return
+	}
+	if !mygo.App.IsReady() || !mygo.Updater.Enabled() {
+		if manual {
+			a.updateStatus = locales.SettingsUpdateDisabled()
+		}
+		return
+	}
+	a.updateChecking = true
+	if manual {
+		a.updateStatus = locales.SettingsCheckingUpdate()
+	}
+	panel := a.panel
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
+		defer cancel()
+		up, err := mygo.Updater.Check(ctx)
+		if panel == nil {
+			return
+		}
+		panel.Update(func() {
+			a.updateChecking = false
+			if err != nil {
+				if manual {
+					a.updateStatus = locales.SettingsUpdateErr(err.Error())
+				}
+				return
+			}
+			if up == nil {
+				a.availableUpdate = nil
+				a.updateReady = false
+				if manual {
+					a.updateStatus = locales.SettingsUpToDate()
+				}
+				return
+			}
+			a.availableUpdate = up
+			a.updateReady = false
+			a.updateStatus = locales.SettingsUpdateAvailable(up.Version)
+			if !manual {
+				a.setStatus(locales.SettingsUpdateAvailable(up.Version))
+			}
+		})
+	}()
+}
+
+func (a *clipApp) installAvailableUpdate() {
+	if a.updateInstalling || a.availableUpdate == nil || !mygo.App.IsReady() {
+		return
+	}
+	up := a.availableUpdate
+	a.updateInstalling = true
+	a.updateProgress = 0
+	a.updateStatus = locales.SettingsDownloadingUpdate("0")
+	panel := a.panel
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), updateInstallTimeout)
+		defer cancel()
+		lastPct := -1
+		err := up.Install(ctx, func(downloaded, total int64) {
+			if total <= 0 || panel == nil {
+				return
+			}
+			pct := int(downloaded * 100 / total)
+			if pct > 100 {
+				pct = 100
+			}
+			if pct == lastPct || (pct < 100 && pct-lastPct < 2) {
+				return
+			}
+			lastPct = pct
+			panel.Update(func() {
+				a.updateProgress = pct
+				a.updateStatus = locales.SettingsDownloadingUpdate(strconv.Itoa(pct))
+			})
+		})
+		if panel == nil {
+			return
+		}
+		panel.Update(func() {
+			a.updateInstalling = false
+			if err != nil {
+				a.updateStatus = locales.SettingsUpdateErr(err.Error())
+				return
+			}
+			a.updateReady = true
+			a.updateStatus = locales.SettingsUpdateAvailable(up.Version)
+		})
+	}()
+}

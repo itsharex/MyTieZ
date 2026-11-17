@@ -163,5 +163,14 @@
   "settingsResetAll": "恢復初始設定",
   "settingsResetAllConfirm": "再次點擊確認恢復",
   "settingsResetDone": "已恢復預設設定",
-  "settingsTagline": "讓複製與貼上，保持有序"
+  "settingsTagline": "讓複製與貼上，保持有序",
+  "settingsCheckUpdate": "檢查更新",
+  "settingsCheckingUpdate": "正在檢查...",
+  "settingsUpToDate": "已是最新版本",
+  "settingsUpdateAvailable": "發現新版本 v{ver}",
+  "settingsInstallUpdate": "立即更新",
+  "settingsDownloadingUpdate": "正在下載 {pct}%",
+  "settingsRestartToUpdate": "重啟完成更新",
+  "settingsUpdateErr": "檢查更新失敗: {err}",
+  "settingsUpdateDisabled": "開發模式下暫不支援自動更新"
 }

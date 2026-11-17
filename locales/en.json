@@ -163,5 +163,14 @@
   "settingsResetAll": "Reset All Settings",
   "settingsResetAllConfirm": "Click Again to Confirm",
   "settingsResetDone": "Settings restored to default",
-  "settingsTagline": "Keep your copy and paste organized"
+  "settingsTagline": "Keep your copy and paste organized",
+  "settingsCheckUpdate": "Check for Updates",
+  "settingsCheckingUpdate": "Checking...",
+  "settingsUpToDate": "Up to date",
+  "settingsUpdateAvailable": "Update available: v{ver}",
+  "settingsInstallUpdate": "Update Now",
+  "settingsDownloadingUpdate": "Downloading {pct}%",
+  "settingsRestartToUpdate": "Restart to Update",
+  "settingsUpdateErr": "Update check failed: {err}",
+  "settingsUpdateDisabled": "Updates unavailable in dev build"
 }

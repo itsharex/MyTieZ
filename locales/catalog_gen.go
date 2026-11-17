@@ -1579,3 +1579,97 @@ func SettingsTagline() string { return In(i18n.Locale()).SettingsTagline() }
 func (msgs Messages) SettingsTagline() string {
 	return Catalog.Format(msgs.locale, "settingsTagline", nil)
 }
+
+// SettingsCheckUpdate says "检查更新"
+// in the language the app shows.
+func SettingsCheckUpdate() string { return In(i18n.Locale()).SettingsCheckUpdate() }
+
+// SettingsCheckUpdate says "检查更新"
+// in the language of msgs.
+func (msgs Messages) SettingsCheckUpdate() string {
+	return Catalog.Format(msgs.locale, "settingsCheckUpdate", nil)
+}
+
+// SettingsCheckingUpdate says "正在检查..."
+// in the language the app shows.
+func SettingsCheckingUpdate() string { return In(i18n.Locale()).SettingsCheckingUpdate() }
+
+// SettingsCheckingUpdate says "正在检查..."
+// in the language of msgs.
+func (msgs Messages) SettingsCheckingUpdate() string {
+	return Catalog.Format(msgs.locale, "settingsCheckingUpdate", nil)
+}
+
+// SettingsUpToDate says "已是最新版本"
+// in the language the app shows.
+func SettingsUpToDate() string { return In(i18n.Locale()).SettingsUpToDate() }
+
+// SettingsUpToDate says "已是最新版本"
+// in the language of msgs.
+func (msgs Messages) SettingsUpToDate() string {
+	return Catalog.Format(msgs.locale, "settingsUpToDate", nil)
+}
+
+// SettingsUpdateAvailable says "发现新版本 v{ver}"
+// in the language the app shows.
+func SettingsUpdateAvailable(ver string) string {
+	return In(i18n.Locale()).SettingsUpdateAvailable(ver)
+}
+
+// SettingsUpdateAvailable says "发现新版本 v{ver}"
+// in the language of msgs.
+func (msgs Messages) SettingsUpdateAvailable(ver string) string {
+	return Catalog.Format(msgs.locale, "settingsUpdateAvailable", map[string]any{"ver": ver})
+}
+
+// SettingsInstallUpdate says "立即更新"
+// in the language the app shows.
+func SettingsInstallUpdate() string { return In(i18n.Locale()).SettingsInstallUpdate() }
+
+// SettingsInstallUpdate says "立即更新"
+// in the language of msgs.
+func (msgs Messages) SettingsInstallUpdate() string {
+	return Catalog.Format(msgs.locale, "settingsInstallUpdate", nil)
+}
+
+// SettingsDownloadingUpdate says "正在下载 {pct}%"
+// in the language the app shows.
+func SettingsDownloadingUpdate(pct string) string {
+	return In(i18n.Locale()).SettingsDownloadingUpdate(pct)
+}
+
+// SettingsDownloadingUpdate says "正在下载 {pct}%"
+// in the language of msgs.
+func (msgs Messages) SettingsDownloadingUpdate(pct string) string {
+	return Catalog.Format(msgs.locale, "settingsDownloadingUpdate", map[string]any{"pct": pct})
+}
+
+// SettingsRestartToUpdate says "重启完成更新"
+// in the language the app shows.
+func SettingsRestartToUpdate() string { return In(i18n.Locale()).SettingsRestartToUpdate() }
+
+// SettingsRestartToUpdate says "重启完成更新"
+// in the language of msgs.
+func (msgs Messages) SettingsRestartToUpdate() string {
+	return Catalog.Format(msgs.locale, "settingsRestartToUpdate", nil)
+}
+
+// SettingsUpdateErr says "检查更新失败: {err}"
+// in the language the app shows.
+func SettingsUpdateErr(err string) string { return In(i18n.Locale()).SettingsUpdateErr(err) }
+
+// SettingsUpdateErr says "检查更新失败: {err}"
+// in the language of msgs.
+func (msgs Messages) SettingsUpdateErr(err string) string {
+	return Catalog.Format(msgs.locale, "settingsUpdateErr", map[string]any{"err": err})
+}
+
+// SettingsUpdateDisabled says "开发模式下暂不支持自动更新"
+// in the language the app shows.
+func SettingsUpdateDisabled() string { return In(i18n.Locale()).SettingsUpdateDisabled() }
+
+// SettingsUpdateDisabled says "开发模式下暂不支持自动更新"
+// in the language of msgs.
+func (msgs Messages) SettingsUpdateDisabled() string {
+	return Catalog.Format(msgs.locale, "settingsUpdateDisabled", nil)
+}

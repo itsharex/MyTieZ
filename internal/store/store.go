@@ -119,25 +119,7 @@ type Store struct {
 	imageDir string
 }
 
-func portableDataDir(exeDir string) (string, bool) {
-	if exeDir == "" {
-		return "", false
-	}
-	if _, err := os.Stat(filepath.Join(exeDir, "portable")); err == nil {
-		return filepath.Join(exeDir, "data"), true
-	}
-	if _, err := os.Stat(filepath.Join(exeDir, "data", "mytiez.db")); err == nil {
-		return filepath.Join(exeDir, "data"), true
-	}
-	return "", false
-}
-
 func defaultDataDir() (string, error) {
-	if exe, err := os.Executable(); err == nil {
-		if dir, ok := portableDataDir(filepath.Dir(exe)); ok {
-			return dir, nil
-		}
-	}
 	base, err := os.UserCacheDir()
 	if err != nil || base == "" {
 		base, err = os.UserConfigDir()

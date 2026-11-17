@@ -23,8 +23,8 @@ func (a *clipApp) settingsView(c *ui.Context) {
 	t := c.Theme()
 
 	ui.Column(c.Key("settings-page")).Fill().Children(func() {
-		// 设置页顶部导航栏（与主页顶栏同构）
-		ui.Column(c).FillWidth().Padding(8, 16, 4, 16).Children(func() {
+		// 设置页顶部导航栏（与主页顶栏同构，无硬分割线直接过渡到分组卡片）
+		ui.Column(c).FillWidth().Padding(10, 16, 6, 16).Children(func() {
 			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(8).DragWindow().Children(func() {
 				a.renderHeaderIconBtn(c, iconBack, "返回", false, false, func() {
 					a.cancelHotkeyRecording()
@@ -33,7 +33,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.settingsNotice = ""
 				})
 
-				ui.Text(c, "设置").FontSize(18).Bold().TextColor(t.Text)
+				ui.Text(c, "设置").FontSize(17).Bold().TextColor(t.Text)
 				ui.Box(c).Grow(1)
 				ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
 					a.renderWindowActionButtons(c)
@@ -41,10 +41,8 @@ func (a *clipApp) settingsView(c *ui.Context) {
 			})
 		})
 
-		ui.Divider(c)
-
 		ui.Scroll(c.Key("settings-scroll")).Grow(1).Children(func() {
-			ui.Column(c).FillWidth().Padding(18, 12, 18, 12).Gap(10).Children(func() {
+			ui.Column(c).FillWidth().Padding(8, 14, 18, 14).Gap(10).Children(func() {
 				if a.settingsNotice != "" {
 					ui.Text(c.Key("settings-notice"), a.settingsNotice).FontSize(13).TextColor(t.Accent).
 						FillWidth().Padding(10, 14).Radius(radiusGroup).
@@ -100,14 +98,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					})
 				})
 
-				// 3. 打开方式
-				a.renderSettingsGroup(c, "打开方式", &a.expanded.openApps, func() {
-					a.renderOpenAppRow(c, "文本", &a.settings.OpenAppText)
-					a.renderOpenAppRow(c, "富文本", &a.settings.OpenAppRichText)
-					a.renderOpenAppRow(c, "图片", &a.settings.OpenAppImage)
-				})
-
-				// 4. 界面设置
+				// 3. 界面设置
 				a.renderSettingsGroup(c, "界面设置", &a.expanded.appearance, func() {
 					a.renderChoiceGroup(c, "窗口材质", []choiceOption{
 						{label: "云母", a11y: "材质云母", active: a.settings.BackdropMode == "mica", onClick: func() { a.setBackdropMode("mica") }},
@@ -125,6 +116,13 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, "悬停显示卡片操作", "", &a.settings.HideCardActions, func(bool) {
 						a.persistSettings()
 					})
+				})
+
+				// 4. 默认打开程序
+				a.renderSettingsGroup(c, "默认打开程序", &a.expanded.openApps, func() {
+					a.renderOpenAppRow(c, "文本", &a.settings.OpenAppText)
+					a.renderOpenAppRow(c, "富文本", &a.settings.OpenAppRichText)
+					a.renderOpenAppRow(c, "图片", &a.settings.OpenAppImage)
 				})
 
 				// 4. 数据管理
@@ -236,21 +234,33 @@ type choiceOption struct {
 
 func (a *clipApp) renderSettingsGroup(c *ui.Context, title string, expanded *bool, body func()) {
 	t := c.Theme()
-	ui.Column(c.Key("group-"+title)).FillWidth().Radius(radiusGroup).Clip().Background(t.Surface).Border(1, t.Border.Alpha(0.45)).Children(func() {
-		p := ui.CollapsibleBase(c, expanded)
-		tr := p.Trigger.FillWidth().MinHeight(settingGroupMinH).Padding(0, 16).Justify(ui.SpaceBetween).AlignItems(ui.Center).Label(title)
-		tr.Background(t.Surface).Children(func() {
-			ui.Text(c, title).FontSize(15).FontWeight(700).TextColor(t.Text)
-			ui.Icon(c, iconChevronRight).FontSize(17).TextColor(t.TextMuted).Rotate(90 * p.Progress())
-		})
+	shadowAlpha := float32(0.05)
+	if t.Dark {
+		shadowAlpha = 0.22
+	}
+	ui.Column(c.Key("group-"+title)).FillWidth().Radius(radiusCard).
+		Background(t.Surface).Border(1, t.Border.Alpha(0.38)).
+		Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+		Children(func() {
+			p := ui.CollapsibleBase(c, expanded)
+			tr := p.Trigger.FillWidth().MinHeight(50).Padding(0, 16).Radius(radiusCard).
+				Justify(ui.SpaceBetween).AlignItems(ui.Center).Label(title)
+			bg := t.Surface
+			if tr.Hovered() {
+				bg = t.SurfaceHover
+			}
+			tr.Background(bg).Transition(colorTransition).Children(func() {
+				ui.Text(c, title).FontSize(14.5).FontWeight(700).TextColor(t.Text)
+				ui.Icon(c, iconChevronRight).FontSize(15).TextColor(t.TextMuted).Rotate(90 * p.Progress())
+			})
 
-		if panel := p.Panel(func() {
-			ui.Box(c).FillWidth().Height(1).Background(t.Text.Alpha(0.05))
-			ui.Column(c).FillWidth().Padding(4, 0, 8, 0).Children(body)
-		}); panel.Valid() {
-			panel.FillWidth()
-		}
-	})
+			if panel := p.Panel(func() {
+				ui.Box(c).FillWidth().Height(1).Background(t.Border.Alpha(0.35))
+				ui.Column(c).FillWidth().Padding(4, 0, 8, 0).Children(body)
+			}); panel.Valid() {
+				panel.FillWidth()
+			}
+		})
 }
 
 func (a *clipApp) renderSettingRow(c *ui.Context, title, desc string, control func()) {

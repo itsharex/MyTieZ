@@ -170,9 +170,9 @@ func TestSettingsViewInteractions(t *testing.T) {
 	}
 	tt.Advance(250 * time.Millisecond)
 
-	// 展开“打开方式”，验证默认显示与恢复默认交互
+	// 展开“默认打开程序”，验证默认显示与恢复默认交互
 	a.settings.OpenAppText = `C:\Windows\System32\notepad.exe`
-	if err := tt.Click("打开方式"); err != nil {
+	if err := tt.Click("默认打开程序"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
@@ -185,7 +185,7 @@ func TestSettingsViewInteractions(t *testing.T) {
 	if a.settings.OpenAppText != "" {
 		t.Fatalf("expected OpenAppText cleared after reset, got %q", a.settings.OpenAppText)
 	}
-	if err := tt.Click("打开方式"); err != nil {
+	if err := tt.Click("默认打开程序"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)

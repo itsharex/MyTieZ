@@ -171,13 +171,12 @@ func (a *clipApp) pickOpenApp(title string, dst *string) {
 		Filters: filters,
 	})
 	if err != nil {
-		a.settingsNotice = locales.OpenAppPickErr(err.Error())
+		a.setStatus(locales.OpenAppPickErr(err.Error()))
 		return
 	}
 	if len(paths) == 0 || strings.TrimSpace(paths[0]) == "" {
 		return
 	}
 	*dst = paths[0]
-	a.settingsNotice = locales.OpenAppSetNotice(title, openAppDisplayName(locales.In(""), paths[0]))
 	a.persistSettings()
 }

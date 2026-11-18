@@ -86,7 +86,6 @@ func (a *clipApp) view(c *ui.Context) {
 				a.confirmAction = ""
 			} else {
 				a.showSettings = false
-				a.settingsNotice = ""
 			}
 		}
 		a.settingsView(c)
@@ -139,7 +138,6 @@ func (a *clipApp) view(c *ui.Context) {
 				a.renderHeaderIconBtn(c, iconSettings, msgs.HeaderSettings(), false, false, func() {
 					a.showSettings = true
 					a.confirmAction = ""
-					a.settingsNotice = ""
 				})
 				a.renderHeaderIconBtn(c, iconClear, msgs.HeaderHide(), false, true, func() {
 					if a.panel != nil {
@@ -248,10 +246,7 @@ func (a *clipApp) view(c *ui.Context) {
 			a.renderScrollTopButton(c, t)
 		})
 
-		if a.pendingToast != "" {
-			c.Toast(a.pendingToast)
-			a.pendingToast = ""
-		}
+		a.flushPendingToast(c)
 
 		a.renderSearchTagPopover(c, t)
 	})
@@ -260,6 +255,33 @@ func (a *clipApp) view(c *ui.Context) {
 	case 1:
 		a.clearUnpinned()
 	}
+}
+
+func (a *clipApp) flushPendingToast(c *ui.Context) {
+	if a.pendingToast != "" {
+		c.Toast(a.pendingToast)
+		a.pendingToast = ""
+	}
+	t := c.Theme()
+	shadowAlpha := float32(0.12)
+	if t.Dark {
+		shadowAlpha = 0.32
+	}
+	ui.ToastViewportBase(c, func(viewport ui.Element, toasts []ui.Toast) {
+		viewport.Top(52).Justify(ui.Start).AlignItems(ui.Center).Gap(6)
+		for _, ts := range toasts {
+			p := ui.ToastBase(c, ts)
+			op := p.Root.Animate("toast-opacity", 1, 150*time.Millisecond)
+			p.Root.Row().AlignItems(ui.Center).Gap(8).
+				Padding(8, 14).Radius(radiusCard).
+				Background(t.Surface).Border(1, t.Border).
+				Shadow(0, 6, 18, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+				Opacity(op).
+				Children(func() {
+					ui.Text(c, ts.Title).FontSize(12.5).FontWeight(500).TextColor(t.Text)
+				})
+		}
+	})
 }
 
 func (a *clipApp) renderCard(row ui.ListRow) {

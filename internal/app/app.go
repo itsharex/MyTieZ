@@ -67,7 +67,6 @@ type clipApp struct {
 	upScrollAccum      float32
 	expanded           settingsGroupExpanded
 	confirmAction      string
-	settingsNotice     string
 	recordingHotkey    bool
 	hotkeyFocusPending bool
 	hotkeyMods         ui.Modifiers

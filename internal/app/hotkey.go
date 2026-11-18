@@ -51,11 +51,10 @@ func (a *clipApp) applyHotkey(combo string) {
 				_ = mygo.GlobalShortcut.Register(a.shortcut, a.togglePanel)
 			}
 		}
-		a.settingsNotice = locales.SettingsHotkeyOccupied(combo)
+		a.setStatus(locales.SettingsHotkeyOccupied(combo))
 		return
 	}
 	a.settings.Hotkey = combo
-	a.settingsNotice = locales.SettingsHotkeyUpdated(combo)
 	a.persistSettings()
 }
 
@@ -76,7 +75,6 @@ func (a *clipApp) handleHotkeyInput(ev ui.InputEvent) bool {
 		a.hotkeyMods = ev.Mods
 		if ev.Mods == 0 && ev.Key == ui.KeyEscape {
 			a.cancelHotkeyRecording()
-			a.settingsNotice = ""
 			return true
 		}
 		if ev.Key == ui.KeyUnknown {
@@ -84,12 +82,12 @@ func (a *clipApp) handleHotkeyInput(ev ui.InputEvent) bool {
 		}
 		keyName, ok := keyToAcceleratorName(ev.Key)
 		if !ok {
-			a.settingsNotice = locales.SettingsHotkeyUnsupported()
+			a.setStatus(locales.SettingsHotkeyUnsupported())
 			return true
 		}
 		hasPrimaryMod := ev.Mods&(ui.Ctrl|ui.Alt|ui.Super) != 0
 		if !hasPrimaryMod && !isFunctionKey(ev.Key) {
-			a.settingsNotice = locales.SettingsHotkeyNeedMod()
+			a.setStatus(locales.SettingsHotkeyNeedMod())
 			return true
 		}
 		combo := formatHotkey(ev.Mods, keyName)

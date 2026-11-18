@@ -505,10 +505,10 @@ func TestHotkeyRecorder(t *testing.T) {
 		t.Fatalf("expected recording state active, recording=%v texts=%q", a.recordingHotkey, tt.Texts())
 	}
 
-	// 无修饰键的普通字母按键应被拒绝
+	// 无修饰键的普通字母按键应被拒绝并通过 Toast 提示
 	tt.Key(0, ui.KeyA)
-	if !a.recordingHotkey || a.settings.Hotkey != "Alt+V" || a.settingsNotice == "" {
-		t.Fatalf("expected plain key A rejected, recording=%v hotkey=%q notice=%q", a.recordingHotkey, a.settings.Hotkey, a.settingsNotice)
+	if !a.recordingHotkey || a.settings.Hotkey != "Alt+V" || !tt.HasText(locales.SettingsHotkeyNeedMod()) {
+		t.Fatalf("expected plain key A rejected with toast, recording=%v hotkey=%q texts=%q", a.recordingHotkey, a.settings.Hotkey, tt.Texts())
 	}
 
 	// 按 Esc 取消录制

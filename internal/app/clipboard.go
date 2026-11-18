@@ -159,7 +159,6 @@ func (a *clipApp) resetSettings() {
 	if a.panel != nil {
 		a.panel.SetSize(a.settings.WindowWidth, a.settings.WindowHeight)
 	}
-	a.settingsNotice = locales.SettingsResetDone()
 }
 
 func (a *clipApp) hydrateItem(item store.ClipItem) store.ClipItem {

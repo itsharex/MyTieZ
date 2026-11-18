@@ -34,7 +34,6 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.cancelHotkeyRecording()
 					a.showSettings = false
 					a.confirmAction = ""
-					a.settingsNotice = ""
 				})
 
 				ui.Text(c, msgs.SettingsTitle()).FontSize(17).Bold().TextColor(t.Text)
@@ -51,20 +50,13 @@ func (a *clipApp) settingsView(c *ui.Context) {
 
 		ui.Scroll(c.Key("settings-scroll")).Grow(1).Children(func() {
 			ui.Column(c).FillWidth().Padding(22, 14, 18, 14).Gap(10).Children(func() {
-				if a.settingsNotice != "" {
-					ui.Text(c.Key("settings-notice"), a.settingsNotice).FontSize(13).TextColor(t.Accent).
-						FillWidth().Padding(10, 14).Radius(radiusGroup).
-						Background(t.Surface.Mix(t.Accent, 0.1)).
-						Border(1, t.Accent.Alpha(0.4))
-				}
-
 				// 1. 常规设置
 				a.renderSettingsGroup(c, msgs.SettingsGroupGeneral(), &a.expanded.general, func() {
 					a.renderSwitchRow(c, msgs.SettingsAutostart(), "", &a.settings.AutoStart, func(on bool) {
 						if err := mygo.App.SetOpenAtLogin(on); err != nil {
 							log.Printf("set open at login: %v", err)
 							a.settings.AutoStart = !on
-							a.settingsNotice = msgs.SettingsAutostartErr(err.Error())
+							a.setStatus(msgs.SettingsAutostartErr(err.Error()))
 						}
 						a.persistSettings()
 					})
@@ -96,7 +88,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						btn.Background(bg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 							OnClick(func() {
 								if err := sys.RestartAsAdmin(); err != nil {
-									a.settingsNotice = msgs.SettingsRestartAdminErr(err.Error())
+									a.setStatus(msgs.SettingsRestartAdminErr(err.Error()))
 									return
 								}
 								mygo.App.Quit()
@@ -194,7 +186,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 							OnClick(func() {
 								if dataDir != "" {
 									if err := mygo.Shell.OpenPath(dataDir); err != nil {
-										a.settingsNotice = msgs.SettingsOpenDirErr(err.Error())
+										a.setStatus(msgs.SettingsOpenDirErr(err.Error()))
 									}
 								}
 							}).
@@ -204,11 +196,9 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					})
 					a.renderConfirmActionRow(c, msgs.SettingsClearUnpinned(), "", "clear_unpinned", msgs.SettingsClearBtn(), msgs.SettingsClearConfirm(), func() {
 						a.clearUnpinned()
-						a.settingsNotice = msgs.SettingsClearUnpinnedDone()
 					})
 					a.renderConfirmActionRow(c, msgs.SettingsClearAll(), "", "clear_all", msgs.SettingsClearAllBtn(), msgs.SettingsClearAllConfirm(), func() {
 						a.clearAll()
-						a.settingsNotice = msgs.SettingsClearAllDone()
 					})
 				})
 
@@ -256,6 +246,8 @@ func (a *clipApp) settingsView(c *ui.Context) {
 				})
 			})
 		})
+
+		a.flushPendingToast(c)
 	})
 }
 
@@ -552,7 +544,6 @@ func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) 
 					OnClick(func() {
 						if target != nil {
 							*target = ""
-							a.settingsNotice = msgs.OpenAppResetNotice(title)
 							a.persistSettings()
 						}
 					}).
@@ -605,7 +596,6 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 				cancelBtn.Background(cBg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 					OnClick(func() {
 						a.cancelHotkeyRecording()
-						a.settingsNotice = ""
 					}).
 					Children(func() {
 						ui.Text(c, msgs.SettingsHotkeyCancel()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)

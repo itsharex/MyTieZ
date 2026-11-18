@@ -5,7 +5,7 @@ go 1.27.4
 tool github.com/egoist/mygo/cmd/mygo
 
 require (
-	github.com/egoist/mygo v0.9.2
+	github.com/egoist/mygo v0.10.0
 	golang.org/x/net v0.59.0
 	golang.org/x/sys v0.49.0
 	modernc.org/sqlite v1.62.0

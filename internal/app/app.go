@@ -17,23 +17,23 @@ import (
 var globalShortcuts = []string{"Alt+V", "Ctrl+Shift+V", "Alt+Shift+V"}
 
 type clipApp struct {
-	iconPNG      []byte
-	store        *store.Store
-	settings     store.Settings
-	panel        *mygo.Window
-	tray         *mygo.Tray
-	trayOpenItem *mygo.MenuItem
-	shortcut     string
-	stopWatch    func()
-	stopTrack    chan struct{}
-	items        []store.ClipItem
-	query        string
-	filterIdx    int // 0: 全部, 1: 文本, 2: 图片, 3: 文件
-	selected     int
-	list           ui.ListState
-	listHandle     ui.Handle
-	listScroll     ui.ScrollState
-	searchHandle   ui.Handle
+	iconPNG         []byte
+	store           *store.Store
+	settings        store.Settings
+	panel           *mygo.Window
+	tray            *mygo.Tray
+	trayOpenItem    *mygo.MenuItem
+	shortcut        string
+	stopWatch       func()
+	stopTrack       chan struct{}
+	items           []store.ClipItem
+	query           string
+	filterIdx       int // 0: 全部, 1: 文本, 2: 图片, 3: 文件
+	selected        int
+	list            ui.ListState
+	listHandle      ui.Handle
+	listScroll      ui.ScrollState
+	searchHandle    ui.Handle
 	editingTagsID   int64
 	tagInput        string
 	tagInputHandle  ui.Handle
@@ -45,10 +45,10 @@ type clipApp struct {
 	richSpans     map[int64][]ui.Span
 	richSpansDark bool
 
-	ignoreHash  string
-	ignoreUntil time.Time
-	winPinned   bool
-	pickingApp  bool
+	ignoreHash       string
+	ignoreUntil      time.Time
+	winPinned        bool
+	pickingApp       bool
 	quitting         bool
 	resizeTimer      *time.Timer
 	updateTimer      *time.Timer
@@ -59,11 +59,11 @@ type clipApp struct {
 	availableUpdate  *mygo.Update
 	updateStatus     string
 
-	showSettings      bool
-	controlsCollapsed bool
-	atTop             bool
-	topReachedAt      time.Time
-	upScrollAccum     float32
+	showSettings       bool
+	controlsCollapsed  bool
+	atTop              bool
+	topReachedAt       time.Time
+	upScrollAccum      float32
 	expanded           settingsGroupExpanded
 	confirmAction      string
 	settingsNotice     string
@@ -71,7 +71,7 @@ type clipApp struct {
 	hotkeyFocusPending bool
 	hotkeyMods         ui.Modifiers
 	hotkeyHandle       ui.Handle
-	pendingToast string
+	pendingToast       string
 }
 
 func newClipApp(st *store.Store, iconPNG []byte) *clipApp {

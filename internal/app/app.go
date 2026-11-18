@@ -149,9 +149,9 @@ func (a *clipApp) switchHotkey(newKey string) error {
 	if oldKey != "" {
 		mygo.GlobalShortcut.Unregister(oldKey)
 	}
-	if err := mygo.GlobalShortcut.Register(newKey, a.togglePanel); err != nil {
+	if err := mygo.GlobalShortcut.Register(newKey, a.togglePanelFromHotkey); err != nil {
 		if oldKey != "" && !mygo.GlobalShortcut.IsRegistered(oldKey) {
-			_ = mygo.GlobalShortcut.Register(oldKey, a.togglePanel)
+			_ = mygo.GlobalShortcut.Register(oldKey, a.togglePanelFromHotkey)
 		}
 		return err
 	}
@@ -163,6 +163,10 @@ func (a *clipApp) switchHotkey(newKey string) error {
 }
 
 func (a *clipApp) showPanel() {
+	a.showPanelWithFocus(true)
+}
+
+func (a *clipApp) showPanelWithFocus(focus bool) {
 	if a.panel == nil {
 		return
 	}
@@ -193,9 +197,14 @@ func (a *clipApp) showPanel() {
 	a.resetScrollToTop()
 	a.reload()
 	a.scrollListToTop()
-	a.panel.SetAlwaysOnTop(a.winPinned)
-	a.panel.Show()
-	a.panel.Focus()
+	// 不抢焦点呼出时必须置顶，否则非置顶窗口执行 ShowInactive 会被压在当前前台窗口后面
+	a.panel.SetAlwaysOnTop(a.winPinned || !focus)
+	if focus {
+		a.panel.Show()
+		a.panel.Focus()
+	} else {
+		a.panel.ShowInactive()
+	}
 }
 
 func followMouseTarget(cursor mygo.Point, w, h int, workArea mygo.Rectangle) (int, int) {
@@ -267,13 +276,21 @@ func (a *clipApp) hidePanel() {
 }
 
 func (a *clipApp) togglePanel() {
+	a.togglePanelWithFocus(true)
+}
+
+func (a *clipApp) togglePanelFromHotkey() {
+	a.togglePanelWithFocus(!a.settings.HotkeyNoFocus)
+}
+
+func (a *clipApp) togglePanelWithFocus(focus bool) {
 	if a.panel == nil {
 		return
 	}
 	if a.panel.IsVisible() {
 		a.hidePanel()
 	} else {
-		a.showPanel()
+		a.showPanelWithFocus(focus)
 	}
 }
 
@@ -349,7 +366,7 @@ func (a *clipApp) ready() {
 		if s == "" {
 			continue
 		}
-		if err := mygo.GlobalShortcut.Register(s, a.togglePanel); err == nil {
+		if err := mygo.GlobalShortcut.Register(s, a.togglePanelFromHotkey); err == nil {
 			a.shortcut = s
 			a.settings.Hotkey = s
 			break

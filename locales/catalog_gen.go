@@ -768,6 +768,16 @@ func (msgs Messages) SettingsFollowMouse() string {
 	return Catalog.Format(msgs.locale, "settingsFollowMouse", nil)
 }
 
+// SettingsHotkeyNoFocus says "快捷键呼出不抢焦点"
+// in the language the app shows.
+func SettingsHotkeyNoFocus() string { return In(i18n.Locale()).SettingsHotkeyNoFocus() }
+
+// SettingsHotkeyNoFocus says "快捷键呼出不抢焦点"
+// in the language of msgs.
+func (msgs Messages) SettingsHotkeyNoFocus() string {
+	return Catalog.Format(msgs.locale, "settingsHotkeyNoFocus", nil)
+}
+
 // SettingsAutoHide says "失焦自动隐藏"
 // in the language the app shows.
 func SettingsAutoHide() string { return In(i18n.Locale()).SettingsAutoHide() }

@@ -52,6 +52,7 @@ type Settings struct {
 	AutoStart          bool   `json:"auto_start"`
 	SilentStart        bool   `json:"silent_start"`
 	FollowMouse        bool   `json:"follow_mouse"`
+	HotkeyNoFocus      bool   `json:"hotkey_no_focus"`
 	AutoHideOnBlur     bool   `json:"auto_hide_on_blur"`
 	PinSearchBox       bool   `json:"pin_search_box"`
 	ScrollTopButton    bool   `json:"scroll_top_button"`
@@ -83,6 +84,7 @@ func DefaultSettings() Settings {
 		AutoStart:          false,
 		SilentStart:        false,
 		FollowMouse:        false,
+		HotkeyNoFocus:      false,
 		AutoHideOnBlur:     true,
 		PinSearchBox:       false,
 		ScrollTopButton:    true,

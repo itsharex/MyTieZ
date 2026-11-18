@@ -116,12 +116,13 @@ func TestStoreSettingsAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Deduplicate || cfg.MaxHistory != 500 || cfg.Hotkey != "Alt+V" {
+	if !cfg.Deduplicate || cfg.MaxHistory != 500 || cfg.Hotkey != "Alt+V" || cfg.HotkeyNoFocus {
 		t.Fatalf("unexpected default settings: %+v", cfg)
 	}
 
 	cfg.Deduplicate = false
 	cfg.CompactMode = true
+	cfg.HotkeyNoFocus = true
 	cfg.ColorMode = "dark"
 	if err := st.SaveSettings(cfg); err != nil {
 		t.Fatal(err)
@@ -131,7 +132,7 @@ func TestStoreSettingsAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Deduplicate || !loaded.CompactMode || loaded.ColorMode != "dark" {
+	if loaded.Deduplicate || !loaded.CompactMode || !loaded.HotkeyNoFocus || loaded.ColorMode != "dark" {
 		t.Fatalf("unexpected loaded settings: %+v", loaded)
 	}
 

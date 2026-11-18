@@ -1039,3 +1039,59 @@ func TestTabsAndSearchBehavior(t *testing.T) {
 		t.Fatal("expected header controls to auto-collapse on scroll in category tab as well")
 	}
 }
+
+func TestHotkeyNoFocusSetting(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	if a.settings.HotkeyNoFocus {
+		t.Fatal("expected HotkeyNoFocus to default to false")
+	}
+
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("常规设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+
+	if !tt.HasText("快捷键呼出不抢焦点") {
+		t.Fatalf("expected HotkeyNoFocus row in general settings, texts=%q", tt.Texts())
+	}
+	if err := tt.Click("切换快捷键呼出不抢焦点"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.settings.HotkeyNoFocus {
+		t.Fatal("expected HotkeyNoFocus toggled to true")
+	}
+	loaded, err := st.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.HotkeyNoFocus {
+		t.Fatal("expected HotkeyNoFocus=true persisted to store")
+	}
+
+	tt.SetLocale("zh-Hant")
+	if !tt.HasText("快捷鍵呼出不搶焦點") {
+		t.Fatalf("expected zh-Hant HotkeyNoFocus label, texts=%q", tt.Texts())
+	}
+	tt.SetLocale("en")
+	if !tt.HasText("No Focus on Hotkey") {
+		t.Fatalf("expected en HotkeyNoFocus label, texts=%q", tt.Texts())
+	}
+
+	if err := tt.Click("Toggle No Focus on Hotkey"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.HotkeyNoFocus {
+		t.Fatal("expected HotkeyNoFocus toggled back to false")
+	}
+}

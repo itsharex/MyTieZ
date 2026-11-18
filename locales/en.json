@@ -81,6 +81,7 @@
   "settingsAutostartErr": "Failed to set launch at login: {err}",
   "settingsSilentStart": "Silent Start",
   "settingsFollowMouse": "Follow Cursor",
+  "settingsHotkeyNoFocus": "No Focus on Hotkey",
   "settingsAutoHide": "Auto Hide on Blur",
   "settingsPinSearchBox": "Pin Search Bar",
   "settingsScrollTopBtn": "Show Back to Top",

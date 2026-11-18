@@ -81,6 +81,7 @@
   "settingsAutostartErr": "設定開機自動啟動失敗: {err}",
   "settingsSilentStart": "靜默啟動",
   "settingsFollowMouse": "跟隨滑鼠位置呼出",
+  "settingsHotkeyNoFocus": "快捷鍵呼出不搶焦點",
   "settingsAutoHide": "失焦自動隱藏",
   "settingsPinSearchBox": "固定顯示搜尋列",
   "settingsScrollTopBtn": "顯示回到頂部按鈕",

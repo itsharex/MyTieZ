@@ -66,6 +66,9 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, msgs.SettingsFollowMouse(), "", &a.settings.FollowMouse, func(bool) {
 						a.persistSettings()
 					})
+					a.renderSwitchRow(c, msgs.SettingsHotkeyNoFocus(), "", &a.settings.HotkeyNoFocus, func(bool) {
+						a.persistSettings()
+					})
 					a.renderSwitchRow(c, msgs.SettingsAutoHide(), "", &a.settings.AutoHideOnBlur, func(on bool) {
 						a.applyAutoHide(on)
 						a.persistSettings()

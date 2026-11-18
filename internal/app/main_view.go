@@ -331,7 +331,7 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 	card := ui.Column(c).Padding(padTop, padX, padBottom, padX).Gap(gap).Radius(radiusCard).
 		Background(bg).Border(1, borderColor).
 		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
-		Translate(0, translateY).
+		AnimatePose(ui.Pose{Y: translateY}, ui.Animation{Duration: 240 * time.Millisecond, Ease: ui.EaseOut}).
 		Transition(cardTransition).
 		Children(func() {
 			ui.Row(c).MinHeight(cardActionSize).AlignItems(ui.Center).Gap(4).Children(func() {

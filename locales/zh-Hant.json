@@ -8,7 +8,7 @@
   "trayQuit": "結束",
 
   "headerPin": "釘選視窗",
-  "headerClearUnpinned": "清空未釘選",
+  "headerClearUnpinned": "清空紀錄",
   "headerSettings": "設定",
   "headerHide": "隱藏視窗",
   "headerBack": "返回",
@@ -152,10 +152,10 @@
   "settingsDataDir": "本機儲存目錄",
   "settingsOpenDir": "開啟目錄",
   "settingsOpenDirErr": "開啟目錄失敗: {err}",
-  "settingsClearUnpinned": "清空未釘選紀錄",
+  "settingsClearUnpinned": "清空紀錄",
   "settingsClearBtn": "清空",
   "settingsClearConfirm": "確認清空",
-  "settingsClearUnpinnedDone": "已清空未釘選剪貼簿紀錄",
+  "settingsClearUnpinnedDone": "已清空未釘選且無標籤的剪貼簿紀錄",
   "settingsClearAll": "清空全部紀錄",
   "settingsClearAllBtn": "清空全部",
   "settingsClearAllConfirm": "確認清空全部",
@@ -172,5 +172,8 @@
   "settingsDownloadingUpdate": "正在下載 {pct}%",
   "settingsRestartToUpdate": "重啟完成更新",
   "settingsUpdateErr": "檢查更新失敗: {err}",
-  "settingsUpdateDisabled": "開發模式下暫不支援自動更新"
+  "settingsUpdateDisabled": "開發模式下暫不支援自動更新",
+  "dialogCancel": "取消",
+  "confirmClearUnpinnedTitle": "清空紀錄？",
+  "confirmClearUnpinnedMsg": "將刪除所有未釘選且無標籤的剪貼簿紀錄，已釘選和帶標籤的紀錄會保留。"
 }

@@ -828,3 +828,57 @@ func TestI18nLocales(t *testing.T) {
 		t.Fatalf("expected en settings groups, got %q", tt.Texts())
 	}
 }
+
+func TestClearUnpinnedModalConfirm(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	pinned, err := st.UpsertText("pinned keep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.TogglePin(pinned.ID); err != nil {
+		t.Fatal(err)
+	}
+	tagged, err := st.UpsertText("tagged keep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpdateTags(tagged.ID, []string{"保留"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("unpinned drop"); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	tt.SetLocale("zh-Hans")
+
+	if err := tt.Click("清空记录"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.confirmClearOpen || len(a.items) != 3 {
+		t.Fatalf("expected modal open without clearing yet, open=%v len=%d", a.confirmClearOpen, len(a.items))
+	}
+	if err := tt.Click("取消"); err != nil {
+		t.Fatal(err)
+	}
+	if a.confirmClearOpen || len(a.items) != 3 {
+		t.Fatalf("expected modal closed and items preserved after cancel, open=%v len=%d", a.confirmClearOpen, len(a.items))
+	}
+
+	if err := tt.Click("清空记录"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("清空"); err != nil {
+		t.Fatal(err)
+	}
+	if a.confirmClearOpen || len(a.items) != 2 {
+		t.Fatalf("expected pinned and tagged items kept after confirm, open=%v items=%+v", a.confirmClearOpen, a.items)
+	}
+}

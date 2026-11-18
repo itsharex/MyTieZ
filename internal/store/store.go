@@ -719,7 +719,7 @@ func (s *Store) Delete(id int64) error {
 }
 
 func (s *Store) ClearUnpinned() error {
-	return s.deleteItemsWhere("pinned = 0")
+	return s.deleteItemsWhere("pinned = 0 AND (tags_json IS NULL OR tags_json = '' OR tags_json = '[]')")
 }
 
 func (s *Store) ClearAll() error {

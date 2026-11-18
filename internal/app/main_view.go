@@ -93,24 +93,27 @@ func (a *clipApp) view(c *ui.Context) {
 		return
 	}
 
-	if a.editingTagsID != 0 && c.Shortcut(0, ui.KeyEscape) {
-		a.editingTagsID = 0
-		a.tagInput = ""
-	} else if a.query != "" && c.Shortcut(0, ui.KeyEscape) {
-		a.clearSearch(c)
-	} else if a.selected >= 0 && c.Shortcut(0, ui.KeyEscape) {
-		a.selected = -1
-	} else if c.Shortcut(0, ui.KeyEscape) && a.panel != nil {
-		a.hidePanel()
+	var enterPressed bool
+	if !a.confirmClearOpen {
+		if a.editingTagsID != 0 && c.Shortcut(0, ui.KeyEscape) {
+			a.editingTagsID = 0
+			a.tagInput = ""
+		} else if a.query != "" && c.Shortcut(0, ui.KeyEscape) {
+			a.clearSearch(c)
+		} else if a.selected >= 0 && c.Shortcut(0, ui.KeyEscape) {
+			a.selected = -1
+		} else if c.Shortcut(0, ui.KeyEscape) && a.panel != nil {
+			a.hidePanel()
+		}
+		if c.Shortcut(0, ui.KeyDown) {
+			a.moveSelection(1)
+		}
+		if c.Shortcut(0, ui.KeyUp) {
+			a.moveSelection(-1)
+		}
+		a.handleQuickPasteShortcut(c)
+		enterPressed = c.Shortcut(0, ui.KeyEnter)
 	}
-	if c.Shortcut(0, ui.KeyDown) {
-		a.moveSelection(1)
-	}
-	if c.Shortcut(0, ui.KeyUp) {
-		a.moveSelection(-1)
-	}
-	a.handleQuickPasteShortcut(c)
-	enterPressed := c.Shortcut(0, ui.KeyEnter)
 
 	msgs := locales.In(c.Locale())
 	page := ui.Column(c.Key("main-page")).Fill()
@@ -131,7 +134,7 @@ func (a *clipApp) view(c *ui.Context) {
 					a.toggleWindowPin()
 				})
 				a.renderHeaderIconBtn(c, iconTrash, msgs.HeaderClearUnpinned(), false, false, func() {
-					a.clearUnpinned()
+					a.confirmClearOpen = true
 				})
 				a.renderHeaderIconBtn(c, iconSettings, msgs.HeaderSettings(), false, false, func() {
 					a.showSettings = true
@@ -252,6 +255,11 @@ func (a *clipApp) view(c *ui.Context) {
 
 		a.renderSearchTagPopover(c, t)
 	})
+
+	switch ui.AlertDialog(c, &a.confirmClearOpen, msgs.ConfirmClearUnpinnedTitle(), msgs.ConfirmClearUnpinnedMsg(), msgs.DialogCancel(), msgs.SettingsClearBtn()) {
+	case 1:
+		a.clearUnpinned()
+	}
 }
 
 func (a *clipApp) renderCard(row ui.ListRow) {

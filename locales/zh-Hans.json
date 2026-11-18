@@ -8,7 +8,7 @@
   "trayQuit": "退出",
 
   "headerPin": "固定窗口",
-  "headerClearUnpinned": "清空未置顶",
+  "headerClearUnpinned": "清空记录",
   "headerSettings": "设置",
   "headerHide": "隐藏窗口",
   "headerBack": "返回",
@@ -172,10 +172,10 @@
   "settingsDataDir": "本地存储目录",
   "settingsOpenDir": "打开目录",
   "settingsOpenDirErr": "打开目录失败: {err}",
-  "settingsClearUnpinned": "清空未置顶记录",
+  "settingsClearUnpinned": "清空记录",
   "settingsClearBtn": "清空",
   "settingsClearConfirm": "确认清空",
-  "settingsClearUnpinnedDone": "已清空未置顶剪贴板记录",
+  "settingsClearUnpinnedDone": "已清空未置顶且无标签的剪贴板记录",
   "settingsClearAll": "清空全部记录",
   "settingsClearAllBtn": "清空全部",
   "settingsClearAllConfirm": "确认清空全部",
@@ -192,5 +192,8 @@
   "settingsDownloadingUpdate": "正在下载 {pct}%",
   "settingsRestartToUpdate": "重启完成更新",
   "settingsUpdateErr": "检查更新失败: {err}",
-  "settingsUpdateDisabled": "开发模式下暂不支持自动更新"
+  "settingsUpdateDisabled": "开发模式下暂不支持自动更新",
+  "dialogCancel": "取消",
+  "confirmClearUnpinnedTitle": "清空记录？",
+  "confirmClearUnpinnedMsg": "将删除所有未置顶且无标签的剪贴板记录，已置顶和带标签的记录会保留。"
 }

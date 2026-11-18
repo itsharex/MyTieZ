@@ -96,11 +96,11 @@ func (msgs Messages) HeaderPin() string {
 	return Catalog.Format(msgs.locale, "headerPin", nil)
 }
 
-// HeaderClearUnpinned says "清空未置顶"
+// HeaderClearUnpinned says "清空记录"
 // in the language the app shows.
 func HeaderClearUnpinned() string { return In(i18n.Locale()).HeaderClearUnpinned() }
 
-// HeaderClearUnpinned says "清空未置顶"
+// HeaderClearUnpinned says "清空记录"
 // in the language of msgs.
 func (msgs Messages) HeaderClearUnpinned() string {
 	return Catalog.Format(msgs.locale, "headerClearUnpinned", nil)
@@ -1460,11 +1460,11 @@ func (msgs Messages) SettingsOpenDirErr(err string) string {
 	return Catalog.Format(msgs.locale, "settingsOpenDirErr", map[string]any{"err": err})
 }
 
-// SettingsClearUnpinned says "清空未置顶记录"
+// SettingsClearUnpinned says "清空记录"
 // in the language the app shows.
 func SettingsClearUnpinned() string { return In(i18n.Locale()).SettingsClearUnpinned() }
 
-// SettingsClearUnpinned says "清空未置顶记录"
+// SettingsClearUnpinned says "清空记录"
 // in the language of msgs.
 func (msgs Messages) SettingsClearUnpinned() string {
 	return Catalog.Format(msgs.locale, "settingsClearUnpinned", nil)
@@ -1490,11 +1490,11 @@ func (msgs Messages) SettingsClearConfirm() string {
 	return Catalog.Format(msgs.locale, "settingsClearConfirm", nil)
 }
 
-// SettingsClearUnpinnedDone says "已清空未置顶剪贴板记录"
+// SettingsClearUnpinnedDone says "已清空未置顶且无标签的剪贴板记录"
 // in the language the app shows.
 func SettingsClearUnpinnedDone() string { return In(i18n.Locale()).SettingsClearUnpinnedDone() }
 
-// SettingsClearUnpinnedDone says "已清空未置顶剪贴板记录"
+// SettingsClearUnpinnedDone says "已清空未置顶且无标签的剪贴板记录"
 // in the language of msgs.
 func (msgs Messages) SettingsClearUnpinnedDone() string {
 	return Catalog.Format(msgs.locale, "settingsClearUnpinnedDone", nil)
@@ -1672,4 +1672,34 @@ func SettingsUpdateDisabled() string { return In(i18n.Locale()).SettingsUpdateDi
 // in the language of msgs.
 func (msgs Messages) SettingsUpdateDisabled() string {
 	return Catalog.Format(msgs.locale, "settingsUpdateDisabled", nil)
+}
+
+// DialogCancel says "取消"
+// in the language the app shows.
+func DialogCancel() string { return In(i18n.Locale()).DialogCancel() }
+
+// DialogCancel says "取消"
+// in the language of msgs.
+func (msgs Messages) DialogCancel() string {
+	return Catalog.Format(msgs.locale, "dialogCancel", nil)
+}
+
+// ConfirmClearUnpinnedTitle says "清空记录？"
+// in the language the app shows.
+func ConfirmClearUnpinnedTitle() string { return In(i18n.Locale()).ConfirmClearUnpinnedTitle() }
+
+// ConfirmClearUnpinnedTitle says "清空记录？"
+// in the language of msgs.
+func (msgs Messages) ConfirmClearUnpinnedTitle() string {
+	return Catalog.Format(msgs.locale, "confirmClearUnpinnedTitle", nil)
+}
+
+// ConfirmClearUnpinnedMsg says "将删除所有未置顶且无标签的剪贴板记录，已置顶和带标签的记录会保留。"
+// in the language the app shows.
+func ConfirmClearUnpinnedMsg() string { return In(i18n.Locale()).ConfirmClearUnpinnedMsg() }
+
+// ConfirmClearUnpinnedMsg says "将删除所有未置顶且无标签的剪贴板记录，已置顶和带标签的记录会保留。"
+// in the language of msgs.
+func (msgs Messages) ConfirmClearUnpinnedMsg() string {
+	return Catalog.Format(msgs.locale, "confirmClearUnpinnedMsg", nil)
 }

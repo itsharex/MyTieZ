@@ -60,6 +60,7 @@ type clipApp struct {
 	updateStatus     string
 
 	showSettings       bool
+	confirmClearOpen   bool
 	controlsCollapsed  bool
 	atTop              bool
 	topReachedAt       time.Time
@@ -184,6 +185,7 @@ func (a *clipApp) showPanel() {
 		a.panel.SetPosition(x, y)
 	}
 	a.selected = -1
+	a.confirmClearOpen = false
 	a.controlsCollapsed = false
 	a.atTop = true
 	a.upScrollAccum = 0
@@ -249,6 +251,7 @@ func centeredPanelTarget(w, h int, workArea mygo.Rectangle) (int, int) {
 }
 
 func (a *clipApp) hidePanel() {
+	a.confirmClearOpen = false
 	if a.panel != nil {
 		a.panel.Hide()
 	}

@@ -8,7 +8,7 @@
   "trayQuit": "Quit",
 
   "headerPin": "Pin Window",
-  "headerClearUnpinned": "Clear Unpinned",
+  "headerClearUnpinned": "Clear History",
   "headerSettings": "Settings",
   "headerHide": "Hide Window",
   "headerBack": "Back",
@@ -152,10 +152,10 @@
   "settingsDataDir": "Storage Directory",
   "settingsOpenDir": "Open Folder",
   "settingsOpenDirErr": "Failed to open folder: {err}",
-  "settingsClearUnpinned": "Clear Unpinned",
+  "settingsClearUnpinned": "Clear History",
   "settingsClearBtn": "Clear",
   "settingsClearConfirm": "Confirm Clear",
-  "settingsClearUnpinnedDone": "Cleared unpinned history",
+  "settingsClearUnpinnedDone": "Cleared unpinned, untagged history",
   "settingsClearAll": "Clear All History",
   "settingsClearAllBtn": "Clear All",
   "settingsClearAllConfirm": "Confirm Clear All",
@@ -172,5 +172,8 @@
   "settingsDownloadingUpdate": "Downloading {pct}%",
   "settingsRestartToUpdate": "Restart to Update",
   "settingsUpdateErr": "Update check failed: {err}",
-  "settingsUpdateDisabled": "Updates unavailable in dev build"
+  "settingsUpdateDisabled": "Updates unavailable in dev build",
+  "dialogCancel": "Cancel",
+  "confirmClearUnpinnedTitle": "Clear History?",
+  "confirmClearUnpinnedMsg": "This will delete all unpinned, untagged items. Pinned and tagged items will be kept."
 }

@@ -75,6 +75,7 @@ type Settings struct {
 	OpenAppImage       string `json:"open_app_image"`
 	WindowWidth        int    `json:"window_width"`
 	WindowHeight       int    `json:"window_height"`
+	LastUpdateCheck    int64  `json:"last_update_check"`
 }
 
 func DefaultSettings() Settings {

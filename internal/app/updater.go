@@ -13,6 +13,7 @@ import (
 const (
 	updateCheckTimeout   = 10 * time.Second
 	updateInstallTimeout = 5 * time.Minute
+	autoUpdateInterval   = 24 * time.Hour
 )
 
 func appVersion() string {
@@ -26,6 +27,9 @@ func appVersion() string {
 
 func (a *clipApp) checkForUpdates(manual bool) {
 	if a.updateChecking || a.updateInstalling {
+		return
+	}
+	if !manual && a.settings.LastUpdateCheck > 0 && time.Since(time.Unix(a.settings.LastUpdateCheck, 0)) < autoUpdateInterval {
 		return
 	}
 	if !mygo.App.IsReady() || !mygo.Updater.Enabled() {
@@ -54,6 +58,8 @@ func (a *clipApp) checkForUpdates(manual bool) {
 				}
 				return
 			}
+			a.settings.LastUpdateCheck = time.Now().Unix()
+			a.persistSettings()
 			if up == nil {
 				a.availableUpdate = nil
 				a.updateReady = false

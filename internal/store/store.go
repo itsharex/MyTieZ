@@ -52,7 +52,7 @@ type Settings struct {
 	AutoStart          bool   `json:"auto_start"`
 	SilentStart        bool   `json:"silent_start"`
 	FollowMouse        bool   `json:"follow_mouse"`
-	HotkeyNoFocus      bool   `json:"hotkey_no_focus"`
+	NoFocusMode        bool   `json:"no_focus_mode"`
 	AutoHideOnBlur     bool   `json:"auto_hide_on_blur"`
 	PinSearchBox       bool   `json:"pin_search_box"`
 	ScrollTopButton    bool   `json:"scroll_top_button"`
@@ -84,7 +84,7 @@ func DefaultSettings() Settings {
 		AutoStart:          false,
 		SilentStart:        false,
 		FollowMouse:        false,
-		HotkeyNoFocus:      false,
+		NoFocusMode:        false,
 		AutoHideOnBlur:     true,
 		PinSearchBox:       false,
 		ScrollTopButton:    true,
@@ -254,6 +254,19 @@ func (s *Store) LoadSettings() (Settings, error) {
 	}
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		return DefaultSettings(), err
+	}
+	if !cfg.NoFocusMode {
+		var rawMap map[string]json.RawMessage
+		if json.Unmarshal([]byte(raw), &rawMap) == nil {
+			if _, ok := rawMap["no_focus_mode"]; !ok {
+				var legacy struct {
+					HotkeyNoFocus bool `json:"hotkey_no_focus"`
+				}
+				if json.Unmarshal([]byte(raw), &legacy) == nil && legacy.HotkeyNoFocus {
+					cfg.NoFocusMode = true
+				}
+			}
+		}
 	}
 	if cfg.ColorMode != "system" && cfg.ColorMode != "light" && cfg.ColorMode != "dark" {
 		cfg.ColorMode = "system"

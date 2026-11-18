@@ -1040,16 +1040,21 @@ func TestTabsAndSearchBehavior(t *testing.T) {
 	}
 }
 
-func TestHotkeyNoFocusSetting(t *testing.T) {
+func TestNoFocusModeSetting(t *testing.T) {
 	st, err := store.OpenStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer st.Close()
 
+	if _, err := st.UpsertText("sample item"); err != nil {
+		t.Fatal(err)
+	}
+
 	a := newClipApp(st, nil)
-	if a.settings.HotkeyNoFocus {
-		t.Fatal("expected HotkeyNoFocus to default to false")
+	a.reload()
+	if a.settings.NoFocusMode || a.panelNoActivate {
+		t.Fatalf("expected NoFocusMode and panelNoActivate to default to false, got settings=%v noAct=%v", a.settings.NoFocusMode, a.panelNoActivate)
 	}
 
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
@@ -1062,36 +1067,62 @@ func TestHotkeyNoFocusSetting(t *testing.T) {
 	}
 	tt.Advance(250 * time.Millisecond)
 
-	if !tt.HasText("快捷键呼出不抢焦点") {
-		t.Fatalf("expected HotkeyNoFocus row in general settings, texts=%q", tt.Texts())
+	if !tt.HasText("不抢焦点 (实验性)") {
+		t.Fatalf("expected NoFocusMode row in general settings, texts=%q", tt.Texts())
 	}
-	if err := tt.Click("切换快捷键呼出不抢焦点"); err != nil {
+	if err := tt.Click("切换不抢焦点 (实验性)"); err != nil {
 		t.Fatal(err)
 	}
-	if !a.settings.HotkeyNoFocus {
-		t.Fatal("expected HotkeyNoFocus toggled to true")
+	if !a.settings.NoFocusMode || !a.panelNoActivate {
+		t.Fatalf("expected NoFocusMode and panelNoActivate toggled to true, got settings=%v noAct=%v", a.settings.NoFocusMode, a.panelNoActivate)
 	}
 	loaded, err := st.LoadSettings()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !loaded.HotkeyNoFocus {
-		t.Fatal("expected HotkeyNoFocus=true persisted to store")
+	if !loaded.NoFocusMode {
+		t.Fatal("expected NoFocusMode=true persisted to store")
 	}
 
 	tt.SetLocale("zh-Hant")
-	if !tt.HasText("快捷鍵呼出不搶焦點") {
-		t.Fatalf("expected zh-Hant HotkeyNoFocus label, texts=%q", tt.Texts())
+	if !tt.HasText("不搶焦點 (實驗性)") {
+		t.Fatalf("expected zh-Hant NoFocusMode label, texts=%q", tt.Texts())
 	}
 	tt.SetLocale("en")
-	if !tt.HasText("No Focus on Hotkey") {
-		t.Fatalf("expected en HotkeyNoFocus label, texts=%q", tt.Texts())
+	if !tt.HasText("No Focus Mode (Experimental)") {
+		t.Fatalf("expected en NoFocusMode label, texts=%q", tt.Texts())
 	}
+	tt.SetLocale("zh-Hans")
 
-	if err := tt.Click("Toggle No Focus on Hotkey"); err != nil {
+	// 录制快捷键会临时退出无激活状态以接收按键
+	if err := tt.Click("剪贴板设置"); err != nil {
 		t.Fatal(err)
 	}
-	if a.settings.HotkeyNoFocus {
-		t.Fatal("expected HotkeyNoFocus toggled back to false")
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("录制呼出快捷键"); err != nil {
+		t.Fatal(err)
+	}
+	if a.panelNoActivate {
+		t.Fatal("expected panelNoActivate=false while recording hotkey")
+	}
+	tt.Key(0, ui.KeyEscape)
+
+	// 返回主列表后，点击搜索框与标签编辑均自动恢复激活以接收输入
+	if err := tt.Click("返回"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	a.setPanelNoActivate(true)
+	if err := tt.Click("搜索剪贴板"); err != nil {
+		t.Fatal(err)
+	}
+	if a.panelNoActivate {
+		t.Fatal("expected clicking search box to clear panelNoActivate for text input")
+	}
+
+	a.setPanelNoActivate(true)
+	a.toggleTagEditor(a.items[0].ID)
+	if a.panelNoActivate {
+		t.Fatal("expected opening tag editor to clear panelNoActivate for text input")
 	}
 }

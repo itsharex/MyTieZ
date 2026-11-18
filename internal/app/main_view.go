@@ -147,9 +147,7 @@ func (a *clipApp) mainView(c *ui.Context) {
 					a.confirmAction = ""
 				})
 				a.renderHeaderIconBtn(c, iconClear, msgs.HeaderHide(), false, true, func() {
-					if a.panel != nil {
-						a.panel.Hide()
-					}
+					a.hidePanel()
 				})
 			})
 		})
@@ -163,11 +161,16 @@ func (a *clipApp) mainView(c *ui.Context) {
 		if p > 0 {
 			ctrlWrap.Padding(2, 16, 8, 16).Gap(8).Children(func() {
 				searchBorder := t.Border
-				if a.searchHandle.Focused(c) {
+				if !a.panelNoActivate && a.searchHandle.Focused(c) {
 					searchBorder = t.Accent
 				}
 				ui.Row(c).Height(searchBoxHeight).Padding(0, 12).Gap(8).AlignItems(ui.Center).Radius(radiusControl).
 					Background(t.Surface).Border(1, searchBorder).Transition(colorTransition).
+					ObserveInput(func(ev ui.InputEvent) {
+						if ev.Kind == ui.InputPointerDown {
+							a.activatePanelForInput()
+						}
+					}).
 					Children(func() {
 						ui.Icon(c, iconSearch).FontSize(18).TextColor(t.TextMuted)
 						searchIn := ui.TextInputBase(c, &a.query).Bind(&a.searchHandle).

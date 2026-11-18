@@ -236,6 +236,7 @@ func (a *clipApp) resetSettings() {
 		a.settings = cfg
 	}
 	a.applyAutoHide(a.settings.AutoHideOnBlur)
+	a.applyNoFocusMode(a.settings.NoFocusMode)
 	a.applyBackdrop()
 	if mygo.App.IsReady() {
 		if err := mygo.App.SetOpenAtLogin(a.settings.AutoStart); err != nil {
@@ -297,9 +298,12 @@ func (a *clipApp) pasteSelected() {
 		a.setStatus(locales.StatusCopied())
 		return
 	}
-	restoreFocus := a.winPinned
+	wasNoActivate := a.panelNoActivate
+	restoreFocus := a.winPinned && !wasNoActivate
 	if a.panel != nil && !a.winPinned {
 		a.hidePanel()
+	} else if a.winPinned && a.settings.NoFocusMode && !wasNoActivate {
+		a.setPanelNoActivate(true)
 	}
 	if mygo.App.IsReady() {
 		method := a.settings.PasteMethod
@@ -309,6 +313,8 @@ func (a *clipApp) pasteSelected() {
 			if restoreFocus {
 				sys.RestoreForegroundWindow()
 				time.Sleep(70 * time.Millisecond)
+			} else if wasNoActivate {
+				time.Sleep(30 * time.Millisecond)
 			} else {
 				time.Sleep(60 * time.Millisecond)
 			}

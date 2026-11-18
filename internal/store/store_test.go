@@ -116,13 +116,13 @@ func TestStoreSettingsAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Deduplicate || cfg.MaxHistory != 500 || cfg.Hotkey != "Alt+V" || cfg.HotkeyNoFocus {
+	if !cfg.Deduplicate || cfg.MaxHistory != 500 || cfg.Hotkey != "Alt+V" || cfg.NoFocusMode {
 		t.Fatalf("unexpected default settings: %+v", cfg)
 	}
 
 	cfg.Deduplicate = false
 	cfg.CompactMode = true
-	cfg.HotkeyNoFocus = true
+	cfg.NoFocusMode = true
 	cfg.ColorMode = "dark"
 	if err := st.SaveSettings(cfg); err != nil {
 		t.Fatal(err)
@@ -132,8 +132,23 @@ func TestStoreSettingsAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Deduplicate || !loaded.CompactMode || !loaded.HotkeyNoFocus || loaded.ColorMode != "dark" {
+	if loaded.Deduplicate || !loaded.CompactMode || !loaded.NoFocusMode || loaded.ColorMode != "dark" {
 		t.Fatalf("unexpected loaded settings: %+v", loaded)
+	}
+
+	// 兼容旧字段 hotkey_no_focus 自动迁移到 no_focus_mode
+	if _, err := st.db.Exec(`UPDATE app_settings SET value = '{"hotkey_no_focus":true}' WHERE key = 'config'`); err != nil {
+		t.Fatal(err)
+	}
+	migrated, err := st.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !migrated.NoFocusMode {
+		t.Fatalf("expected legacy hotkey_no_focus migrated to NoFocusMode=true, got %+v", migrated)
+	}
+	if err := st.SaveSettings(cfg); err != nil {
+		t.Fatal(err)
 	}
 
 	// 关闭去重时允许同内容重复入库

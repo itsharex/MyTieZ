@@ -768,14 +768,24 @@ func (msgs Messages) SettingsFollowMouse() string {
 	return Catalog.Format(msgs.locale, "settingsFollowMouse", nil)
 }
 
-// SettingsHotkeyNoFocus says "快捷键呼出不抢焦点"
+// SettingsNoFocusMode says "不抢焦点 (实验性)"
 // in the language the app shows.
-func SettingsHotkeyNoFocus() string { return In(i18n.Locale()).SettingsHotkeyNoFocus() }
+func SettingsNoFocusMode() string { return In(i18n.Locale()).SettingsNoFocusMode() }
 
-// SettingsHotkeyNoFocus says "快捷键呼出不抢焦点"
+// SettingsNoFocusMode says "不抢焦点 (实验性)"
 // in the language of msgs.
-func (msgs Messages) SettingsHotkeyNoFocus() string {
-	return Catalog.Format(msgs.locale, "settingsHotkeyNoFocus", nil)
+func (msgs Messages) SettingsNoFocusMode() string {
+	return Catalog.Format(msgs.locale, "settingsNoFocusMode", nil)
+}
+
+// SettingsNoFocusModeDesc says "呼出、点选卡片与拖拽不抢占焦点，点击输入框时自动聚焦"
+// in the language the app shows.
+func SettingsNoFocusModeDesc() string { return In(i18n.Locale()).SettingsNoFocusModeDesc() }
+
+// SettingsNoFocusModeDesc says "呼出、点选卡片与拖拽不抢占焦点，点击输入框时自动聚焦"
+// in the language of msgs.
+func (msgs Messages) SettingsNoFocusModeDesc() string {
+	return Catalog.Format(msgs.locale, "settingsNoFocusModeDesc", nil)
 }
 
 // SettingsAutoHide says "失焦自动隐藏"

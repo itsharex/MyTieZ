@@ -11,6 +11,7 @@ import (
 )
 
 func (a *clipApp) startHotkeyRecording() {
+	a.activatePanelForInput()
 	if a.recordingHotkey {
 		a.hotkeyFocusPending = true
 		return
@@ -32,7 +33,7 @@ func (a *clipApp) cancelHotkeyRecording() {
 	a.hotkeyFocusPending = false
 	a.hotkeyMods = 0
 	if mygo.App.IsReady() && a.shortcut != "" && !mygo.GlobalShortcut.IsRegistered(a.shortcut) {
-		_ = mygo.GlobalShortcut.Register(a.shortcut, a.togglePanel)
+		_ = mygo.GlobalShortcut.Register(a.shortcut, a.togglePanelFromHotkey)
 	}
 }
 

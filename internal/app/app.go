@@ -49,6 +49,9 @@ type clipApp struct {
 	ignoreHash       string
 	ignoreUntil      time.Time
 	winPinned        bool
+	panelNoActivate  bool
+	stopOutsideWatch func()
+	lastOutsideHide  time.Time
 	pickingApp       bool
 	quitting         bool
 	resizeTimer      *time.Timer
@@ -84,14 +87,15 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 		}
 	}
 	return &clipApp{
-		iconPNG:   iconPNG,
-		store:     st,
-		settings:  cfg,
-		selected:  -1,
-		atTop:     true,
-		winPinned: !cfg.AutoHideOnBlur,
-		thumbs:    newBitmapCache(),
-		appIcons:  newBitmapCache(),
+		iconPNG:         iconPNG,
+		store:           st,
+		settings:        cfg,
+		selected:        -1,
+		atTop:           true,
+		winPinned:       !cfg.AutoHideOnBlur,
+		panelNoActivate: cfg.NoFocusMode,
+		thumbs:          newBitmapCache(),
+		appIcons:        newBitmapCache(),
 	}
 }
 
@@ -130,7 +134,76 @@ func (a *clipApp) applyAutoHide(autoHide bool) {
 	a.settings.AutoHideOnBlur = autoHide
 	a.winPinned = !autoHide
 	if a.panel != nil && mygo.App.IsReady() {
+		a.panel.SetAlwaysOnTop(a.winPinned || a.panelNoActivate)
+	}
+	a.syncOutsideClickWatch()
+}
+
+func (a *clipApp) applyNoFocusMode(on bool) {
+	a.settings.NoFocusMode = on
+	a.setPanelNoActivate(on)
+	if a.panel != nil && mygo.App.IsReady() {
+		a.panel.SetAlwaysOnTop(a.winPinned || a.panelNoActivate)
+	}
+	a.syncOutsideClickWatch()
+}
+
+func (a *clipApp) setPanelNoActivate(on bool) {
+	a.panelNoActivate = on
+	if a.panel != nil && mygo.App.IsReady() {
+		sys.SetWindowNoActivate(a.panel.NativeHandle(), on)
+	}
+	a.syncOutsideClickWatch()
+}
+
+func (a *clipApp) syncOutsideClickWatch() {
+	shouldWatch := a.panel != nil && mygo.App.IsReady() && a.panel.IsVisible() &&
+		a.settings.NoFocusMode && a.panelNoActivate && !a.winPinned && !a.pickingApp
+	if !shouldWatch {
+		a.stopOutsideClickWatch()
+		return
+	}
+	if a.stopOutsideWatch != nil {
+		return
+	}
+	hwnd := a.panel.NativeHandle()
+	if hwnd == 0 {
+		return
+	}
+	a.stopOutsideWatch = sys.StartOutsideClickWatch(hwnd, func() {
+		if a.panel == nil {
+			return
+		}
+		a.panel.Update(func() {
+			if a.panel == nil || !a.panel.IsVisible() {
+				return
+			}
+			if !a.settings.NoFocusMode || !a.panelNoActivate || a.winPinned || a.pickingApp {
+				return
+			}
+			a.lastOutsideHide = time.Now()
+			a.hidePanel()
+		})
+	})
+}
+
+func (a *clipApp) stopOutsideClickWatch() {
+	if a.stopOutsideWatch != nil {
+		stop := a.stopOutsideWatch
+		a.stopOutsideWatch = nil
+		stop()
+	}
+}
+
+func (a *clipApp) activatePanelForInput() {
+	if !a.panelNoActivate {
+		return
+	}
+	a.setPanelNoActivate(false)
+	if a.panel != nil && mygo.App.IsReady() {
 		a.panel.SetAlwaysOnTop(a.winPinned)
+		a.panel.Show()
+		a.panel.Focus()
 	}
 }
 
@@ -163,7 +236,7 @@ func (a *clipApp) switchHotkey(newKey string) error {
 }
 
 func (a *clipApp) showPanel() {
-	a.showPanelWithFocus(true)
+	a.showPanelWithFocus(!a.settings.NoFocusMode)
 }
 
 func (a *clipApp) showPanelWithFocus(focus bool) {
@@ -197,6 +270,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 	a.resetScrollToTop()
 	a.reload()
 	a.scrollListToTop()
+	a.setPanelNoActivate(!focus)
 	// 不抢焦点呼出时必须置顶，否则非置顶窗口执行 ShowInactive 会被压在当前前台窗口后面
 	a.panel.SetAlwaysOnTop(a.winPinned || !focus)
 	if focus {
@@ -204,6 +278,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 		a.panel.Focus()
 	} else {
 		a.panel.ShowInactive()
+		a.syncOutsideClickWatch()
 	}
 }
 
@@ -259,9 +334,13 @@ func centeredPanelTarget(w, h int, workArea mygo.Rectangle) (int, int) {
 }
 
 func (a *clipApp) hidePanel() {
+	a.stopOutsideClickWatch()
 	a.confirmClearOpen = false
 	if a.panel != nil {
 		a.panel.Hide()
+	}
+	if a.settings.NoFocusMode {
+		a.setPanelNoActivate(true)
 	}
 	if a.thumbs != nil {
 		a.thumbs.clear()
@@ -276,11 +355,11 @@ func (a *clipApp) hidePanel() {
 }
 
 func (a *clipApp) togglePanel() {
-	a.togglePanelWithFocus(true)
+	a.togglePanelWithFocus(!a.settings.NoFocusMode)
 }
 
 func (a *clipApp) togglePanelFromHotkey() {
-	a.togglePanelWithFocus(!a.settings.HotkeyNoFocus)
+	a.togglePanelWithFocus(!a.settings.NoFocusMode)
 }
 
 func (a *clipApp) togglePanelWithFocus(focus bool) {
@@ -401,7 +480,12 @@ func (a *clipApp) setupTray() {
 	}
 	a.tray = tray
 	a.updateTrayMenu()
-	a.tray.OnClick(func() { a.togglePanel() })
+	a.tray.OnClick(func() {
+		if time.Since(a.lastOutsideHide) < 300*time.Millisecond {
+			return
+		}
+		a.togglePanel()
+	})
 	mygo.App.OnLocaleChanged(func(string) {
 		a.updateTrayMenu()
 	})
@@ -412,6 +496,7 @@ func (a *clipApp) setupTray() {
 		a.quitting = false
 	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		a.stopOutsideClickWatch()
 		if a.resizeTimer != nil {
 			a.resizeTimer.Stop()
 		}

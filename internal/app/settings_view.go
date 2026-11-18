@@ -66,7 +66,8 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, msgs.SettingsFollowMouse(), "", &a.settings.FollowMouse, func(bool) {
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, msgs.SettingsHotkeyNoFocus(), "", &a.settings.HotkeyNoFocus, func(bool) {
+					a.renderSwitchRow(c, msgs.SettingsNoFocusMode(), msgs.SettingsNoFocusModeDesc(), &a.settings.NoFocusMode, func(on bool) {
+						a.applyNoFocusMode(on)
 						a.persistSettings()
 					})
 					a.renderSwitchRow(c, msgs.SettingsAutoHide(), "", &a.settings.AutoHideOnBlur, func(on bool) {

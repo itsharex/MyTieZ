@@ -48,6 +48,7 @@ func (a *clipApp) toggleTagEditor(id int64) {
 	a.editingTagsID = id
 	a.tagInput = ""
 	a.tagFocusPending = true
+	a.activatePanelForInput()
 }
 
 func (a *clipApp) addTagToItem(item store.ClipItem, raw string) {
@@ -242,7 +243,13 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 			})
 		}
 
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).Children(func() {
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(6).
+			ObserveInput(func(ev ui.InputEvent) {
+				if ev.Kind == ui.InputPointerDown {
+					a.activatePanelForInput()
+				}
+			}).
+			Children(func() {
 			inp := ui.TextInput(c, &a.tagInput).Bind(&a.tagInputHandle).
 				Placeholder(msgs.TagsInputPlaceholder()).
 				Grow(1).Height(26).Padding(0, 8).Radius(radiusMicro).

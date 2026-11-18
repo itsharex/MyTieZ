@@ -30,4 +30,6 @@ jobs:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go tool mygo build -platform windows/amd64,windows/arm64 -upload
+        run: |
+          go tool mygo build -platform windows/amd64,windows/arm64 -upload
+          gh release delete-asset "${{ github.ref_name }}" install.ps1 --yes || true

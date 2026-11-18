@@ -53,6 +53,13 @@ func (bc *bitmapCache) clear() {
 	bc.items = make(map[string]*ui.Bitmap)
 }
 
+func (bc *bitmapCache) len() int {
+	if bc == nil {
+		return 0
+	}
+	return len(bc.items)
+}
+
 func (bc *bitmapCache) get(win *mygo.Window, key string, maxCount int, fetch func() ([]byte, error)) *ui.Bitmap {
 	return bc.getBitmap(win, key, maxCount, func() (*ui.Bitmap, error) {
 		data, err := fetch()

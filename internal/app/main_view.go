@@ -700,7 +700,7 @@ func (a *clipApp) getRichPreviewSpans(item store.ClipItem, t *ui.Theme) []ui.Spa
 	if item.HTML == "" {
 		return nil
 	}
-	if a.richSpans == nil || a.richSpansDark != t.Dark {
+	if a.richSpans == nil || a.richSpansDark != t.Dark || len(a.richSpans) >= maxRichSpanCacheEntries {
 		a.richSpans = make(map[int64][]ui.Span)
 		a.richSpansDark = t.Dark
 	}

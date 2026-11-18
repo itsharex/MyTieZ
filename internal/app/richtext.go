@@ -14,6 +14,7 @@ const (
 	maxRichPreviewHTMLBytes = 16 * 1024
 	maxRichPreviewSpans     = 48
 	maxRichPreviewChars     = 400
+	maxRichSpanCacheEntries = 128
 )
 
 type spanStyle struct {

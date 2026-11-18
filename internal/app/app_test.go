@@ -1126,3 +1126,45 @@ func TestNoFocusModeSetting(t *testing.T) {
 		t.Fatal("expected opening tag editor to clear panelNoActivate for text input")
 	}
 }
+
+func TestHiddenMemoryAndCacheRetention(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	a.richSpans = map[int64][]ui.Span{
+		1: {{Text: "cached span"}},
+	}
+	for i := 0; i < warmThumbCacheLimit; i++ {
+		a.thumbs.items[string(rune('a'+i))] = &ui.Bitmap{}
+	}
+
+	// 1. 常规隐藏且缩略图数 <= warmThumbCacheLimit（内存 < 50MB）：热缓存与 richSpans 均保留
+	a.hidePanel()
+	if a.thumbs.len() != warmThumbCacheLimit {
+		t.Fatalf("expected warm thumb cache (%d) preserved on normal hide, got %d", warmThumbCacheLimit, a.thumbs.len())
+	}
+	if len(a.richSpans) != 1 {
+		t.Fatalf("expected richSpans preserved on normal hide, got %d", len(a.richSpans))
+	}
+
+	// 2. 缩略图超过 warmThumbCacheLimit 时，隐藏立即清理缩略图，但仍保留轻量 richSpans
+	a.thumbs.items["overflow"] = &ui.Bitmap{}
+	a.hidePanel()
+	if a.thumbs.len() != 0 {
+		t.Fatalf("expected oversized thumb cache cleared on hide, got %d", a.thumbs.len())
+	}
+	if len(a.richSpans) != 1 {
+		t.Fatalf("expected richSpans still preserved under 50MB, got %d", len(a.richSpans))
+	}
+
+	// 3. 后台托盘闲置超时（idleExpired=true）时，即使缩略图未超上限也会被清理
+	a.thumbs.items["idle-thumb"] = &ui.Bitmap{}
+	a.releaseHiddenMemory(true)
+	if a.thumbs.len() != 0 {
+		t.Fatalf("expected thumb cache cleared after idle timeout, got %d", a.thumbs.len())
+	}
+}

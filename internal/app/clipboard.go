@@ -78,7 +78,6 @@ func (a *clipApp) applyActiveTabFilter() {
 		}
 		a.items = filtered
 	}
-	a.richSpans = nil
 	a.syncSelectionBounds()
 }
 
@@ -141,7 +140,6 @@ func (a *clipApp) reload() {
 			return
 		}
 		a.items = items
-		a.richSpans = nil
 		a.syncSelectionBounds()
 	}
 	if tags, err := a.store.ListAllTags(); err == nil {
@@ -212,6 +210,7 @@ func (a *clipApp) clearAll() {
 		return
 	}
 	a.thumbs.clear()
+	a.richSpans = nil
 	a.reload()
 }
 

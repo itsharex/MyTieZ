@@ -16,6 +16,15 @@ import (
 
 var globalShortcuts = []string{"Alt+V", "Ctrl+Shift+V", "Alt+Shift+V"}
 
+const (
+	// warmThumbCacheLimit keeps up to 8 recently viewed thumbnails (~1 MB) intact
+	// on panel hide when process memory is healthy.
+	warmThumbCacheLimit = 8
+	// idleCleanupDelay releases cached thumbnails after the panel stays hidden
+	// in the system tray for a prolonged period.
+	idleCleanupDelay = 3 * time.Minute
+)
+
 type clipApp struct {
 	iconPNG         []byte
 	store           *store.Store
@@ -57,6 +66,7 @@ type clipApp struct {
 	resizeTimer      *time.Timer
 	searchTimer      *time.Timer
 	updateTimer      *time.Timer
+	idleTimer        *time.Timer
 	updateChecking   bool
 	updateInstalling bool
 	updateProgress   int
@@ -243,6 +253,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 	if a.panel == nil {
 		return
 	}
+	a.stopIdleTimer()
 	sys.TrackForegroundWindow()
 	if !a.panel.IsVisible() {
 		// 非固定窗口每次重新呼出从「全部」Tab 开始，避免遗忘停留在旧子分类中
@@ -333,6 +344,68 @@ func centeredPanelTarget(w, h int, workArea mygo.Rectangle) (int, int) {
 	return x, y
 }
 
+func (a *clipApp) stopIdleTimer() {
+	if a.idleTimer != nil {
+		a.idleTimer.Stop()
+		a.idleTimer = nil
+	}
+}
+
+func (a *clipApp) scheduleIdleCleanup() {
+	a.stopIdleTimer()
+	if !mygo.App.IsReady() || a.panel == nil {
+		return
+	}
+	if a.thumbs.len() == 0 && sys.WorkingSetBytes() <= sys.MemoryTrimThresholdBytes {
+		return
+	}
+	a.idleTimer = time.AfterFunc(idleCleanupDelay, func() {
+		if a.panel == nil {
+			return
+		}
+		a.panel.Update(func() {
+			a.idleTimer = nil
+			if a.panel == nil || a.panel.IsVisible() {
+				return
+			}
+			a.releaseHiddenMemory(true)
+		})
+	})
+}
+
+// releaseHiddenMemory prunes caches and trims OS working set pages as needed.
+// Under the 50 MB working set threshold, warm caches (<= 8 thumbnails and richSpans)
+// are preserved on normal hide, and only cleared if idle in tray for idleCleanupDelay.
+func (a *clipApp) releaseHiddenMemory(idleExpired bool) {
+	overMemory := sys.WorkingSetBytes() > sys.MemoryTrimThresholdBytes
+	cleared := false
+
+	if a.thumbs != nil {
+		if overMemory || idleExpired || a.thumbs.len() > warmThumbCacheLimit {
+			if a.thumbs.len() > 0 {
+				a.thumbs.clear()
+				cleared = true
+			}
+		}
+	}
+	if overMemory && len(a.richSpans) > 0 {
+		a.richSpans = nil
+		cleared = true
+	}
+
+	if !overMemory && !cleared {
+		return
+	}
+	if mygo.App.IsReady() {
+		go func(forceTrim bool) {
+			if forceTrim || sys.WorkingSetBytes() > sys.MemoryTrimThresholdBytes {
+				debug.FreeOSMemory()
+				sys.TrimMemory()
+			}
+		}(overMemory)
+	}
+}
+
 func (a *clipApp) hidePanel() {
 	a.stopOutsideClickWatch()
 	a.confirmClearOpen = false
@@ -342,16 +415,8 @@ func (a *clipApp) hidePanel() {
 	if a.settings.NoFocusMode {
 		a.setPanelNoActivate(true)
 	}
-	if a.thumbs != nil {
-		a.thumbs.clear()
-	}
-	a.richSpans = nil
-	if mygo.App.IsReady() {
-		go func() {
-			debug.FreeOSMemory()
-			sys.TrimMemory()
-		}()
-	}
+	a.releaseHiddenMemory(false)
+	a.scheduleIdleCleanup()
 }
 
 func (a *clipApp) togglePanel() {
@@ -501,6 +566,7 @@ func (a *clipApp) setupTray() {
 			a.resizeTimer.Stop()
 		}
 		a.stopSearchTimer()
+		a.stopIdleTimer()
 		if a.updateTimer != nil {
 			a.updateTimer.Stop()
 		}

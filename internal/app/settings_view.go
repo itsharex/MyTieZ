@@ -26,7 +26,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 	t := c.Theme()
 	msgs := locales.In(c.Locale())
 
-	ui.Column(c.Key("settings-page")).Fill().Children(func() {
+	ui.Column(c.Key("settings-page")).Fill().Transition(settingsEnterTransition).Children(func() {
 		// 设置页顶部导航栏（与主页顶栏同构，下方带左右留白的细分割线）
 		ui.Column(c).FillWidth().Padding(10, 16, 8, 16).Children(func() {
 			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(8).DragWindow().Children(func() {

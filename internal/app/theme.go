@@ -41,6 +41,15 @@ var (
 		Colors:   true,
 		Shadows:  true,
 	}
+	settingsEnterTransition = ui.ElementTransition{
+		Animation: &ui.Animation{
+			Spring: ui.SpringOptions{
+				Duration: 360 * time.Millisecond,
+				Bounce:   0.25,
+			},
+		},
+		Enter: &ui.Motion{X: 36, Opacity: 0},
+	}
 )
 
 func buildMyTiezTheme(dark bool) *ui.Theme {

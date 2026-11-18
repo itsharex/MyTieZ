@@ -110,10 +110,12 @@ func TestSettingsViewInteractions(t *testing.T) {
 	a.reload()
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
 
-	// 进入设置页，所有分组默认收起
+	// 进入设置页，验证弹性入场动画期间与结束后设置页正常显示且所有分组默认收起
 	if err := tt.Click("设置"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Advance(180 * time.Millisecond)
+	tt.Advance(250 * time.Millisecond)
 	if !a.showSettings || !tt.HasText("常规设置") || !tt.HasText("剪贴板设置") {
 		t.Fatalf("expected settings groups visible, texts=%q", tt.Texts())
 	}
@@ -213,7 +215,7 @@ func TestSettingsViewInteractions(t *testing.T) {
 		t.Fatal("expected HideCardActions toggled to true")
 	}
 
-	// 返回主列表
+	// 返回主列表（无退场动画，立即恢复主列表显示）
 	if err := tt.Click("返回"); err != nil {
 		t.Fatal(err)
 	}
@@ -491,6 +493,7 @@ func TestHotkeyRecorder(t *testing.T) {
 	if err := tt.Click("设置"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Advance(250 * time.Millisecond)
 	if err := tt.Click("剪贴板设置"); err != nil {
 		t.Fatal(err)
 	}
@@ -702,6 +705,7 @@ func TestLightweightSettings(t *testing.T) {
 	if err := tt.Click("设置"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Advance(250 * time.Millisecond)
 	if err := tt.Click("常规设置"); err != nil {
 		t.Fatal(err)
 	}
@@ -768,6 +772,7 @@ func TestLightweightSettings(t *testing.T) {
 	if err := tt.Click("返回"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Advance(250 * time.Millisecond)
 
 	// 2. PinSearchBox=true 时滚动不收起搜索栏，且出现“回到顶部”按钮
 	tt.Wheel(panelWidth/2, panelHeight/2, 0, 260)
@@ -827,6 +832,7 @@ func TestI18nLocales(t *testing.T) {
 	if err := tt.Click("Settings"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Advance(250 * time.Millisecond)
 	if !tt.HasText("General") || !tt.HasText("Appearance") || !tt.HasText("Default Apps") {
 		t.Fatalf("expected en settings groups, got %q", tt.Texts())
 	}

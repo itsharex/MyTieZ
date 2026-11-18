@@ -81,18 +81,24 @@ func (a *clipApp) view(c *ui.Context) {
 		c.Root().Background(t.Background)
 	}
 
-	if a.showSettings {
-		if !a.recordingHotkey && c.Shortcut(0, ui.KeyEscape) {
-			if a.confirmAction != "" {
-				a.confirmAction = ""
-			} else {
-				a.showSettings = false
+	ui.Box(c.Key("app-pages")).Fill().Clip().Children(func() {
+		if a.showSettings {
+			if !a.recordingHotkey && c.Shortcut(0, ui.KeyEscape) {
+				if a.confirmAction != "" {
+					a.confirmAction = ""
+				} else {
+					a.showSettings = false
+				}
 			}
+			a.settingsView(c)
+			return
 		}
-		a.settingsView(c)
-		return
-	}
+		a.mainView(c)
+	})
+}
 
+func (a *clipApp) mainView(c *ui.Context) {
+	t := c.Theme()
 	var enterPressed bool
 	if !a.confirmClearOpen {
 		if a.editingTagsID != 0 && c.Shortcut(0, ui.KeyEscape) {

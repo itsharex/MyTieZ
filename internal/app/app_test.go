@@ -62,9 +62,12 @@ func TestViewInteractions(t *testing.T) {
 		t.Fatalf("expected only text item after filter, got texts: %q", tt.Texts())
 	}
 
-	// 再次点击“文本”取消筛选回到全部，并用搜索过滤
+	// 再次点击“文本”取消选中回到全部（无状态），并用搜索过滤
 	if err := tt.Click("文本"); err != nil {
 		t.Fatal(err)
+	}
+	if a.filterIdx != 0 || !tt.HasText("report.pdf") {
+		t.Fatalf("expected clicking active tab again to reset to all (0), filterIdx=%d texts=%q", a.filterIdx, tt.Texts())
 	}
 	if err := tt.Click("搜索剪贴板"); err != nil {
 		t.Fatal(err)
@@ -880,5 +883,153 @@ func TestClearUnpinnedModalConfirm(t *testing.T) {
 	}
 	if a.confirmClearOpen || len(a.items) != 2 {
 		t.Fatalf("expected pinned and tagged items kept after confirm, open=%v items=%+v", a.confirmClearOpen, a.items)
+	}
+}
+
+func TestCategoryToggleResetsTop(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// 先插入一条链接记录（排在底部），再插入 12 条更新的文本记录（排在顶部）
+	if _, err := st.SaveText("https://example.com/bottom-link", store.SaveOptions{Deduplicate: false}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	for i := 0; i < 12; i++ {
+		if _, err := st.SaveText(
+			string(rune('A'+i))+" newer text item",
+			store.SaveOptions{Deduplicate: false},
+		); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	tt.SetLocale("zh-Hans")
+
+	if !tt.HasText("L newer text item") {
+		t.Fatalf("expected newest text item at top initially, texts=%q", tt.Texts())
+	}
+
+	// 点击“链接”分类
+	if err := tt.Click("链接"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("https://example.com/bottom-link") || tt.HasText("L newer text item") {
+		t.Fatalf("expected only link item after selecting category, texts=%q", tt.Texts())
+	}
+
+	// 再次点击“链接”取消选中回到全部（无状态）：应回到顶部且保留顶部控制栏展开，而不是停留在底部链接卡片
+	if err := tt.Click("链接"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.filterIdx != 0 || a.listScroll.Y != 0 || !a.atTop || a.controlsCollapsed {
+		t.Fatalf("expected top reset after deselecting category, filterIdx=%d scrollY=%v atTop=%v collapsed=%v", a.filterIdx, a.listScroll.Y, a.atTop, a.controlsCollapsed)
+	}
+	if !tt.HasText("L newer text item") {
+		t.Fatalf("expected newest text item visible at top after deselecting category, texts=%q", tt.Texts())
+	}
+}
+
+func TestTabsAndSearchBehavior(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	tagged, err := st.UpsertText("alpha demo note")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpdateTags(tagged.ID, []string{"工作"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("https://example.com/demo"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("const demo = 1; return demo;"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 10; i++ {
+		if _, err := st.SaveText(
+			string(rune('A'+i))+" extra plain row",
+			store.SaveOptions{Deduplicate: false},
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	tt.SetLocale("zh-Hans")
+
+	if a.filterIdx != 0 {
+		t.Fatalf("expected initial state to be 0 (unselected = all), got %d", a.filterIdx)
+	}
+
+	// 先选中“文本”类别，再聚焦空搜索框：标签浮层弹出；输入 demo 后浮层自动收起并拉取全类别命中结果
+	if err := tt.Click("文本"); err != nil {
+		t.Fatal(err)
+	}
+	if a.filterIdx != 1 || a.currentKind() != store.KindText {
+		t.Fatalf("expected text tab selected, filterIdx=%d kind=%q", a.filterIdx, a.currentKind())
+	}
+	if err := tt.Click("搜索剪贴板"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("筛选标签 工作") {
+		t.Fatalf("expected tag popover visible on empty focused search, texts=%q", tt.Texts())
+	}
+	tt.Type("demo")
+	if tt.HasText("筛选标签 工作") {
+		t.Fatalf("expected tag popover hidden once query is non-empty, texts=%q", tt.Texts())
+	}
+	if !tt.HasText("alpha demo note") || tt.HasText("https://example.com/demo") || tt.HasText("const demo = 1") {
+		t.Fatalf("expected text tab to show text search hit only, texts=%q", tt.Texts())
+	}
+
+	if err := tt.Click("链接"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("https://example.com/demo") || tt.HasText("alpha demo note") {
+		t.Fatalf("expected link tab to immediately show link search hit, texts=%q", tt.Texts())
+	}
+
+	if err := tt.Click("代码"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("const demo = 1; return demo;") || tt.HasText("https://example.com/demo") {
+		t.Fatalf("expected code tab to immediately show code search hit, texts=%q", tt.Texts())
+	}
+
+	// 再次点击“代码”取消选中回到无状态（全部），看到全部搜索命中结果
+	if err := tt.Click("代码"); err != nil {
+		t.Fatal(err)
+	}
+	if a.filterIdx != 0 || !tt.HasText("alpha demo note") || !tt.HasText("https://example.com/demo") || !tt.HasText("const demo = 1; return demo;") {
+		t.Fatalf("expected deselected (all) state to show all search hits, filterIdx=%d texts=%q", a.filterIdx, tt.Texts())
+	}
+
+	// 清空搜索后切换到“文本”Tab，向下滚动同样支持自动收起顶栏
+	if err := tt.Click("清除搜索"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("文本"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 180)
+	tt.Advance(250 * time.Millisecond)
+	if !a.controlsCollapsed {
+		t.Fatal("expected header controls to auto-collapse on scroll in category tab as well")
 	}
 }

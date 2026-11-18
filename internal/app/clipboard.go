@@ -23,18 +23,97 @@ func (a *clipApp) currentKind() store.ClipKind {
 	case 1:
 		return store.KindText
 	case 2:
-		return store.KindRichText
-	case 3:
-		return store.KindURL
-	case 4:
-		return store.KindCode
-	case 5:
 		return store.KindImage
-	case 6:
+	case 3:
 		return store.KindFile
+	case 4:
+		return store.KindURL
+	case 5:
+		return store.KindCode
+	case 6:
+		return store.KindRichText
 	default:
 		return ""
 	}
+}
+
+func (a *clipApp) stopSearchTimer() {
+	if a.searchTimer != nil {
+		a.searchTimer.Stop()
+		a.searchTimer = nil
+	}
+}
+
+func (a *clipApp) resetScrollToTop() {
+	a.controlsCollapsed = false
+	a.atTop = true
+	a.upScrollAccum = 0
+	a.listScroll.Y = 0
+}
+
+func (a *clipApp) scrollListToTop() {
+	if len(a.items) > 0 {
+		a.list.ScrollTo(0, ui.Start)
+	}
+}
+
+func (a *clipApp) syncSelectionBounds() {
+	if len(a.items) == 0 {
+		a.selected = -1
+	} else if a.selected >= len(a.items) {
+		a.selected = len(a.items) - 1
+	}
+}
+
+func (a *clipApp) applyActiveTabFilter() {
+	kind := a.currentKind()
+	if kind == "" {
+		a.items = a.searchHits
+	} else {
+		filtered := make([]store.ClipItem, 0, len(a.searchHits))
+		for _, item := range a.searchHits {
+			if item.Kind == kind {
+				filtered = append(filtered, item)
+			}
+		}
+		a.items = filtered
+	}
+	a.richSpans = nil
+	a.syncSelectionBounds()
+}
+
+func (a *clipApp) onTabChanged() {
+	a.selected = -1
+	a.resetScrollToTop()
+	if strings.TrimSpace(a.query) != "" && a.searchTimer == nil && a.searchHits != nil {
+		// 搜索态下切 Tab 直接在全局命中结果内按类别过滤，无需重复查库
+		a.applyActiveTabFilter()
+	} else {
+		a.stopSearchTimer()
+		a.reload()
+	}
+	a.scrollListToTop()
+}
+
+func (a *clipApp) runSearchReload() {
+	a.searchTimer = nil
+	a.selected = -1
+	a.resetScrollToTop()
+	a.reload()
+	a.scrollListToTop()
+}
+
+func (a *clipApp) scheduleSearchReload() {
+	a.stopSearchTimer()
+	if a.panel == nil || strings.TrimSpace(a.query) == "" {
+		a.runSearchReload()
+		return
+	}
+	a.searchTimer = time.AfterFunc(160*time.Millisecond, func() {
+		if a.panel != nil {
+			a.panel.Update(a.runSearchReload)
+		}
+	})
 }
 
 func (a *clipApp) reload() {
@@ -45,20 +124,28 @@ func (a *clipApp) reload() {
 	if a.settings.MaxHistory > 0 {
 		limit = max(a.settings.MaxHistory, 200)
 	}
-	items, err := a.store.ListSummaries(a.query, a.currentKind(), limit)
-	if err != nil {
-		log.Printf("list clipboard items: %v", err)
-		return
+	if strings.TrimSpace(a.query) != "" {
+		// 搜索时拉取全类别匹配结果，便于在不同 Tab 间即时切换查看
+		hits, err := a.store.ListSummaries(a.query, "", limit)
+		if err != nil {
+			log.Printf("list clipboard items: %v", err)
+			return
+		}
+		a.searchHits = hits
+		a.applyActiveTabFilter()
+	} else {
+		a.searchHits = nil
+		items, err := a.store.ListSummaries("", a.currentKind(), limit)
+		if err != nil {
+			log.Printf("list clipboard items: %v", err)
+			return
+		}
+		a.items = items
+		a.richSpans = nil
+		a.syncSelectionBounds()
 	}
-	a.items = items
-	a.richSpans = nil
 	if tags, err := a.store.ListAllTags(); err == nil {
 		a.allTags = tags
-	}
-	if len(a.items) == 0 {
-		a.selected = -1
-	} else if a.selected >= len(a.items) {
-		a.selected = len(a.items) - 1
 	}
 }
 

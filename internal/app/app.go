@@ -27,8 +27,9 @@ type clipApp struct {
 	stopWatch       func()
 	stopTrack       chan struct{}
 	items           []store.ClipItem
+	searchHits      []store.ClipItem
 	query           string
-	filterIdx       int // 0: 全部, 1: 文本, 2: 图片, 3: 文件
+	filterIdx       int // 0: 全部, 1: 文本, 2: 图片, 3: 文件, 4: 链接, 5: 代码, 6: 富文本
 	selected        int
 	list            ui.ListState
 	listHandle      ui.Handle
@@ -51,6 +52,7 @@ type clipApp struct {
 	pickingApp       bool
 	quitting         bool
 	resizeTimer      *time.Timer
+	searchTimer      *time.Timer
 	updateTimer      *time.Timer
 	updateChecking   bool
 	updateInstalling bool
@@ -166,6 +168,8 @@ func (a *clipApp) showPanel() {
 	}
 	sys.TrackForegroundWindow()
 	if !a.panel.IsVisible() {
+		// 非固定窗口每次重新呼出从「全部」Tab 开始，避免遗忘停留在旧子分类中
+		a.filterIdx = 0
 		cursor := mygo.Screen.CursorScreenPoint()
 		d := mygo.Screen.DisplayNearestPoint(cursor)
 		w, h := a.panel.Size()
@@ -183,16 +187,12 @@ func (a *clipApp) showPanel() {
 		}
 		a.panel.SetPosition(x, y)
 	}
+	a.stopSearchTimer()
 	a.selected = -1
 	a.confirmClearOpen = false
-	a.controlsCollapsed = false
-	a.atTop = true
-	a.upScrollAccum = 0
-	a.listScroll.Y = 0
+	a.resetScrollToTop()
 	a.reload()
-	if len(a.items) > 0 {
-		a.list.ScrollTo(0, ui.Start)
-	}
+	a.scrollListToTop()
 	a.panel.SetAlwaysOnTop(a.winPinned)
 	a.panel.Show()
 	a.panel.Focus()
@@ -398,6 +398,7 @@ func (a *clipApp) setupTray() {
 		if a.resizeTimer != nil {
 			a.resizeTimer.Stop()
 		}
+		a.stopSearchTimer()
 		if a.updateTimer != nil {
 			a.updateTimer.Stop()
 		}

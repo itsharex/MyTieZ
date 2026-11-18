@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"mytiez/internal/store"
@@ -163,10 +164,11 @@ func (a *clipApp) view(c *ui.Context) {
 					Background(t.Surface).Border(1, searchBorder).Transition(colorTransition).
 					Children(func() {
 						ui.Icon(c, iconSearch).FontSize(18).TextColor(t.TextMuted)
-						if ui.TextInputBase(c, &a.query).Bind(&a.searchHandle).
+						searchIn := ui.TextInputBase(c, &a.query).Bind(&a.searchHandle).
 							Grow(1).FontSize(14).FontWeight(500).
-							Placeholder(msgs.SearchPlaceholder()).Label(msgs.SearchLabel()).Changed() {
-							a.reload()
+							Placeholder(msgs.SearchPlaceholder()).Label(msgs.SearchLabel())
+						if searchIn.Changed() && !searchIn.Composing() {
+							a.scheduleSearchReload()
 						}
 						if a.query != "" {
 							ui.ButtonBase(c).Size(24, 24).Center().Radius(radiusMicro).Label(msgs.SearchClear()).OnClick(func() {
@@ -177,42 +179,46 @@ func (a *clipApp) view(c *ui.Context) {
 						}
 					})
 
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					tabs := []string{
+				ui.ScrollHorizontal(c).FillWidth().Scrollbars(false).Children(func() {
+					tabLabels := []string{
 						msgs.TabText(),
-						msgs.TabRichText(),
-						msgs.TabURL(),
-						msgs.TabCode(),
 						msgs.TabImage(),
 						msgs.TabFile(),
+						msgs.TabURL(),
+						msgs.TabCode(),
+						msgs.TabRichText(),
 					}
-					for i, label := range tabs {
-						tabIdx := i + 1
-						active := a.filterIdx == tabIdx
-						tab := ui.ButtonBase(c).Height(filterPillHeight).Padding(0, 9).Radius(radiusMicro).Label(label)
-						tabBg, tabBorder, tabText := t.Surface, t.Border, t.TextMuted
-						if active {
-							tabBg = t.Accent
-							tabBorder = t.Accent
-							tabText = t.AccentText
-						} else if tab.Hovered() {
-							tabBg = t.SurfaceHover
-							tabBorder = t.Border.Mix(t.TextMuted, 0.35)
-							tabText = t.Text
+					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+						for i, label := range tabLabels {
+							tabIdx := i + 1
+							active := a.filterIdx == tabIdx
+							tab := ui.ButtonBase(c).Height(filterPillHeight).Padding(0, 9).Radius(radiusMicro).Label(label)
+							tabBg, tabBorder, tabText := t.Surface, t.Border, t.TextMuted
+							tabWeight := 400
+							if active {
+								tabBg = t.Accent
+								tabBorder = t.Accent
+								tabText = t.AccentText
+								tabWeight = 500
+							} else if tab.Hovered() {
+								tabBg = t.SurfaceHover
+								tabBorder = t.Border.Mix(t.TextMuted, 0.35)
+								tabText = t.Text
+							}
+							tab.Background(tabBg).Border(1, tabBorder).Transition(colorTransition).
+								OnClick(func() {
+									if a.filterIdx == tabIdx {
+										a.filterIdx = 0
+									} else {
+										a.filterIdx = tabIdx
+									}
+									a.onTabChanged()
+								}).
+								Children(func() {
+									ui.Text(c, label).FontSize(12).FontWeight(tabWeight).TextColor(tabText).SingleLine()
+								})
 						}
-						tab.Background(tabBg).Border(1, tabBorder).Transition(colorTransition).
-							OnClick(func() {
-								if a.filterIdx == tabIdx {
-									a.filterIdx = 0
-								} else {
-									a.filterIdx = tabIdx
-								}
-								a.reload()
-							}).
-							Children(func() {
-								ui.Text(c, label).FontSize(12).FontWeight(400).TextColor(tabText)
-							})
-					}
+					})
 				})
 			})
 		}
@@ -464,23 +470,19 @@ func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string,
 }
 
 func (a *clipApp) clearSearch(c *ui.Context) {
+	a.stopSearchTimer()
 	a.query = ""
 	a.selected = -1
-	a.controlsCollapsed = false
-	a.atTop = true
-	a.upScrollAccum = 0
-	a.listScroll.Y = 0
+	a.resetScrollToTop()
 	a.reload()
-	if len(a.items) > 0 {
-		a.list.ScrollTo(0, ui.Start)
-	}
+	a.scrollListToTop()
 	if c != nil {
 		a.listHandle.Focus(c)
 	}
 }
 
 func (a *clipApp) canAutoCollapseControls() bool {
-	return !a.settings.PinSearchBox && len(a.items) > 0 && a.query == "" && a.filterIdx == 0
+	return !a.settings.PinSearchBox && len(a.items) > 0 && strings.TrimSpace(a.query) == ""
 }
 
 func (a *clipApp) handleQuickPasteShortcut(c *ui.Context) {

@@ -91,13 +91,17 @@ func (a *clipApp) removeTagFromItem(item store.ClipItem, target string) {
 }
 
 func (a *clipApp) filterByTag(tag string) {
+	a.stopSearchTimer()
 	target := "#" + tag
 	if strings.TrimSpace(a.query) == target {
 		a.query = ""
 	} else {
 		a.query = target
 	}
+	a.selected = -1
+	a.resetScrollToTop()
 	a.reload()
+	a.scrollListToTop()
 }
 
 func (a *clipApp) pickableTagSuggestions(item store.ClipItem) []string {
@@ -299,24 +303,10 @@ func (a *clipApp) renderCardTags(c *ui.Context, t *ui.Theme, item store.ClipItem
 }
 
 func (a *clipApp) renderSearchTagPopover(c *ui.Context, t *ui.Theme) {
-	if !a.searchHandle.Focused(c) || a.controlsCollapsed || len(a.allTags) == 0 {
+	if !a.searchHandle.Focused(c) || a.controlsCollapsed || strings.TrimSpace(a.query) != "" || len(a.allTags) == 0 {
 		return
 	}
-	q := strings.TrimSpace(a.query)
-	var tags []string
-	if q != "" && !strings.HasPrefix(q, "#") {
-		lq := strings.ToLower(q)
-		for _, tag := range a.allTags {
-			if strings.Contains(strings.ToLower(tag), lq) {
-				tags = append(tags, tag)
-			}
-		}
-		if len(tags) == 0 {
-			return
-		}
-	} else {
-		tags = a.allTags
-	}
+	tags := a.allTags
 	if len(tags) > 18 {
 		tags = tags[:18]
 	}
@@ -339,14 +329,8 @@ func (a *clipApp) renderSearchTagPopover(c *ui.Context, t *ui.Theme) {
 				for _, tag := range tags {
 					tagName := tag
 					chipBg, chipFg := tagChipColors(tagName, t.Dark)
-					active := q == "#"+tagName
 					btn := ui.ButtonBase(c).Padding(3, 9).Radius(radiusMicro).Label(msgs.TagsFilterA11y(tagName)).
-						Background(chipBg)
-					if active {
-						btn.Border(1.5, chipFg)
-					} else {
-						btn.Border(1, chipFg.Alpha(0.25))
-					}
+						Background(chipBg).Border(1, chipFg.Alpha(0.25))
 					btn.OnClick(func() {
 						a.filterByTag(tagName)
 					}).Children(func() {

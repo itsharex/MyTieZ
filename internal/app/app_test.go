@@ -367,6 +367,24 @@ func TestRichTextPreviewAndFilter(t *testing.T) {
 		t.Fatalf("unexpected UTF-16LE rich spans: %+v", uSpans)
 	}
 
+	// Verify HTML fragments with leading plain text before an inline tag (e.g. <a>) keep the prefix.
+	prefixedHTML := `感源自 <a href="https://github.com/jimuzhe/tiez-clipboard">tiez-clipboard</a>。`
+	pSpans := parseHTMLPreviewSpans(prefixedHTML, myTiezLightTheme)
+	if len(pSpans) != 3 || pSpans[0].Text != "感源自 " || pSpans[1].Text != "tiez-clipboard" || !pSpans[1].Underline || pSpans[2].Text != "。" {
+		t.Fatalf("expected leading text and link spans preserved, got %+v", pSpans)
+	}
+	cfPrefixHTML := "Version:0.9\r\nStartHTML:000080\r\nEndHTML:000160\r\n" + prefixedHTML
+	cfPrefixSpans := parseHTMLPreviewSpans(cfPrefixHTML, myTiezLightTheme)
+	if len(cfPrefixSpans) != 3 || cfPrefixSpans[0].Text != "感源自 " || cfPrefixSpans[1].Text != "tiez-clipboard" || cfPrefixSpans[2].Text != "。" {
+		t.Fatalf("expected CF_HTML headers stripped without losing leading text, got %+v", cfPrefixSpans)
+	}
+	if _, err := st.SaveText("感源自 tiez-clipboard。", store.SaveOptions{
+		Deduplicate: true,
+		HTML:        prefixedHTML,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	a := newClipApp(st, nil)
 	a.reload()
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
@@ -377,8 +395,8 @@ func TestRichTextPreviewAndFilter(t *testing.T) {
 	if a.currentKind() != store.KindRichText {
 		t.Fatalf("expected KindRichText filter, got %q", a.currentKind())
 	}
-	if tt.HasText("plain only item") || !tt.HasText("Bold") {
-		t.Fatalf("expected only rich_text item visible, texts=%q", tt.Texts())
+	if tt.HasText("plain only item") || !tt.HasText("Bold") || !tt.HasText("感源自 ") || !tt.HasText("tiez-clipboard") {
+		t.Fatalf("expected only rich_text items with prefix text visible, texts=%q", tt.Texts())
 	}
 }
 

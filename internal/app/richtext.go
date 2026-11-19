@@ -176,10 +176,51 @@ func extractHTMLFragment(raw string) string {
 	if i := strings.Index(strings.ToLower(raw), "<html"); i >= 0 {
 		return strings.TrimSpace(raw[i:])
 	}
-	if i := strings.Index(raw, "<"); i >= 0 {
-		return strings.TrimSpace(raw[i:])
+	raw = stripCFHTMLHeaders(raw)
+	if strings.Contains(raw, "<") {
+		return strings.TrimSpace(raw)
 	}
 	return ""
+}
+
+func stripCFHTMLHeaders(raw string) string {
+	head := raw
+	if len(head) > 512 {
+		head = head[:512]
+	}
+	if !strings.HasPrefix(head, "Version:") || (!strings.Contains(head, "StartHTML:") && !strings.Contains(head, "StartFragment:")) {
+		return raw
+	}
+	s := raw
+	for s != "" {
+		line, rest, hasNL := strings.Cut(s, "\n")
+		if !isCFHTMLHeaderLine(strings.TrimRight(line, "\r")) {
+			return s
+		}
+		if !hasNL {
+			return ""
+		}
+		s = rest
+	}
+	return ""
+}
+
+func isCFHTMLHeaderLine(line string) bool {
+	for _, prefix := range []string{
+		"Version:",
+		"StartHTML:",
+		"EndHTML:",
+		"StartFragment:",
+		"EndFragment:",
+		"StartSelection:",
+		"EndSelection:",
+		"SourceURL:",
+	} {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func collapsePreviewWhitespace(s string) string {

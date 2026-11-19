@@ -3,6 +3,7 @@ package app
 import (
 	"image"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1374,5 +1375,81 @@ func TestWideImagePreviewFitsCardWidth(t *testing.T) {
 		if h <= 0 || h > 100 {
 			t.Fatalf("winW=%d: expected fitted height in (0, 100], got %.1f", winW, h)
 		}
+	}
+}
+
+func TestSaveAsyncSerializesAndDeduplicates(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var active atomic.Int32
+	var maxActive atomic.Int32
+	done := make(chan struct{})
+
+	recordActive := func() func() {
+		cur := active.Add(1)
+		for {
+			prev := maxActive.Load()
+			if cur <= prev || maxActive.CompareAndSwap(prev, cur) {
+				break
+			}
+		}
+		return func() { active.Add(-1) }
+	}
+
+	a.saveAsync(func() (string, error) {
+		defer recordActive()()
+		close(firstStarted)
+		<-releaseFirst
+		it, err := st.SaveText("first-item", store.SaveOptions{Deduplicate: true})
+		return it.Hash, err
+	})
+	<-firstStarted
+
+	for i := 0; i < 4; i++ {
+		a.saveAsync(func() (string, error) {
+			defer recordActive()()
+			it, err := st.SaveText("first-item", store.SaveOptions{Deduplicate: true})
+			return it.Hash, err
+		})
+	}
+	for i := 0; i < 4; i++ {
+		idx := i
+		a.saveAsync(func() (string, error) {
+			defer recordActive()()
+			it, err := st.SaveText("second-item", store.SaveOptions{Deduplicate: true})
+			if idx == 3 {
+				close(done)
+			}
+			return it.Hash, err
+		})
+	}
+	close(releaseFirst)
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for saveAsync queue to drain")
+	}
+
+	if got := maxActive.Load(); got != 1 {
+		t.Fatalf("expected saveAsync tasks to execute serially (maxActive=1), got %d", got)
+	}
+
+	items, err := st.List("", "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 deduplicated items, got %d: %+v", len(items), items)
+	}
+	if items[0].Text != "second-item" || items[1].Text != "first-item" {
+		t.Fatalf("expected FIFO order [second-item, first-item], got [%q, %q]", items[0].Text, items[1].Text)
 	}
 }

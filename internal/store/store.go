@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -134,8 +135,15 @@ type Store struct {
 	db          *sql.DB
 	baseDir     string
 	imageDir    string
+	writeMu     sync.Mutex
 	revision    atomic.Uint64
 	tagRevision atomic.Uint64
+}
+
+type sqlExecer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
 }
 
 func (s *Store) Revision() uint64 {
@@ -349,6 +357,8 @@ func (s *Store) SaveSettings(cfg Settings) error {
 	if err != nil {
 		return err
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	_, err = s.db.Exec(`
 INSERT INTO app_settings (key, value) VALUES ('config', ?)
 ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -547,12 +557,21 @@ func (s *Store) save(item ClipItem, opts SaveOptions) (ClipItem, error) {
 	}
 	sourcePath := strings.TrimSpace(opts.SourcePath)
 
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return ClipItem{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	var targetID int64
 	if opts.Deduplicate {
 		var existingID int64
 		var existingApp, existingPath, existingTagsJSON string
-		err := s.db.QueryRow(`
-SELECT id, source_app, source_path, tags_json FROM clip_items WHERE kind = ? AND content_hash = ? ORDER BY updated_at DESC LIMIT 1
+		err := tx.QueryRow(`
+SELECT id, source_app, source_path, tags_json FROM clip_items WHERE kind = ? AND content_hash = ? ORDER BY updated_at DESC, id DESC LIMIT 1
 `, string(item.Kind), item.Hash).Scan(&existingID, &existingApp, &existingPath, &existingTagsJSON)
 		if err == nil {
 			keepApp, keepPath := sourceApp, sourcePath
@@ -568,7 +587,7 @@ SELECT id, source_app, source_path, tags_json FROM clip_items WHERE kind = ? AND
 					mergedTagsJSON = string(b)
 				}
 			}
-			if _, err := s.db.Exec(`
+			if _, err := tx.Exec(`
 UPDATE clip_items
 SET text_content = ?, html_content = ?, image_path = ?, files_json = ?, preview = ?, source_app = ?, source_path = ?, byte_size = ?, tags_json = ?, updated_at = ?
 WHERE id = ?
@@ -588,7 +607,7 @@ WHERE id = ?
 				tagsJSON = string(b)
 			}
 		}
-		res, err := s.db.Exec(`
+		res, err := tx.Exec(`
 INSERT INTO clip_items (kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
 `, string(item.Kind), item.Hash, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, sourceApp, sourcePath, item.ByteSize, tagsJSON, now, now)
@@ -601,16 +620,26 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
 		}
 	}
 
+	var orphanPaths []string
+	var deleted int64
 	if opts.MaxHistory > 0 {
-		_ = s.EnforceLimit(opts.MaxHistory)
+		orphanPaths, deleted, _ = enforceLimitExec(tx, opts.MaxHistory)
 	}
-	s.bumpRevision(len(opts.Tags) > 0)
 
-	row := s.db.QueryRow(`
+	row := tx.QueryRow(`
 SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at
 FROM clip_items WHERE id = ?
 `, targetID)
-	return scanItem(row)
+	saved, err := scanItem(row)
+	if err != nil {
+		return ClipItem{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return ClipItem{}, err
+	}
+	s.removeOrphanImages(orphanPaths)
+	s.bumpRevision(len(opts.Tags) > 0 || deleted > 0)
+	return saved, nil
 }
 
 // GetByID returns the full clipboard item for id, including complete text and HTML.
@@ -709,6 +738,8 @@ LIMIT ?
 }
 
 func (s *Store) TouchItem(id int64) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	if _, err := s.db.Exec(`UPDATE clip_items SET updated_at = ? WHERE id = ?`, time.Now().UnixMilli(), id); err != nil {
 		return err
 	}
@@ -717,6 +748,8 @@ func (s *Store) TouchItem(id int64) error {
 }
 
 func (s *Store) TogglePin(id int64) (bool, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	if _, err := s.db.Exec(`UPDATE clip_items SET pinned = 1 - pinned WHERE id = ?`, id); err != nil {
 		return false, err
 	}
@@ -755,6 +788,8 @@ func (s *Store) UpdateTags(id int64, tags []string) ([]string, error) {
 		}
 		raw = string(b)
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	if _, err := s.db.Exec(`UPDATE clip_items SET tags_json = ? WHERE id = ?`, raw, id); err != nil {
 		return nil, err
 	}
@@ -844,10 +879,37 @@ func (s *Store) EnforceLimit(maxHistory int) error {
 	)`, maxHistory)
 }
 
+func enforceLimitExec(exec sqlExecer, maxHistory int) ([]string, int64, error) {
+	if maxHistory <= 0 {
+		return nil, 0, nil
+	}
+	return deleteItemsWhereExec(exec, `id IN (
+		SELECT id FROM clip_items
+		WHERE pinned = 0
+		ORDER BY updated_at DESC, id DESC
+		LIMIT -1 OFFSET ?
+	)`, maxHistory)
+}
+
 func (s *Store) deleteItemsWhere(where string, args ...any) error {
-	rows, err := s.db.Query(`SELECT DISTINCT image_path FROM clip_items WHERE `+where+` AND image_path != ''`, args...)
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	paths, deleted, err := deleteItemsWhereExec(s.db, where, args...)
 	if err != nil {
 		return err
+	}
+	s.removeOrphanImages(paths)
+	if deleted > 0 {
+		s.bumpRevision(true)
+	}
+	return nil
+}
+
+func deleteItemsWhereExec(exec sqlExecer, where string, args ...any) ([]string, int64, error) {
+	rows, err := exec.Query(`SELECT DISTINCT image_path FROM clip_items WHERE `+where+` AND image_path != ''`, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 	var paths []string
 	for rows.Next() {
@@ -858,17 +920,18 @@ func (s *Store) deleteItemsWhere(where string, args ...any) error {
 	}
 	_ = rows.Close()
 
-	res, err := s.db.Exec(`DELETE FROM clip_items WHERE `+where, args...)
+	res, err := exec.Exec(`DELETE FROM clip_items WHERE `+where, args...)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
+	n, _ := res.RowsAffected()
+	return paths, n, nil
+}
+
+func (s *Store) removeOrphanImages(paths []string) {
 	for _, p := range paths {
 		s.removeOrphanImage(p)
 	}
-	if n, err := res.RowsAffected(); err == nil && n > 0 {
-		s.bumpRevision(true)
-	}
-	return nil
 }
 
 func (s *Store) removeOrphanImage(imgPath string) {

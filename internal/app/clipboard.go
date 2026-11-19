@@ -475,14 +475,41 @@ func (a *clipApp) shouldIgnore(h string) bool {
 }
 
 func (a *clipApp) saveAsync(fn func() (string, error)) {
-	go func() {
+	if fn == nil {
+		return
+	}
+	a.saveMu.Lock()
+	a.saveQueue = append(a.saveQueue, fn)
+	if a.saveRunning {
+		a.saveMu.Unlock()
+		return
+	}
+	a.saveRunning = true
+	a.saveMu.Unlock()
+	go a.drainSaveQueue()
+}
+
+func (a *clipApp) drainSaveQueue() {
+	for {
+		a.saveMu.Lock()
+		if len(a.saveQueue) == 0 {
+			a.saveQueue = nil
+			a.saveRunning = false
+			a.saveMu.Unlock()
+			return
+		}
+		fn := a.saveQueue[0]
+		a.saveQueue[0] = nil
+		a.saveQueue = a.saveQueue[1:]
+		a.saveMu.Unlock()
+
 		err := runWithTimeout(saveAsyncTimeout, func() error {
 			_, err := fn()
 			return err
 		})
 		if err != nil {
 			log.Printf("save clipboard item: %v", err)
-			return
+			continue
 		}
 		if a.panel != nil {
 			a.panel.Update(func() {
@@ -494,5 +521,5 @@ func (a *clipApp) saveAsync(fn func() (string, error)) {
 				}
 			})
 		}
-	}()
+	}
 }

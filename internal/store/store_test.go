@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -501,5 +502,62 @@ func TestListSummariesRichTextAndLargePinyin(t *testing.T) {
 	}
 	if hits[0].Text != "" {
 		t.Fatalf("expected large text cleared in summary result, got len=%d", len(hits[0].Text))
+	}
+}
+
+func TestConcurrentSaveDeduplicate(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	const workers = 24
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make(chan error, workers*2)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, err := st.SaveText("快速Ctrl+C内容", SaveOptions{
+				Deduplicate: true,
+				HTML:        "<b>快速Ctrl+C内容</b>",
+				SourceApp:   "zen.exe",
+			}); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	pngData := makeTestPNG(t, color.RGBA{R: 12, G: 34, B: 56, A: 255})
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, err := st.SaveImage(pngData, SaveOptions{
+				Deduplicate: true,
+				SourceApp:   "zen.exe",
+			}); err != nil {
+				errs <- err
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+
+	items, err := st.List("", "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected exactly 2 deduplicated items (1 rich_text + 1 image), got %d: %+v", len(items), items)
 	}
 }

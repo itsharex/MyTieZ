@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -98,6 +99,9 @@ type clipApp struct {
 	hotkeyHandle       ui.Handle
 	pendingToast       string
 	memTrimming        atomic.Bool
+	saveMu             sync.Mutex
+	saveQueue          []func() (string, error)
+	saveRunning        bool
 }
 
 func newClipApp(st *store.Store, iconPNG []byte) *clipApp {

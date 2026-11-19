@@ -318,12 +318,9 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 }
 
 func followMouseTarget(cursor mygo.Point, w, h int, workArea mygo.Rectangle) (int, int) {
-	const (
-		cursorGap = 12
-		edgePad   = 8
-	)
-	x := cursor.X - w/2
-	y := cursor.Y + cursorGap
+	const edgePad = 8
+	x := cursor.X
+	y := cursor.Y
 
 	minX := workArea.X + edgePad
 	maxX := workArea.X + workArea.Width - w - edgePad
@@ -339,7 +336,7 @@ func followMouseTarget(cursor mygo.Point, w, h int, workArea mygo.Rectangle) (in
 		return x, workArea.Y
 	}
 	if y > maxY {
-		aboveY := cursor.Y - h - cursorGap
+		aboveY := cursor.Y - h
 		if aboveY >= minY {
 			y = aboveY
 		} else {

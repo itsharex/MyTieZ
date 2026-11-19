@@ -51,3 +51,9 @@ func RestoreForegroundWindow() bool {
 	ok, _, _ := procSetForegroundWindow.Call(hwnd)
 	return ok != 0
 }
+
+// IsLeftMouseButtonDown reports whether the primary mouse button is currently pressed.
+func IsLeftMouseButtonDown() bool {
+	r, _, _ := procGetAsyncKeyState.Call(0x01) // VK_LBUTTON
+	return (uint16(r) & 0x8000) != 0
+}

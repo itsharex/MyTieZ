@@ -798,6 +798,26 @@ func (msgs Messages) SettingsAutoHide() string {
 	return Catalog.Format(msgs.locale, "settingsAutoHide", nil)
 }
 
+// SettingsEdgeDocking says "贴边自动收纳"
+// in the language the app shows.
+func SettingsEdgeDocking() string { return In(i18n.Locale()).SettingsEdgeDocking() }
+
+// SettingsEdgeDocking says "贴边自动收纳"
+// in the language of msgs.
+func (msgs Messages) SettingsEdgeDocking() string {
+	return Catalog.Format(msgs.locale, "settingsEdgeDocking", nil)
+}
+
+// SettingsEdgeDockingDesc says "窗口靠近屏幕边缘时自动缩进，鼠标悬停时滑出"
+// in the language the app shows.
+func SettingsEdgeDockingDesc() string { return In(i18n.Locale()).SettingsEdgeDockingDesc() }
+
+// SettingsEdgeDockingDesc says "窗口靠近屏幕边缘时自动缩进，鼠标悬停时滑出"
+// in the language of msgs.
+func (msgs Messages) SettingsEdgeDockingDesc() string {
+	return Catalog.Format(msgs.locale, "settingsEdgeDockingDesc", nil)
+}
+
 // SettingsPinSearchBox says "固定显示搜索栏"
 // in the language the app shows.
 func SettingsPinSearchBox() string { return In(i18n.Locale()).SettingsPinSearchBox() }

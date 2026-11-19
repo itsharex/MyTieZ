@@ -78,6 +78,10 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						a.applyAutoHide(on)
 						a.persistSettings()
 					})
+					a.renderSwitchRow(c, msgs.SettingsEdgeDocking(), msgs.SettingsEdgeDockingDesc(), &a.settings.EdgeDocking, func(bool) {
+						a.syncEdgeDocking()
+						a.persistSettings()
+					})
 					a.renderSwitchRow(c, msgs.SettingsPinSearchBox(), "", &a.settings.PinSearchBox, func(on bool) {
 						if on {
 							a.controlsCollapsed = false

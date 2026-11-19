@@ -55,6 +55,7 @@ type Settings struct {
 	FollowMouse        bool   `json:"follow_mouse"`
 	NoFocusMode        bool   `json:"no_focus_mode"`
 	AutoHideOnBlur     bool   `json:"auto_hide_on_blur"`
+	EdgeDocking        bool   `json:"edge_docking"`
 	PinSearchBox       bool   `json:"pin_search_box"`
 	ScrollTopButton    bool   `json:"scroll_top_button"`
 	Hotkey             string `json:"hotkey"`
@@ -93,6 +94,7 @@ func DefaultSettings() Settings {
 		FollowMouse:        false,
 		NoFocusMode:        false,
 		AutoHideOnBlur:     true,
+		EdgeDocking:        false,
 		PinSearchBox:       false,
 		ScrollTopButton:    true,
 		Hotkey:             "Alt+V",

@@ -84,6 +84,8 @@
   "settingsNoFocusMode": "No Focus Mode (Experimental)",
   "settingsNoFocusModeDesc": "Show, search, click, and drag without stealing focus (no IME in search; focuses on tag edit)",
   "settingsAutoHide": "Auto Hide on Blur",
+  "settingsEdgeDocking": "Edge Docking",
+  "settingsEdgeDockingDesc": "Auto-hide window when near screen edges, slide out on hover",
   "settingsPinSearchBox": "Pin Search Bar",
   "settingsScrollTopBtn": "Show Back to Top",
   "settingsRestartAdmin": "Restart as Admin",

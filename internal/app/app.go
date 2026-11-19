@@ -67,6 +67,9 @@ type clipApp struct {
 	routedCaretPending bool
 	stopOutsideWatch   func()
 	stopKeyRouter      func()
+	edgeDock           dockPosition
+	edgeDockStop       chan struct{}
+	lastShowAt         time.Time
 	lastOutsideHide    time.Time
 	pickingApp       bool
 	quitting         bool
@@ -264,6 +267,10 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 		return
 	}
 	sys.TrackForegroundWindow()
+	wasDocked := a.edgeDock != dockNone
+	if wasDocked {
+		a.undockWindow(false)
+	}
 	if !a.panel.IsVisible() {
 		// 非固定窗口每次重新呼出从「全部」Tab 开始，避免遗忘停留在旧子分类中
 		a.filterIdx = 0
@@ -293,6 +300,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 	a.setPanelNoActivate(!focus)
 	// 不抢焦点呼出时必须置顶，否则非置顶窗口执行 ShowInactive 会被压在当前前台窗口后面
 	a.panel.SetAlwaysOnTop(a.winPinned || !focus)
+	a.lastShowAt = time.Now()
 	if focus {
 		a.panel.Show()
 		a.panel.Focus()
@@ -387,6 +395,7 @@ func (a *clipApp) releaseHiddenMemory() {
 func (a *clipApp) hidePanel() {
 	a.stopOutsideClickWatch()
 	a.stopKeyRouting()
+	a.edgeDock = dockNone
 	a.routedSearchActive = false
 	a.revealedSensitive = nil
 	a.confirmClearOpen = false
@@ -411,7 +420,7 @@ func (a *clipApp) togglePanelWithFocus(focus bool) {
 	if a.panel == nil {
 		return
 	}
-	if a.panel.IsVisible() {
+	if a.panel.IsVisible() && a.edgeDock == dockNone {
 		a.hidePanel()
 	} else {
 		a.showPanelWithFocus(focus)
@@ -479,7 +488,7 @@ func (a *clipApp) ready() {
 	})
 	a.panel.OnBlur(func() {
 		a.cancelHotkeyRecording()
-		if !a.winPinned && !a.pickingApp {
+		if !a.winPinned && !a.pickingApp && !(a.settings.EdgeDocking && a.isNearDockEdge()) {
 			a.saveWindowSize()
 			a.hidePanel()
 		}
@@ -502,6 +511,7 @@ func (a *clipApp) ready() {
 	a.setupTray()
 	a.stopWatch = mygo.Clipboard.OnChanged(a.onClipboardChanged)
 	a.startForegroundTracker()
+	a.syncEdgeDocking()
 	a.reload()
 	a.updateTimer = time.AfterFunc(5*time.Second, func() {
 		if a.panel != nil {
@@ -543,6 +553,7 @@ func (a *clipApp) setupTray() {
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		a.stopOutsideClickWatch()
 		a.stopKeyRouting()
+		a.stopEdgeDocking()
 		if a.resizeTimer != nil {
 			a.resizeTimer.Stop()
 		}

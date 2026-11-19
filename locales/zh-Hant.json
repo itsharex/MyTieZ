@@ -84,6 +84,8 @@
   "settingsNoFocusMode": "不搶焦點 (實驗性)",
   "settingsNoFocusModeDesc": "呼出、搜尋、點選與拖曳均不搶佔焦點（搜尋不支援輸入法，編輯標籤時自動聚焦）",
   "settingsAutoHide": "失焦自動隱藏",
+  "settingsEdgeDocking": "貼邊自動收納",
+  "settingsEdgeDockingDesc": "視窗靠近螢幕邊緣時自動縮進，滑鼠懸停時滑出",
   "settingsPinSearchBox": "固定顯示搜尋列",
   "settingsScrollTopBtn": "顯示回到頂部按鈕",
   "settingsRestartAdmin": "以系統管理員身分重啟",

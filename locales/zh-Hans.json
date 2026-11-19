@@ -104,6 +104,8 @@
   "settingsNoFocusMode": "不抢焦点 (实验性)",
   "settingsNoFocusModeDesc": "呼出、搜索、点选与拖拽均不抢占焦点（无输入法，中文可用拼音搜索；标签编辑时聚焦）",
   "settingsAutoHide": "失焦自动隐藏",
+  "settingsEdgeDocking": "贴边自动收纳",
+  "settingsEdgeDockingDesc": "窗口靠近屏幕边缘时自动缩进，鼠标悬停时滑出",
   "settingsPinSearchBox": "固定显示搜索栏",
   "settingsScrollTopBtn": "显示回到顶部按钮",
   "settingsRestartAdmin": "以管理员身份重启",

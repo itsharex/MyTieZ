@@ -1287,3 +1287,74 @@ func TestHiddenMemoryAndCacheRetention(t *testing.T) {
 		t.Fatalf("expected richSpans still preserved under 50MB, got %d", len(a.richSpans))
 	}
 }
+
+func TestEdgeDockingGeometryAndSetting(t *testing.T) {
+	workArea := mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1040}
+	winSize := mygo.Rectangle{X: 300, Y: 200, Width: 400, Height: 660}
+	if got := detectEdgeDock(winSize, workArea, edgeDockThreshold); got != dockNone {
+		t.Fatalf("expected center window dockNone, got %v", got)
+	}
+
+	topWin := mygo.Rectangle{X: 300, Y: 3, Width: 400, Height: 660}
+	if got := detectEdgeDock(topWin, workArea, edgeDockThreshold); got != dockTop {
+		t.Fatalf("expected dockTop, got %v", got)
+	}
+	dx, dy := dockedWindowPosition(dockTop, topWin, workArea, edgeDockHideSize)
+	if dx != 300 || dy != -660+edgeDockHideSize {
+		t.Fatalf("unexpected docked top pos (%d, %d)", dx, dy)
+	}
+	dockedTopRect := mygo.Rectangle{X: dx, Y: dy, Width: 400, Height: 660}
+	if !isCursorInDockedSliver(dockTop, mygo.Point{X: 450, Y: 2}, dockedTopRect, workArea, edgeDockHoverSliver) {
+		t.Fatalf("expected cursor inside top docked sliver")
+	}
+	ux, uy := undockedWindowPosition(dockTop, dockedTopRect, workArea)
+	if ux != 300 || uy != 0 {
+		t.Fatalf("unexpected undocked top pos (%d, %d)", ux, uy)
+	}
+
+	leftWin := mygo.Rectangle{X: 4, Y: 120, Width: 400, Height: 660}
+	if got := detectEdgeDock(leftWin, workArea, edgeDockThreshold); got != dockLeft {
+		t.Fatalf("expected dockLeft, got %v", got)
+	}
+	lx, ly := dockedWindowPosition(dockLeft, leftWin, workArea, edgeDockHideSize)
+	if lx != -400+edgeDockHideSize || ly != 120 {
+		t.Fatalf("unexpected docked left pos (%d, %d)", lx, ly)
+	}
+
+	rightWin := mygo.Rectangle{X: 1516, Y: 120, Width: 400, Height: 660}
+	if got := detectEdgeDock(rightWin, workArea, edgeDockThreshold); got != dockRight {
+		t.Fatalf("expected dockRight, got %v", got)
+	}
+	rx, ry := dockedWindowPosition(dockRight, rightWin, workArea, edgeDockHideSize)
+	if rx != 1920-edgeDockHideSize || ry != 120 {
+		t.Fatalf("unexpected docked right pos (%d, %d)", rx, ry)
+	}
+
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("常规设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("切换贴边自动收纳"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.settings.EdgeDocking {
+		t.Fatalf("expected EdgeDocking enabled after toggle")
+	}
+	reloaded, err := st.LoadSettings()
+	if err != nil || !reloaded.EdgeDocking {
+		t.Fatalf("expected EdgeDocking persisted, got %+v err=%v", reloaded, err)
+	}
+}

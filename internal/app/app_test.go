@@ -137,6 +137,19 @@ func TestSettingsViewInteractions(t *testing.T) {
 	if !a.expanded.general || !tt.HasText("开机自启动") {
 		t.Fatalf("expected general group expanded, texts=%q", tt.Texts())
 	}
+	noFocusDesc := locales.In("zh-Hans").SettingsNoFocusModeDesc()
+	if tt.HasText(noFocusDesc) {
+		t.Fatalf("expected desc %q moved into help tooltip instead of inline text", noFocusDesc)
+	}
+	titleRect, ok := tt.Find("不抢焦点 (实验性)")
+	if !ok {
+		t.Fatalf("expected 不抢焦点 (实验性) title visible, texts=%q", tt.Texts())
+	}
+	tt.Move(titleRect.X+titleRect.W+14, titleRect.Y+titleRect.H/2)
+	tt.Advance(700 * time.Millisecond)
+	if !tt.HasText(noFocusDesc) {
+		t.Fatalf("expected help icon hover tooltip to display %q, texts=%q", noFocusDesc, tt.Texts())
+	}
 	if err := tt.Click("切换失焦自动隐藏"); err != nil {
 		t.Fatal(err)
 	}
@@ -202,26 +215,32 @@ func TestSettingsViewInteractions(t *testing.T) {
 	}
 	tt.Advance(250 * time.Millisecond)
 
-	// 展开“界面设置”切换窗口材质，并验证 Vibrancy 模式下渲染正常
+	// 展开“界面设置”以下拉框切换窗口材质，并验证 Vibrancy 模式下渲染正常
 	tt.SetVibrancy(true)
 	if err := tt.Click("界面设置"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
+	curTrigger := "纯色"
 	for _, tc := range []struct {
-		label string
-		want  string
+		itemLabel string
+		nextText  string
+		want      string
 	}{
-		{"材质云母 Alt", "mica_alt"},
-		{"材质标准亚克力", "acrylic_base"},
-		{"材质轻薄亚克力", "acrylic"},
+		{"材质云母 Alt", "云母 Alt", "mica_alt"},
+		{"材质标准亚克力", "标准亚克力", "acrylic_base"},
+		{"材质轻薄亚克力", "轻薄亚克力", "acrylic"},
 	} {
-		if err := tt.Click(tc.label); err != nil {
+		if err := tt.Click(curTrigger); err != nil {
+			t.Fatal(err)
+		}
+		if err := tt.Click(tc.itemLabel); err != nil {
 			t.Fatal(err)
 		}
 		if a.settings.BackdropMode != tc.want {
 			t.Fatalf("expected BackdropMode=%s, got %q", tc.want, a.settings.BackdropMode)
 		}
+		curTrigger = tc.nextText
 	}
 	if backdropVibrancy("mica_alt") != mygo.VibrancyTabbed {
 		t.Fatalf("expected mica_alt -> VibrancyTabbed, got %v", backdropVibrancy("mica_alt"))

@@ -155,13 +155,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						{label: msgs.SettingsLangTw(), a11y: msgs.SettingsLangTw(), active: curLocale == "zh-Hant", onClick: func() { a.setLanguage("zh-Hant") }},
 						{label: msgs.SettingsLangEn(), a11y: msgs.SettingsLangEn(), active: curLocale == "en", onClick: func() { a.setLanguage("en") }},
 					})
-					a.renderChoiceGroup(c, msgs.SettingsBackdrop(), []choiceOption{
-						{label: msgs.SettingsBackdropSolid(), a11y: msgs.SettingsBackdropSolidA11y(), active: a.settings.BackdropMode == "solid", onClick: func() { a.setBackdropMode("solid") }},
-						{label: msgs.SettingsBackdropMica(), a11y: msgs.SettingsBackdropMicaA11y(), active: a.settings.BackdropMode == "mica", onClick: func() { a.setBackdropMode("mica") }},
-						{label: msgs.SettingsBackdropMicaAlt(), a11y: msgs.SettingsBackdropMicaAltA11y(), active: a.settings.BackdropMode == "mica_alt", onClick: func() { a.setBackdropMode("mica_alt") }},
-						{label: msgs.SettingsBackdropAcrylicBase(), a11y: msgs.SettingsBackdropAcrylicBaseA11y(), active: a.settings.BackdropMode == "acrylic_base", onClick: func() { a.setBackdropMode("acrylic_base") }},
-						{label: msgs.SettingsBackdropAcrylic(), a11y: msgs.SettingsBackdropAcrylicA11y(), active: a.settings.BackdropMode == "acrylic", onClick: func() { a.setBackdropMode("acrylic") }},
-					})
+					a.renderBackdropSelectRow(c, msgs)
 					a.renderChoiceGroup(c, msgs.SettingsColorMode(), []choiceOption{
 						{label: msgs.SettingsColorSystem(), a11y: msgs.SettingsColorSystemA11y(), active: a.settings.ColorMode == "system", onClick: func() { a.setColorMode("system") }},
 						{label: msgs.SettingsColorLight(), a11y: msgs.SettingsColorLightA11y(), active: a.settings.ColorMode == "light", onClick: func() { a.setColorMode("light") }},
@@ -326,10 +320,71 @@ func (a *clipApp) setMaxHistory(val int) {
 	}
 }
 
-func (a *clipApp) setBackdropMode(mode string) {
-	a.settings.BackdropMode = mode
-	a.applyBackdrop()
-	a.persistSettings()
+func (a *clipApp) renderBackdropSelectRow(c *ui.Context, msgs locales.Messages) {
+	t := c.Theme()
+	type backdropOpt struct {
+		mode  string
+		label string
+		a11y  string
+	}
+	opts := []backdropOpt{
+		{mode: "solid", label: msgs.SettingsBackdropSolid(), a11y: msgs.SettingsBackdropSolidA11y()},
+		{mode: "mica", label: msgs.SettingsBackdropMica(), a11y: msgs.SettingsBackdropMicaA11y()},
+		{mode: "mica_alt", label: msgs.SettingsBackdropMicaAlt(), a11y: msgs.SettingsBackdropMicaAltA11y()},
+		{mode: "acrylic_base", label: msgs.SettingsBackdropAcrylicBase(), a11y: msgs.SettingsBackdropAcrylicBaseA11y()},
+		{mode: "acrylic", label: msgs.SettingsBackdropAcrylic(), a11y: msgs.SettingsBackdropAcrylicA11y()},
+	}
+	curLabel := msgs.SettingsBackdropSolid()
+	for _, opt := range opts {
+		if opt.mode == a.settings.BackdropMode {
+			curLabel = opt.label
+			break
+		}
+	}
+	a.renderSettingRow(c, msgs.SettingsBackdrop(), "", func() {
+		sel := ui.SelectBase(c.Key("backdrop-select"), &a.settings.BackdropMode)
+		trig := sel.Trigger
+		bg := t.Surface
+		if trig.Hovered() {
+			bg = t.SurfaceHover
+		}
+		trig.Height(pillHeight).MinWidth(132).Padding(0, 12).Radius(radiusGroup).
+			Justify(ui.SpaceBetween).AlignItems(ui.Center).Gap(8).
+			Background(bg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+			Label(msgs.SettingsBackdrop()).
+			Children(func() {
+				ui.Text(c, curLabel).FontSize(13).FontWeight(600).TextColor(t.Text).SingleLine()
+				ui.Icon(c, iconChevronDown).FontSize(14).TextColor(t.TextMuted)
+			})
+		if trig.Changed() {
+			a.confirmAction = ""
+			a.applyBackdrop()
+			a.persistSettings()
+		}
+		shadowAlpha := float32(0.12)
+		if t.Dark {
+			shadowAlpha = 0.34
+		}
+		sel.Popup(func(panel ui.Element) {
+			panel.Margin(4, 0, 0, 0).Padding(4).Radius(radiusGroup).
+				Background(a.floatingSurface(c, t)).Border(1, t.Border).
+				Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, shadowAlpha))
+			for _, opt := range opts {
+				item := sel.Item(opt.mode).Padding(6, 10).Radius(radiusMicro).Label(opt.a11y)
+				fg := t.Text
+				switch {
+				case item.Highlighted():
+					item.Background(t.Accent)
+					fg = t.AccentText
+				case opt.mode == a.settings.BackdropMode:
+					item.Background(t.SurfaceHover)
+				}
+				item.Children(func() {
+					ui.Text(c, opt.label).FontSize(13).FontWeight(500).TextColor(fg).SingleLine()
+				})
+			}
+		})
+	})
 }
 
 func (a *clipApp) setQuickPasteModifier(mod string) {
@@ -361,7 +416,7 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 	}
 
 	ui.Column(c).FillWidth().Padding(0, 14, 6, 18).Children(func() {
-		a.renderPrivacySubgroup(c, msgs.SettingsPrivacyKinds(), &a.expanded.privacyKinds, func() {
+		a.renderPrivacySubgroup(c, msgs.SettingsPrivacyKinds(), "", &a.expanded.privacyKinds, func() {
 			ui.Row(c).FillWidth().Padding(2, 8, 8, 28).Gap(12).Wrap().Children(func() {
 				for _, k := range store.AllPrivacyKinds {
 					kind := k
@@ -389,9 +444,8 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 			})
 		})
 
-		a.renderPrivacySubgroup(c, msgs.SettingsPrivacyCustomRules(), &a.expanded.privacyRules, func() {
+		a.renderPrivacySubgroup(c, msgs.SettingsPrivacyCustomRules(), msgs.SettingsPrivacyCustomRulesDesc(), &a.expanded.privacyRules, func() {
 			ui.Column(c).FillWidth().Padding(2, 8, 8, 28).Gap(6).Children(func() {
-				ui.Text(c, msgs.SettingsPrivacyCustomRulesDesc()).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
 				rulesBox := ui.TextArea(c, &a.settings.PrivacyCustomRules).
 					FillWidth().Height(72).Padding(8, 10).Radius(radiusControl).
 					FontSize(12.5).Background(t.Background).Border(1, t.Border).
@@ -407,7 +461,7 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 			})
 		})
 
-		a.renderPrivacySubgroup(c, msgs.SettingsMaskPreview(), &a.expanded.privacyMasking, func() {
+		a.renderPrivacySubgroup(c, msgs.SettingsMaskPreview(), "", &a.expanded.privacyMasking, func() {
 			ui.Column(c).FillWidth().Padding(2, 8, 6, 28).Gap(6).Children(func() {
 				a.renderNumberStepperRow(c, msgs.SettingsMaskPrefix(), &a.settings.SensitiveMaskPrefix, 0, 12, func() {
 					a.persistSettings()
@@ -426,7 +480,7 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 	})
 }
 
-func (a *clipApp) renderPrivacySubgroup(c *ui.Context, title string, expanded *bool, body func()) {
+func (a *clipApp) renderPrivacySubgroup(c *ui.Context, title, desc string, expanded *bool, body func()) {
 	t := c.Theme()
 	ui.Column(c.Key("privacy-sub-"+title)).FillWidth().Children(func() {
 		ui.Box(c).FillWidth().Height(1).Background(t.Border.Alpha(0.28))
@@ -438,7 +492,12 @@ func (a *clipApp) renderPrivacySubgroup(c *ui.Context, title string, expanded *b
 					Children(func() {
 						ui.Icon(c, iconChevronRight).FontSize(12).TextColor(t.TextMuted).Rotate(90 * p.Progress())
 					})
-				ui.Text(c, title).FontSize(13).FontWeight(500).TextColor(t.Text).SingleLine()
+				ui.Row(c).AlignItems(ui.Center).Gap(5).Children(func() {
+					ui.Text(c, title).FontSize(13).FontWeight(500).TextColor(t.Text).SingleLine()
+					if desc != "" {
+						a.renderHelpTooltip(c, desc)
+					}
+				})
 			})
 		if panel := p.Panel(body); panel.Valid() {
 			panel.FillWidth()
@@ -484,7 +543,6 @@ func (a *clipApp) togglePrivacyKind(kind string) {
 }
 
 func (a *clipApp) renderPasteMethodGroup(c *ui.Context, msgs locales.Messages) {
-	t := c.Theme()
 	desc := msgs.SettingsPasteMethodShiftInsertDesc()
 	switch a.settings.PasteMethod {
 	case "ctrl_v":
@@ -493,18 +551,15 @@ func (a *clipApp) renderPasteMethodGroup(c *ui.Context, msgs locales.Messages) {
 		desc = msgs.SettingsPasteMethodGameModeDesc()
 	}
 	opts := []choiceOption{
-		{label: msgs.SettingsPasteMethodShiftInsert(), a11y: msgs.SettingsPasteMethodShiftInsert(), active: a.settings.PasteMethod == "shift_insert", onClick: func() { a.setPasteMethod("shift_insert") }},
-		{label: msgs.SettingsPasteMethodCtrlV(), a11y: msgs.SettingsPasteMethodCtrlV(), active: a.settings.PasteMethod == "ctrl_v", onClick: func() { a.setPasteMethod("ctrl_v") }},
-		{label: msgs.SettingsPasteMethodGameMode(), a11y: msgs.SettingsPasteMethodGameMode(), active: a.settings.PasteMethod == "game_mode", onClick: func() { a.setPasteMethod("game_mode") }},
+		{label: msgs.SettingsPasteMethodShiftInsert(), a11y: msgs.SettingsPasteMethodShiftInsert(), tooltip: msgs.SettingsPasteMethodShiftInsertDesc(), active: a.settings.PasteMethod == "shift_insert", onClick: func() { a.setPasteMethod("shift_insert") }},
+		{label: msgs.SettingsPasteMethodCtrlV(), a11y: msgs.SettingsPasteMethodCtrlV(), tooltip: msgs.SettingsPasteMethodCtrlVDesc(), active: a.settings.PasteMethod == "ctrl_v", onClick: func() { a.setPasteMethod("ctrl_v") }},
+		{label: msgs.SettingsPasteMethodGameMode(), a11y: msgs.SettingsPasteMethodGameMode(), tooltip: msgs.SettingsPasteMethodGameModeDesc(), active: a.settings.PasteMethod == "game_mode", onClick: func() { a.setPasteMethod("game_mode") }},
 	}
 	ui.Column(c).FillWidth().Padding(8, 16).Gap(8).Children(func() {
-		ui.Column(c).Gap(2).Children(func() {
-			ui.Text(c, msgs.SettingsPasteMethod()).FontSize(14).FontWeight(600).TextColor(t.Text)
-			ui.Text(c, desc).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
-		})
+		a.renderSettingTitle(c, msgs.SettingsPasteMethod(), desc)
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
 			for _, opt := range opts {
-				a.renderChoicePill(c, opt.label, opt.a11y, opt.active, opt.onClick)
+				a.renderChoicePill(c, opt.label, opt.a11y, opt.tooltip, opt.active, opt.onClick)
 			}
 		})
 	})
@@ -524,6 +579,7 @@ func (a *clipApp) setColorMode(mode string) {
 type choiceOption struct {
 	label   string
 	a11y    string
+	tooltip string
 	active  bool
 	onClick func()
 }
@@ -558,26 +614,45 @@ func (a *clipApp) renderSettingsGroup(c *ui.Context, title string, expanded *boo
 		})
 }
 
-func (a *clipApp) renderSettingRow(c *ui.Context, title, desc string, control func()) {
+func (a *clipApp) renderSettingTitle(c *ui.Context, title, desc string) ui.Element {
 	t := c.Theme()
+	return ui.Row(c).AlignItems(ui.Center).Gap(5).Children(func() {
+		ui.Text(c, title).Shrink(1).FontSize(14).FontWeight(600).TextColor(t.Text).SingleLine()
+		if desc != "" {
+			a.renderHelpTooltip(c, desc)
+		}
+	})
+}
+
+func (a *clipApp) renderHelpTooltip(c *ui.Context, tip string) {
+	if tip == "" {
+		return
+	}
+	t := c.Theme()
+	badge := ui.Box(c).Size(18, 18).Shrink(0).Center().Radius(9).Role(ui.RoleImage).Tooltip(tip)
+	fg := t.TextMuted
+	if badge.Hovered() {
+		fg = t.Text
+		badge.Background(t.SurfaceHover)
+	}
+	badge.Children(func() {
+		ui.Icon(c, iconHelpCircle).FontSize(13.5).TextColor(fg)
+	})
+}
+
+func (a *clipApp) renderSettingRow(c *ui.Context, title, desc string, control func()) {
 	ui.Row(c).FillWidth().MinHeight(44).Padding(8, 16).Gap(16).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(t.Text)
-			if desc != "" {
-				ui.Text(c, desc).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
-			}
-		})
+		a.renderSettingTitle(c, title, desc).Grow(1).Shrink(1)
 		control()
 	})
 }
 
 func (a *clipApp) renderChoiceGroup(c *ui.Context, title string, opts []choiceOption) {
-	t := c.Theme()
 	ui.Column(c).FillWidth().Padding(8, 16).Gap(8).Children(func() {
-		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(t.Text)
+		a.renderSettingTitle(c, title, "")
 		ui.Row(c).FillWidth().Wrap().Gap(8).Children(func() {
 			for _, opt := range opts {
-				a.renderChoicePill(c, opt.label, opt.a11y, opt.active, opt.onClick)
+				a.renderChoicePill(c, opt.label, opt.a11y, opt.tooltip, opt.active, opt.onClick)
 			}
 		})
 	})
@@ -630,9 +705,12 @@ func b2f(b bool) float32 {
 	return 0
 }
 
-func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel string, active bool, onClick func()) {
+func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel, tooltip string, active bool, onClick func()) {
 	t := c.Theme()
 	pill := ui.ButtonBase(c).Grow(1).Shrink(0).Padding(0, 12).Height(32).Center().Radius(radiusGroup).Label(a11yLabel)
+	if tooltip != "" {
+		pill.Tooltip(tooltip)
+	}
 	bg, border, fg := t.Surface, t.Border.Alpha(0.65), t.Text
 	if active {
 		bg = t.Accent
@@ -691,8 +769,9 @@ func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) 
 	if target != nil {
 		current = *target
 	}
-	a.renderSettingRow(c, title, openAppDisplayName(msgs, current), func() {
+	a.renderSettingRow(c, title, "", func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+			ui.Text(c, openAppDisplayName(msgs, current)).MaxWidth(120).FontSize(12).TextColor(t.TextMuted).SingleLine()
 			if current != "" {
 				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.OpenAppResetA11y(title))
 				rBg := t.Surface

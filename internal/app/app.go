@@ -49,6 +49,7 @@ type clipApp struct {
 	tagInputHandle  ui.Handle
 	tagFocusPending bool
 	allTags         []string
+	editingTagOrder []string
 
 	thumbs            *bitmapCache
 	appIcons          *bitmapCache

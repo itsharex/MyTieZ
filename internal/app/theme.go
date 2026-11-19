@@ -17,10 +17,11 @@ const (
 	radiusControl float32 = 14
 	radiusGroup   float32 = 12
 	radiusMicro   float32 = 6
+	radiusPill    float32 = 9999
 
 	headerBtnSize    float32 = 32
 	headerBtnRadius  float32 = 10
-	searchBoxHeight  float32 = 46
+	searchBoxHeight  float32 = 44
 	filterPillHeight float32 = 28
 	pillHeight       float32 = 30
 	cardActionSize   float32 = 22

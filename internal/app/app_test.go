@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image"
 	"path/filepath"
 	"testing"
 	"time"
@@ -1356,5 +1357,22 @@ func TestEdgeDockingGeometryAndSetting(t *testing.T) {
 	reloaded, err := st.LoadSettings()
 	if err != nil || !reloaded.EdgeDocking {
 		t.Fatalf("expected EdgeDocking persisted, got %+v err=%v", reloaded, err)
+	}
+}
+
+func TestWideImagePreviewFitsCardWidth(t *testing.T) {
+	a := newClipApp(nil, nil)
+	wideBmp := ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 1200, 200)))
+
+	for _, winW := range []int{minPanelWidth, panelWidth, 520} {
+		a.settings.WindowWidth = winW
+		maxW := a.cardContentWidth()
+		w, h := fitImageSize(wideBmp, maxW, 100)
+		if w > maxW {
+			t.Fatalf("winW=%d: expected fitted width <= %.1f, got %.1f", winW, maxW, w)
+		}
+		if h <= 0 || h > 100 {
+			t.Fatalf("winW=%d: expected fitted height in (0, 100], got %.1f", winW, h)
+		}
 	}
 }

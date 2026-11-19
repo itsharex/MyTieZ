@@ -477,13 +477,7 @@ func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string,
 
 	// 约 3.55 行高度：前 3 行完整显示，第 4 行露出约半行并渐隐
 	maxPreviewH := bodySize * lineHeight * 3.55
-	winW := float32(a.settings.WindowWidth)
-	if a.panel != nil {
-		if w, _ := a.panel.Size(); w > 0 {
-			winW = float32(w)
-		}
-	}
-	contentW := max(120, winW-58)
+	contentW := a.cardContentWidth()
 
 	var measureSpans []ui.Span
 	if len(spans) > 0 {
@@ -717,20 +711,41 @@ func (a *clipApp) renderSensitiveImageMask(c *ui.Context, t *ui.Theme, msgs loca
 	})
 }
 
+func (a *clipApp) cardContentWidth() float32 {
+	winW := float32(a.settings.WindowWidth)
+	if a.panel != nil {
+		if w, _ := a.panel.Size(); w > 0 {
+			winW = float32(w)
+		}
+	}
+	if winW <= 0 {
+		winW = panelWidth
+	}
+	// 扣除列表左右 padding(32) + 卡片左右 padding(24) + 卡片与图片边框(4)
+	return max(120, winW-60)
+}
+
 func (a *clipApp) renderImagePreview(c *ui.Context, item store.ClipItem) {
 	t := c.Theme()
-	var maxW, maxH float32 = 356, 100
+	maxW, maxH := a.cardContentWidth(), float32(100)
 	if a.settings.CompactMode {
-		maxW, maxH = 120, 38
+		maxW, maxH = min(120, maxW), 38
 	}
 	if bmp := a.getOrLoadThumb(item.ImagePath); bmp != nil {
+		iw, ih := bmp.Size()
+		// 横宽图直接用 FillWidth + MaxHeight 交由布局引擎按 aspect 自动撑满卡片真实内容宽度
+		if !a.settings.CompactMode && iw > 0 && ih > 0 && float32(iw) >= maxW && float32(iw)*maxH/float32(ih) >= maxW {
+			ui.Image(c, bmp).FillWidth().MinHeight(24).MaxHeight(maxH).Fit(ui.Contain).
+				Radius(radiusControl).Border(1, t.Border)
+			return
+		}
 		w, h := fitImageSize(bmp, maxW, maxH)
 		ui.Image(c, bmp).Size(w, h).Fit(ui.Contain).Radius(radiusControl).
 			Border(1, t.Border)
 		return
 	}
 	// 异步加载完成前保持占位高度，防止列表发生跳动
-	ui.Box(c).Size(100, maxH).Radius(radiusControl).Background(t.SurfaceHover)
+	ui.Box(c).Size(min(100, maxW), maxH).Radius(radiusControl).Background(t.SurfaceHover)
 }
 
 func fitImageSize(bmp *ui.Bitmap, maxW, maxH float32) (float32, float32) {

@@ -406,3 +406,64 @@ func TestPinyinSearch(t *testing.T) {
 		}
 	}
 }
+
+func TestPrivacyDetectionAndMasking(t *testing.T) {
+	kinds := DefaultPrivacyKinds()
+	if !ContainsSensitiveInfo("13800138000", kinds, "") {
+		t.Fatal("expected phone detected")
+	}
+	if !ContainsSensitiveInfo("11010519900307123X", kinds, "") {
+		t.Fatal("expected idcard detected")
+	}
+	if !ContainsSensitiveInfo("alice@example.com", kinds, "") {
+		t.Fatal("expected email detected")
+	}
+	if !ContainsSensitiveInfo("sk-1234567890abcdefghijklmnop", kinds, "") {
+		t.Fatal("expected secret detected")
+	}
+	if ContainsSensitiveInfo("https://example.com", kinds, "") {
+		t.Fatal("url should not be detected unless enabled")
+	}
+	if !ContainsSensitiveInfo("https://example.com", []string{"url"}, "") {
+		t.Fatal("expected url detected when enabled")
+	}
+	if !ContainsSensitiveInfo("Abc123!@#", []string{"password"}, "") {
+		t.Fatal("expected strong password detected")
+	}
+	if !ContainsSensitiveInfo("CUSTOM-998877", nil, "^CUSTOM-\\d+$") {
+		t.Fatal("expected custom regex detected")
+	}
+	if ContainsSensitiveInfo("data:image/png;base64,13800138000", AllPrivacyKinds, "") {
+		t.Fatal("data URL should be ignored")
+	}
+
+	if !HasSensitiveTag([]string{"密码"}) || !HasSensitiveTag([]string{"Sensitive"}) {
+		t.Fatal("expected HasSensitiveTag true for sensitive/密码")
+	}
+
+	if got := MaskSensitiveText("13800138000", 3, 4, false); got != "138••••••8000" {
+		t.Fatalf("unexpected masked phone: %q", got)
+	}
+	if got := MaskSensitiveText("alice@example.com", 2, 2, false); got != "al••••••@example.com" {
+		t.Fatalf("unexpected masked email keep domain: %q", got)
+	}
+	if got := MaskSensitiveText("alice@example.com", 2, 2, true); got != "al••••••@•••.com" {
+		t.Fatalf("unexpected masked email mask domain: %q", got)
+	}
+	if got := MaskSensitiveText("Ab1!", 3, 3, false); got != "••••••••" {
+		t.Fatalf("expected short secret fully masked, got %q", got)
+	}
+
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	it, err := st.SaveText("13800138000", SaveOptions{Deduplicate: true, Tags: []string{SensitiveTag}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !HasSensitiveTag(it.Tags) {
+		t.Fatalf("expected saved item tagged sensitive, got %+v", it.Tags)
+	}
+}

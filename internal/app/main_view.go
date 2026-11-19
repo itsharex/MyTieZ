@@ -246,7 +246,13 @@ func (a *clipApp) mainView(c *ui.Context) {
 		a.list.Selected = nil
 		a.list.MoveAnimation = &ui.Snappy
 		a.list.Key = func(i int) any { return a.items[i].ID }
-		a.list.Label = func(i int) string { return a.items[i].Preview }
+		a.list.Label = func(i int) string {
+			it := a.items[i]
+			if store.HasSensitiveTag(it.Tags) && !a.revealedSensitive[it.ID] {
+				return msgs.CardSensitiveHidden()
+			}
+			return it.Preview
+		}
 
 		ui.Column(c).Grow(1).HandleInput(a.handleListWheel).Children(func() {
 			list := ui.List(c, &a.list, len(a.items)).Bind(&a.listHandle).TrackScroll(&a.listScroll).
@@ -375,6 +381,20 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 
 				ui.Box(c).Grow(1)
 
+				isSensitive := store.HasSensitiveTag(item.Tags)
+				isRevealed := isSensitive && a.revealedSensitive[item.ID]
+				if isSensitive && (!a.settings.HideCardActions || hovered || isRevealed) {
+					eyeIcon := iconEye
+					eyeLabel := msgs.CardSensitiveShow()
+					if isRevealed {
+						eyeIcon = iconEyeOff
+						eyeLabel = msgs.CardSensitiveHide()
+					}
+					a.renderCardActionBtn(c, eyeIcon, eyeLabel, isRevealed, func() {
+						a.toggleSensitiveReveal(item.ID)
+					})
+				}
+
 				if !a.settings.HideCardActions || hovered {
 					a.renderCardActionBtn(c, iconOpen, msgs.CardActionOpen(), false, func() {
 						a.openItem(item)
@@ -399,21 +419,31 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 				ui.Box(c).Height(3)
 			}
 
-			switch item.Kind {
-			case store.KindText, store.KindCode:
-				a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
-			case store.KindURL:
-				a.renderCardTextPreview(c, t, item.Preview, []ui.Span{{Text: item.Preview, Color: t.Accent}}, bodySize, maxLines)
-			case store.KindRichText:
-				if spans := a.getRichPreviewSpans(item, t); len(spans) > 0 {
-					a.renderCardTextPreview(c, t, item.Preview, spans, bodySize, maxLines)
+			isHiddenSensitive := store.HasSensitiveTag(item.Tags) && !a.revealedSensitive[item.ID]
+			if isHiddenSensitive {
+				if item.Kind == store.KindImage {
+					a.renderSensitiveImageMask(c, t, msgs)
 				} else {
-					a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
+					masked := store.MaskSensitiveText(item.Preview, a.settings.SensitiveMaskPrefix, a.settings.SensitiveMaskSuffix, a.settings.SensitiveMaskEmailDomain)
+					a.renderCardTextPreview(c, t, masked, []ui.Span{{Text: masked, Color: t.TextMuted}}, bodySize, maxLines)
 				}
-			case store.KindImage:
-				a.renderImagePreview(c, item)
-			case store.KindFile:
-				a.renderFilesPreview(c, item)
+			} else {
+				switch item.Kind {
+				case store.KindText, store.KindCode:
+					a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
+				case store.KindURL:
+					a.renderCardTextPreview(c, t, item.Preview, []ui.Span{{Text: item.Preview, Color: t.Accent}}, bodySize, maxLines)
+				case store.KindRichText:
+					if spans := a.getRichPreviewSpans(item, t); len(spans) > 0 {
+						a.renderCardTextPreview(c, t, item.Preview, spans, bodySize, maxLines)
+					} else {
+						a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
+					}
+				case store.KindImage:
+					a.renderImagePreview(c, item)
+				case store.KindFile:
+					a.renderFilesPreview(c, item)
+				}
 			}
 
 			a.renderCardTags(c, t, item)
@@ -653,6 +683,30 @@ func (a *clipApp) renderCardActionBtn(c *ui.Context, icon *ui.SVG, label string,
 		Children(func() {
 			ui.Icon(c, icon).FontSize(13).TextColor(fg)
 		})
+}
+
+func (a *clipApp) toggleSensitiveReveal(id int64) {
+	if a.revealedSensitive == nil {
+		a.revealedSensitive = make(map[int64]bool)
+	}
+	if a.revealedSensitive[id] {
+		delete(a.revealedSensitive, id)
+	} else {
+		a.revealedSensitive[id] = true
+	}
+}
+
+func (a *clipApp) renderSensitiveImageMask(c *ui.Context, t *ui.Theme, msgs locales.Messages) {
+	h := float32(72)
+	if a.settings.CompactMode {
+		h = 34
+	}
+	ui.Row(c).FillWidth().Height(h).Padding(0, 12).Radius(radiusControl).
+		Background(t.SurfaceHover).Border(1, t.Border).
+		AlignItems(ui.Center).Justify(ui.Center).Gap(6).Children(func() {
+		ui.Icon(c, iconEyeOff).FontSize(15).TextColor(t.TextMuted)
+		ui.Text(c, msgs.CardSensitiveHidden()).FontSize(12.5).TextColor(t.TextMuted).SingleLine()
+	})
 }
 
 func (a *clipApp) renderImagePreview(c *ui.Context, item store.ClipItem) {

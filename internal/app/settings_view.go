@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"slices"
 	"strconv"
 	"time"
 
@@ -15,11 +16,14 @@ import (
 
 // Zero value keeps every group collapsed by default.
 type settingsGroupExpanded struct {
-	general    bool
-	clipboard  bool
-	openApps   bool
-	appearance bool
-	data       bool
+	general        bool
+	clipboard      bool
+	openApps       bool
+	appearance     bool
+	data           bool
+	privacyKinds   bool
+	privacyRules   bool
+	privacyMasking bool
 }
 
 func (a *clipApp) settingsView(c *ui.Context) {
@@ -130,6 +134,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, msgs.SettingsDeleteAfterPaste(), "", &a.settings.DeleteAfterPaste, func(bool) {
 						a.persistSettings()
 					})
+					a.renderPrivacySettings(c, msgs)
 					a.renderPasteMethodGroup(c, msgs)
 					a.renderChoiceGroup(c, msgs.SettingsQuickPaste(), []choiceOption{
 						{label: msgs.SettingsQuickPasteOff(), a11y: msgs.SettingsQuickPasteOffA11y(), active: a.settings.QuickPasteModifier == "none", onClick: func() { a.setQuickPasteModifier("none") }},
@@ -328,6 +333,137 @@ func (a *clipApp) setQuickPasteModifier(mod string) {
 
 func (a *clipApp) setPasteMethod(method string) {
 	a.settings.PasteMethod = method
+	a.persistSettings()
+}
+
+func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
+	t := c.Theme()
+	a.renderSwitchRow(c, msgs.SettingsPrivacyProtection(), msgs.SettingsPrivacyProtectionDesc(), &a.settings.PrivacyProtection, func(bool) {
+		a.persistSettings()
+	})
+	if !a.settings.PrivacyProtection {
+		return
+	}
+
+	kindLabels := map[string]string{
+		"phone":    msgs.PrivacyKindPhone(),
+		"idcard":   msgs.PrivacyKindIDCard(),
+		"email":    msgs.PrivacyKindEmail(),
+		"url":      msgs.PrivacyKindURL(),
+		"secret":   msgs.PrivacyKindSecret(),
+		"password": msgs.PrivacyKindPassword(),
+	}
+
+	ui.Column(c).FillWidth().Padding(0, 14, 6, 18).Children(func() {
+		a.renderPrivacySubgroup(c, msgs.SettingsPrivacyKinds(), &a.expanded.privacyKinds, func() {
+			ui.Row(c).FillWidth().Padding(2, 8, 8, 28).Gap(12).Wrap().Children(func() {
+				for _, k := range store.AllPrivacyKinds {
+					kind := k
+					label := kindLabels[kind]
+					checked := slices.Contains(a.settings.PrivacyKinds, kind)
+					ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+						cb := checked
+						if ui.Checkbox(c, &cb, "").Label(label).Changed() {
+							a.togglePrivacyKind(kind)
+						}
+						ui.Text(c, label).FontSize(12.5).TextColor(t.Text).SingleLine().
+							OnClick(func() { a.togglePrivacyKind(kind) })
+					})
+				}
+			})
+		})
+
+		a.renderPrivacySubgroup(c, msgs.SettingsPrivacyCustomRules(), &a.expanded.privacyRules, func() {
+			ui.Column(c).FillWidth().Padding(2, 8, 8, 28).Gap(6).Children(func() {
+				ui.Text(c, msgs.SettingsPrivacyCustomRulesDesc()).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
+				rulesBox := ui.TextArea(c, &a.settings.PrivacyCustomRules).
+					FillWidth().Height(72).Padding(8, 10).Radius(radiusControl).
+					FontSize(12.5).Background(t.Background).Border(1, t.Border).
+					Placeholder(msgs.SettingsPrivacyCustomRulesPlaceholder()).
+					ObserveInput(func(ev ui.InputEvent) {
+						if ev.Kind == ui.InputPointerDown {
+							a.activatePanelForInput()
+						}
+					})
+				if rulesBox.Changed() {
+					a.persistSettings()
+				}
+			})
+		})
+
+		a.renderPrivacySubgroup(c, msgs.SettingsMaskPreview(), &a.expanded.privacyMasking, func() {
+			ui.Column(c).FillWidth().Padding(2, 8, 6, 28).Gap(6).Children(func() {
+				a.renderNumberStepperRow(c, msgs.SettingsMaskPrefix(), &a.settings.SensitiveMaskPrefix, 0, 12, func() {
+					a.persistSettings()
+				})
+				a.renderNumberStepperRow(c, msgs.SettingsMaskSuffix(), &a.settings.SensitiveMaskSuffix, 0, 12, func() {
+					a.persistSettings()
+				})
+				ui.Row(c).FillWidth().MinHeight(30).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
+					ui.Text(c, msgs.SettingsMaskEmailDomain()).FontSize(12.5).TextColor(t.Text).SingleLine()
+					if ui.Checkbox(c, &a.settings.SensitiveMaskEmailDomain, "").Label(msgs.SettingsMaskEmailDomain()).Changed() {
+						a.persistSettings()
+					}
+				})
+			})
+		})
+	})
+}
+
+func (a *clipApp) renderPrivacySubgroup(c *ui.Context, title string, expanded *bool, body func()) {
+	t := c.Theme()
+	ui.Column(c.Key("privacy-sub-"+title)).FillWidth().Children(func() {
+		ui.Box(c).FillWidth().Height(1).Background(t.Border.Alpha(0.28))
+		p := ui.CollapsibleBase(c, expanded)
+		p.Trigger.FillWidth().MinHeight(38).Padding(0, 4).Gap(8).AlignItems(ui.Center).Label(title).
+			Children(func() {
+				ui.Box(c).Size(20, 20).Center().Radius(10).Border(1, t.Border.Alpha(0.75)).
+					Background(t.Background.Alpha(0.5)).
+					Children(func() {
+						ui.Icon(c, iconChevronRight).FontSize(12).TextColor(t.TextMuted).Rotate(90 * p.Progress())
+					})
+				ui.Text(c, title).FontSize(13).FontWeight(500).TextColor(t.Text).SingleLine()
+			})
+		if panel := p.Panel(body); panel.Valid() {
+			panel.FillWidth()
+		}
+	})
+}
+
+func (a *clipApp) renderNumberStepperRow(c *ui.Context, label string, val *int, minVal, maxVal int, onChange func()) {
+	t := c.Theme()
+	ui.Row(c).FillWidth().MinHeight(30).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
+		ui.Text(c, label).FontSize(12.5).TextColor(t.Text).SingleLine()
+		ui.Row(c).Height(28).Radius(radiusControl).Background(t.Background).Border(1, t.Border).
+			AlignItems(ui.Center).Children(func() {
+			ui.ButtonBase(c).Size(24, 26).Center().Label("-").OnClick(func() {
+				if *val > minVal {
+					*val--
+					onChange()
+				}
+			}).Children(func() {
+				ui.Text(c, "−").FontSize(13).TextColor(t.TextMuted)
+			})
+			ui.Text(c, strconv.Itoa(*val)).Width(26).TextAlign(ui.Center).
+				FontSize(13).FontWeight(600).TextColor(t.Text).SingleLine()
+			ui.ButtonBase(c).Size(24, 26).Center().Label("+").OnClick(func() {
+				if *val < maxVal {
+					*val++
+					onChange()
+				}
+			}).Children(func() {
+				ui.Text(c, "+").FontSize(13).TextColor(t.TextMuted)
+			})
+		})
+	})
+}
+
+func (a *clipApp) togglePrivacyKind(kind string) {
+	if idx := slices.Index(a.settings.PrivacyKinds, kind); idx >= 0 {
+		a.settings.PrivacyKinds = slices.Delete(a.settings.PrivacyKinds, idx, idx+1)
+	} else {
+		a.settings.PrivacyKinds = append(a.settings.PrivacyKinds, kind)
+	}
 	a.persistSettings()
 }
 

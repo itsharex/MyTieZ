@@ -1186,6 +1186,73 @@ func TestRoutedSearchNoFocus(t *testing.T) {
 	}
 }
 
+func TestPrivacyProtectionUI(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	if !a.settings.PrivacyProtection {
+		t.Fatal("expected PrivacyProtection enabled by default")
+	}
+
+	it, err := a.saveTextWithPrivacy("13800138000", store.SaveOptions{Deduplicate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !store.HasSensitiveTag(it.Tags) {
+		t.Fatalf("expected sensitive tag on phone item, got %+v", it.Tags)
+	}
+
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	if tt.HasText("13800138000") {
+		t.Fatalf("expected sensitive text masked by default, texts=%q", tt.Texts())
+	}
+	if !tt.HasText("138••••••000") {
+		t.Fatalf("expected masked text '138••••••000', texts=%q", tt.Texts())
+	}
+
+	if err := tt.Click("显示敏感内容"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("13800138000") {
+		t.Fatalf("expected revealed text after clicking eye button, texts=%q", tt.Texts())
+	}
+
+	if err := tt.Click("隐藏窗口"); err != nil {
+		t.Fatal(err)
+	}
+	if tt.HasText("13800138000") {
+		t.Fatalf("expected sensitive item re-masked after hidePanel, texts=%q", tt.Texts())
+	}
+
+	// 进入设置 -> 剪贴板设置，验证三个隐私子项默认折叠，点击后展开
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("剪贴板设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if !tt.HasText("保护种类") || !tt.HasText("自定义规则") || !tt.HasText("脱敏预览设置") {
+		t.Fatalf("expected privacy subgroups in clipboard settings, texts=%q", tt.Texts())
+	}
+	if tt.HasText("密钥/Token") {
+		t.Fatalf("expected privacyKinds collapsed by default, texts=%q", tt.Texts())
+	}
+	if err := tt.Click("保护种类"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if !tt.HasText("密钥/Token") {
+		t.Fatalf("expected privacyKinds expanded after click, texts=%q", tt.Texts())
+	}
+}
+
 func TestHiddenMemoryAndCacheRetention(t *testing.T) {
 	st, err := store.OpenStore(t.TempDir())
 	if err != nil {

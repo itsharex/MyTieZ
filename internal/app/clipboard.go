@@ -426,10 +426,17 @@ func (a *clipApp) onClipboardChanged() {
 		}
 		opts.HTML = htmlStr
 		a.saveAsync(func() (string, error) {
-			it, err := a.store.SaveText(text, opts)
+			it, err := a.saveTextWithPrivacy(text, opts)
 			return it.Hash, err
 		})
 	}
+}
+
+func (a *clipApp) saveTextWithPrivacy(text string, opts store.SaveOptions) (store.ClipItem, error) {
+	if a.settings.PrivacyProtection && store.ContainsSensitiveInfo(text, a.settings.PrivacyKinds, a.settings.PrivacyCustomRules) {
+		opts.Tags = append(opts.Tags, store.SensitiveTag)
+	}
+	return a.store.SaveText(text, opts)
 }
 
 func (a *clipApp) shouldIgnore(h string) bool {

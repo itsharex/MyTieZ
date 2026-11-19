@@ -50,10 +50,11 @@ type clipApp struct {
 	tagFocusPending bool
 	allTags         []string
 
-	thumbs        *bitmapCache
-	appIcons      *bitmapCache
-	richSpans     map[int64][]ui.Span
-	richSpansDark bool
+	thumbs            *bitmapCache
+	appIcons          *bitmapCache
+	richSpans         map[int64][]ui.Span
+	richSpansDark     bool
+	revealedSensitive map[int64]bool
 
 	ignoreHash       string
 	ignoreUntil      time.Time
@@ -418,6 +419,7 @@ func (a *clipApp) hidePanel() {
 	a.stopOutsideClickWatch()
 	a.stopKeyRouting()
 	a.routedSearchActive = false
+	a.revealedSensitive = nil
 	a.confirmClearOpen = false
 	if a.panel != nil {
 		a.panel.Hide()

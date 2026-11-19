@@ -1723,3 +1723,207 @@ func ConfirmClearUnpinnedMsg() string { return In(i18n.Locale()).ConfirmClearUnp
 func (msgs Messages) ConfirmClearUnpinnedMsg() string {
 	return Catalog.Format(msgs.locale, "confirmClearUnpinnedMsg", nil)
 }
+
+// CardSensitiveShow says "显示敏感内容"
+// in the language the app shows.
+func CardSensitiveShow() string { return In(i18n.Locale()).CardSensitiveShow() }
+
+// CardSensitiveShow says "显示敏感内容"
+// in the language of msgs.
+func (msgs Messages) CardSensitiveShow() string {
+	return Catalog.Format(msgs.locale, "cardSensitiveShow", nil)
+}
+
+// CardSensitiveHide says "隐藏敏感内容"
+// in the language the app shows.
+func CardSensitiveHide() string { return In(i18n.Locale()).CardSensitiveHide() }
+
+// CardSensitiveHide says "隐藏敏感内容"
+// in the language of msgs.
+func (msgs Messages) CardSensitiveHide() string {
+	return Catalog.Format(msgs.locale, "cardSensitiveHide", nil)
+}
+
+// CardSensitiveHidden says "已隐藏敏感内容"
+// in the language the app shows.
+func CardSensitiveHidden() string { return In(i18n.Locale()).CardSensitiveHidden() }
+
+// CardSensitiveHidden says "已隐藏敏感内容"
+// in the language of msgs.
+func (msgs Messages) CardSensitiveHidden() string {
+	return Catalog.Format(msgs.locale, "cardSensitiveHidden", nil)
+}
+
+// SettingsPrivacyProtection says "隐私保护"
+// in the language the app shows.
+func SettingsPrivacyProtection() string { return In(i18n.Locale()).SettingsPrivacyProtection() }
+
+// SettingsPrivacyProtection says "隐私保护"
+// in the language of msgs.
+func (msgs Messages) SettingsPrivacyProtection() string {
+	return Catalog.Format(msgs.locale, "settingsPrivacyProtection", nil)
+}
+
+// SettingsPrivacyProtectionDesc says "自动识别密码、密钥或敏感信息并脱敏显示"
+// in the language the app shows.
+func SettingsPrivacyProtectionDesc() string { return In(i18n.Locale()).SettingsPrivacyProtectionDesc() }
+
+// SettingsPrivacyProtectionDesc says "自动识别密码、密钥或敏感信息并脱敏显示"
+// in the language of msgs.
+func (msgs Messages) SettingsPrivacyProtectionDesc() string {
+	return Catalog.Format(msgs.locale, "settingsPrivacyProtectionDesc", nil)
+}
+
+// SettingsPrivacyKinds says "保护种类"
+// in the language the app shows.
+func SettingsPrivacyKinds() string { return In(i18n.Locale()).SettingsPrivacyKinds() }
+
+// SettingsPrivacyKinds says "保护种类"
+// in the language of msgs.
+func (msgs Messages) SettingsPrivacyKinds() string {
+	return Catalog.Format(msgs.locale, "settingsPrivacyKinds", nil)
+}
+
+// PrivacyKindPhone says "手机号"
+// in the language the app shows.
+func PrivacyKindPhone() string { return In(i18n.Locale()).PrivacyKindPhone() }
+
+// PrivacyKindPhone says "手机号"
+// in the language of msgs.
+func (msgs Messages) PrivacyKindPhone() string {
+	return Catalog.Format(msgs.locale, "privacyKindPhone", nil)
+}
+
+// PrivacyKindIDCard says "身份证"
+// in the language the app shows.
+func PrivacyKindIDCard() string { return In(i18n.Locale()).PrivacyKindIDCard() }
+
+// PrivacyKindIDCard says "身份证"
+// in the language of msgs.
+func (msgs Messages) PrivacyKindIDCard() string {
+	return Catalog.Format(msgs.locale, "privacyKindIDCard", nil)
+}
+
+// PrivacyKindEmail says "邮箱"
+// in the language the app shows.
+func PrivacyKindEmail() string { return In(i18n.Locale()).PrivacyKindEmail() }
+
+// PrivacyKindEmail says "邮箱"
+// in the language of msgs.
+func (msgs Messages) PrivacyKindEmail() string {
+	return Catalog.Format(msgs.locale, "privacyKindEmail", nil)
+}
+
+// PrivacyKindURL says "链接"
+// in the language the app shows.
+func PrivacyKindURL() string { return In(i18n.Locale()).PrivacyKindURL() }
+
+// PrivacyKindURL says "链接"
+// in the language of msgs.
+func (msgs Messages) PrivacyKindURL() string {
+	return Catalog.Format(msgs.locale, "privacyKindURL", nil)
+}
+
+// PrivacyKindSecret says "密钥/Token"
+// in the language the app shows.
+func PrivacyKindSecret() string { return In(i18n.Locale()).PrivacyKindSecret() }
+
+// PrivacyKindSecret says "密钥/Token"
+// in the language of msgs.
+func (msgs Messages) PrivacyKindSecret() string {
+	return Catalog.Format(msgs.locale, "privacyKindSecret", nil)
+}
+
+// PrivacyKindPassword says "密码"
+// in the language the app shows.
+func PrivacyKindPassword() string { return In(i18n.Locale()).PrivacyKindPassword() }
+
+// PrivacyKindPassword says "密码"
+// in the language of msgs.
+func (msgs Messages) PrivacyKindPassword() string {
+	return Catalog.Format(msgs.locale, "privacyKindPassword", nil)
+}
+
+// SettingsMaskPrefix says "前暴露位数"
+// in the language the app shows.
+func SettingsMaskPrefix() string { return In(i18n.Locale()).SettingsMaskPrefix() }
+
+// SettingsMaskPrefix says "前暴露位数"
+// in the language of msgs.
+func (msgs Messages) SettingsMaskPrefix() string {
+	return Catalog.Format(msgs.locale, "settingsMaskPrefix", nil)
+}
+
+// SettingsMaskSuffix says "后暴露位数"
+// in the language the app shows.
+func SettingsMaskSuffix() string { return In(i18n.Locale()).SettingsMaskSuffix() }
+
+// SettingsMaskSuffix says "后暴露位数"
+// in the language of msgs.
+func (msgs Messages) SettingsMaskSuffix() string {
+	return Catalog.Format(msgs.locale, "settingsMaskSuffix", nil)
+}
+
+// SettingsMaskPreview says "脱敏预览设置"
+// in the language the app shows.
+func SettingsMaskPreview() string { return In(i18n.Locale()).SettingsMaskPreview() }
+
+// SettingsMaskPreview says "脱敏预览设置"
+// in the language of msgs.
+func (msgs Messages) SettingsMaskPreview() string {
+	return Catalog.Format(msgs.locale, "settingsMaskPreview", nil)
+}
+
+// SettingsMaskEmailDomain says "脱敏邮箱域名"
+// in the language the app shows.
+func SettingsMaskEmailDomain() string { return In(i18n.Locale()).SettingsMaskEmailDomain() }
+
+// SettingsMaskEmailDomain says "脱敏邮箱域名"
+// in the language of msgs.
+func (msgs Messages) SettingsMaskEmailDomain() string {
+	return Catalog.Format(msgs.locale, "settingsMaskEmailDomain", nil)
+}
+
+// SettingsMaskEmailDomainDesc says "开启后，邮箱地址 @ 后的域名也会被脱敏"
+// in the language the app shows.
+func SettingsMaskEmailDomainDesc() string { return In(i18n.Locale()).SettingsMaskEmailDomainDesc() }
+
+// SettingsMaskEmailDomainDesc says "开启后，邮箱地址 @ 后的域名也会被脱敏"
+// in the language of msgs.
+func (msgs Messages) SettingsMaskEmailDomainDesc() string {
+	return Catalog.Format(msgs.locale, "settingsMaskEmailDomainDesc", nil)
+}
+
+// SettingsPrivacyCustomRules says "自定义规则"
+// in the language the app shows.
+func SettingsPrivacyCustomRules() string { return In(i18n.Locale()).SettingsPrivacyCustomRules() }
+
+// SettingsPrivacyCustomRules says "自定义规则"
+// in the language of msgs.
+func (msgs Messages) SettingsPrivacyCustomRules() string {
+	return Catalog.Format(msgs.locale, "settingsPrivacyCustomRules", nil)
+}
+
+// SettingsPrivacyCustomRulesDesc says "每行一条正则表达式，匹配则自动标记为敏感内容"
+// in the language the app shows.
+func SettingsPrivacyCustomRulesDesc() string {
+	return In(i18n.Locale()).SettingsPrivacyCustomRulesDesc()
+}
+
+// SettingsPrivacyCustomRulesDesc says "每行一条正则表达式，匹配则自动标记为敏感内容"
+// in the language of msgs.
+func (msgs Messages) SettingsPrivacyCustomRulesDesc() string {
+	return Catalog.Format(msgs.locale, "settingsPrivacyCustomRulesDesc", nil)
+}
+
+// SettingsPrivacyCustomRulesPlaceholder says "例如：AKIA[0-9A-Z]+"
+// in the language the app shows.
+func SettingsPrivacyCustomRulesPlaceholder() string {
+	return In(i18n.Locale()).SettingsPrivacyCustomRulesPlaceholder()
+}
+
+// SettingsPrivacyCustomRulesPlaceholder says "例如：AKIA[0-9A-Z]+"
+// in the language of msgs.
+func (msgs Messages) SettingsPrivacyCustomRulesPlaceholder() string {
+	return Catalog.Format(msgs.locale, "settingsPrivacyCustomRulesPlaceholder", nil)
+}

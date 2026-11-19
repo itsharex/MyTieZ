@@ -64,10 +64,16 @@ type Settings struct {
 	ClickCopyOnly      bool   `json:"click_copy_only"`
 	MoveToTopOnPaste   bool   `json:"move_to_top_on_paste"`
 	DeleteAfterPaste   bool   `json:"delete_after_paste"`
-	PasteMethod        string `json:"paste_method"`         // "shift_insert" | "ctrl_v" | "game_mode"
-	QuickPasteModifier string `json:"quick_paste_modifier"` // "none" | "alt" | "ctrl"
-	ColorMode          string `json:"color_mode"`           // "system" | "light" | "dark"
-	BackdropMode       string `json:"backdrop_mode"`        // "mica" | "acrylic" | "solid"
+	PasteMethod              string   `json:"paste_method"`         // "shift_insert" | "ctrl_v" | "game_mode"
+	QuickPasteModifier       string   `json:"quick_paste_modifier"` // "none" | "alt" | "ctrl"
+	PrivacyProtection        bool     `json:"privacy_protection"`
+	PrivacyKinds             []string `json:"privacy_kinds"`
+	PrivacyCustomRules       string   `json:"privacy_custom_rules"`
+	SensitiveMaskPrefix      int      `json:"sensitive_mask_prefix"`
+	SensitiveMaskSuffix      int      `json:"sensitive_mask_suffix"`
+	SensitiveMaskEmailDomain bool     `json:"sensitive_mask_email_domain"`
+	ColorMode                string   `json:"color_mode"`    // "system" | "light" | "dark"
+	BackdropMode             string   `json:"backdrop_mode"` // "mica" | "acrylic" | "solid"
 	CompactMode        bool   `json:"compact_mode"`
 	HideCardActions    bool   `json:"hide_card_actions"`
 	ShowSourceIcon     bool   `json:"show_source_icon"`
@@ -96,9 +102,13 @@ func DefaultSettings() Settings {
 		ClickCopyOnly:      false,
 		MoveToTopOnPaste:   true,
 		DeleteAfterPaste:   false,
-		PasteMethod:        "shift_insert",
-		QuickPasteModifier: "none",
-		ColorMode:          "system",
+		PasteMethod:         "shift_insert",
+		QuickPasteModifier:  "none",
+		PrivacyProtection:   true,
+		PrivacyKinds:        DefaultPrivacyKinds(),
+		SensitiveMaskPrefix: 3,
+		SensitiveMaskSuffix: 3,
+		ColorMode:           "system",
 		BackdropMode:       "solid",
 		CompactMode:        false,
 		HideCardActions:    false,
@@ -114,6 +124,7 @@ type SaveOptions struct {
 	SourceApp   string
 	SourcePath  string
 	HTML        string
+	Tags        []string
 }
 
 type Store struct {
@@ -280,6 +291,11 @@ func (s *Store) LoadSettings() (Settings, error) {
 	if cfg.QuickPasteModifier != "none" && cfg.QuickPasteModifier != "alt" && cfg.QuickPasteModifier != "ctrl" {
 		cfg.QuickPasteModifier = "none"
 	}
+	if cfg.PrivacyKinds == nil {
+		cfg.PrivacyKinds = DefaultPrivacyKinds()
+	}
+	cfg.SensitiveMaskPrefix = max(0, min(cfg.SensitiveMaskPrefix, 12))
+	cfg.SensitiveMaskSuffix = max(0, min(cfg.SensitiveMaskSuffix, 12))
 	if cfg.Hotkey == "" {
 		cfg.Hotkey = DefaultSettings().Hotkey
 	}
@@ -501,20 +517,29 @@ func (s *Store) save(item ClipItem, opts SaveOptions) (ClipItem, error) {
 	var targetID int64
 	if opts.Deduplicate {
 		var existingID int64
-		var existingApp, existingPath string
+		var existingApp, existingPath, existingTagsJSON string
 		err := s.db.QueryRow(`
-SELECT id, source_app, source_path FROM clip_items WHERE kind = ? AND content_hash = ? ORDER BY updated_at DESC LIMIT 1
-`, string(item.Kind), item.Hash).Scan(&existingID, &existingApp, &existingPath)
+SELECT id, source_app, source_path, tags_json FROM clip_items WHERE kind = ? AND content_hash = ? ORDER BY updated_at DESC LIMIT 1
+`, string(item.Kind), item.Hash).Scan(&existingID, &existingApp, &existingPath, &existingTagsJSON)
 		if err == nil {
 			keepApp, keepPath := sourceApp, sourcePath
 			if keepPath == "" && existingPath != "" {
 				keepApp, keepPath = existingApp, existingPath
 			}
+			mergedTagsJSON := existingTagsJSON
+			if len(opts.Tags) > 0 {
+				var cur []string
+				_ = json.Unmarshal([]byte(existingTagsJSON), &cur)
+				merged := normalizeTags(append(cur, opts.Tags...))
+				if b, err := json.Marshal(merged); err == nil {
+					mergedTagsJSON = string(b)
+				}
+			}
 			if _, err := s.db.Exec(`
 UPDATE clip_items
-SET text_content = ?, html_content = ?, image_path = ?, files_json = ?, preview = ?, source_app = ?, source_path = ?, byte_size = ?, updated_at = ?
+SET text_content = ?, html_content = ?, image_path = ?, files_json = ?, preview = ?, source_app = ?, source_path = ?, byte_size = ?, tags_json = ?, updated_at = ?
 WHERE id = ?
-`, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, keepApp, keepPath, item.ByteSize, now, existingID); err != nil {
+`, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, keepApp, keepPath, item.ByteSize, mergedTagsJSON, now, existingID); err != nil {
 				return ClipItem{}, err
 			}
 			targetID = existingID
@@ -524,10 +549,16 @@ WHERE id = ?
 	}
 
 	if targetID == 0 {
+		tagsJSON := "[]"
+		if cleanTags := normalizeTags(opts.Tags); len(cleanTags) > 0 {
+			if b, err := json.Marshal(cleanTags); err == nil {
+				tagsJSON = string(b)
+			}
+		}
 		res, err := s.db.Exec(`
-INSERT INTO clip_items (kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-`, string(item.Kind), item.Hash, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, sourceApp, sourcePath, item.ByteSize, now, now)
+INSERT INTO clip_items (kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+`, string(item.Kind), item.Hash, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, sourceApp, sourcePath, item.ByteSize, tagsJSON, now, now)
 		if err != nil {
 			return ClipItem{}, err
 		}

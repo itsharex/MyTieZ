@@ -6,9 +6,9 @@ import (
 	"mytiez/internal/app"
 )
 
-//go:embed resources/tray.png
-var trayIconPNG []byte
+//go:embed resources/icon.png
+var appIconPNG []byte
 
 func main() {
-	app.Run(trayIconPNG)
+	app.Run(appIconPNG)
 }

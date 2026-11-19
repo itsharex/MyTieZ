@@ -115,14 +115,38 @@ func (a *clipApp) scheduleSearchReload() {
 	})
 }
 
-func (a *clipApp) reload() {
-	if a.store == nil {
-		return
-	}
+func (a *clipApp) historyLimit() int {
 	limit := 500
 	if a.settings.MaxHistory > 0 {
 		limit = max(a.settings.MaxHistory, 200)
 	}
+	return limit
+}
+
+func (a *clipApp) reloadIfStale() {
+	if a.store == nil {
+		return
+	}
+	rev := a.store.Revision()
+	kind := a.currentKind()
+	limit := a.historyLimit()
+	if rev == a.loadedRevision &&
+		a.loadedQuery == a.query &&
+		a.loadedKind == kind &&
+		a.loadedLimit == limit &&
+		a.store.TagRevision() == a.loadedTagRevision {
+		return
+	}
+	a.reload()
+}
+
+func (a *clipApp) reload() {
+	if a.store == nil {
+		return
+	}
+	limit := a.historyLimit()
+	kind := a.currentKind()
+	rev := a.store.Revision()
 	if strings.TrimSpace(a.query) != "" {
 		// 搜索时拉取全类别匹配结果，便于在不同 Tab 间即时切换查看
 		hits, err := a.store.ListSummaries(a.query, "", limit)
@@ -134,7 +158,7 @@ func (a *clipApp) reload() {
 		a.applyActiveTabFilter()
 	} else {
 		a.searchHits = nil
-		items, err := a.store.ListSummaries("", a.currentKind(), limit)
+		items, err := a.store.ListSummaries("", kind, limit)
 		if err != nil {
 			log.Printf("list clipboard items: %v", err)
 			return
@@ -142,8 +166,15 @@ func (a *clipApp) reload() {
 		a.items = items
 		a.syncSelectionBounds()
 	}
-	if tags, err := a.store.ListAllTags(); err == nil {
-		a.allTags = tags
+	a.loadedRevision = rev
+	a.loadedQuery = a.query
+	a.loadedKind = kind
+	a.loadedLimit = limit
+	if tagRev := a.store.TagRevision(); tagRev != a.loadedTagRevision {
+		if tags, err := a.store.ListAllTags(); err == nil {
+			a.allTags = tags
+			a.loadedTagRevision = tagRev
+		}
 	}
 }
 

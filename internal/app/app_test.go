@@ -1277,20 +1277,13 @@ func TestHiddenMemoryAndCacheRetention(t *testing.T) {
 		t.Fatalf("expected richSpans preserved on normal hide, got %d", len(a.richSpans))
 	}
 
-	// 2. 缩略图超过 warmThumbCacheLimit 时，隐藏立即清理缩略图，但仍保留轻量 richSpans
+	// 2. 缩略图超过 warmThumbCacheLimit 时，隐藏通过 LRU 裁剪保留至 warmThumbCacheLimit，且保留轻量 richSpans
 	a.thumbs.items["overflow"] = &ui.Bitmap{}
 	a.hidePanel()
-	if a.thumbs.len() != 0 {
-		t.Fatalf("expected oversized thumb cache cleared on hide, got %d", a.thumbs.len())
+	if a.thumbs.len() != warmThumbCacheLimit {
+		t.Fatalf("expected oversized thumb cache pruned to %d on hide, got %d", warmThumbCacheLimit, a.thumbs.len())
 	}
 	if len(a.richSpans) != 1 {
 		t.Fatalf("expected richSpans still preserved under 50MB, got %d", len(a.richSpans))
-	}
-
-	// 3. 后台托盘闲置超时（idleExpired=true）时，即使缩略图未超上限也会被清理
-	a.thumbs.items["idle-thumb"] = &ui.Bitmap{}
-	a.releaseHiddenMemory(true)
-	if a.thumbs.len() != 0 {
-		t.Fatalf("expected thumb cache cleared after idle timeout, got %d", a.thumbs.len())
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -128,9 +129,35 @@ type SaveOptions struct {
 }
 
 type Store struct {
-	db       *sql.DB
-	baseDir  string
-	imageDir string
+	db          *sql.DB
+	baseDir     string
+	imageDir    string
+	revision    atomic.Uint64
+	tagRevision atomic.Uint64
+}
+
+func (s *Store) Revision() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.revision.Load()
+}
+
+func (s *Store) TagRevision() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.tagRevision.Load()
+}
+
+func (s *Store) bumpRevision(tagsChanged bool) {
+	if s == nil {
+		return
+	}
+	s.revision.Add(1)
+	if tagsChanged {
+		s.tagRevision.Add(1)
+	}
 }
 
 func defaultDataDir() (string, error) {
@@ -179,7 +206,10 @@ func OpenStore(baseDir string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return &Store{db: db, baseDir: baseDir, imageDir: imageDir}, nil
+	st := &Store{db: db, baseDir: baseDir, imageDir: imageDir}
+	st.revision.Store(1)
+	st.tagRevision.Store(1)
+	return st, nil
 }
 
 func initSchema(db *sql.DB) error {
@@ -203,6 +233,7 @@ CREATE TABLE IF NOT EXISTS clip_items (
 );
 CREATE INDEX IF NOT EXISTS idx_clip_items_order ON clip_items(pinned DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_clip_items_kind_hash ON clip_items(kind, content_hash);
+CREATE INDEX IF NOT EXISTS idx_clip_items_tags ON clip_items(tags_json) WHERE tags_json != '[]' AND tags_json != '';
 CREATE TABLE IF NOT EXISTS app_settings (
 	key TEXT PRIMARY KEY,
 	value TEXT NOT NULL
@@ -571,6 +602,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
 	if opts.MaxHistory > 0 {
 		_ = s.EnforceLimit(opts.MaxHistory)
 	}
+	s.bumpRevision(len(opts.Tags) > 0)
 
 	row := s.db.QueryRow(`
 SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at
@@ -667,14 +699,18 @@ LIMIT ?
 }
 
 func (s *Store) TouchItem(id int64) error {
-	_, err := s.db.Exec(`UPDATE clip_items SET updated_at = ? WHERE id = ?`, time.Now().UnixMilli(), id)
-	return err
+	if _, err := s.db.Exec(`UPDATE clip_items SET updated_at = ? WHERE id = ?`, time.Now().UnixMilli(), id); err != nil {
+		return err
+	}
+	s.bumpRevision(false)
+	return nil
 }
 
 func (s *Store) TogglePin(id int64) (bool, error) {
 	if _, err := s.db.Exec(`UPDATE clip_items SET pinned = 1 - pinned WHERE id = ?`, id); err != nil {
 		return false, err
 	}
+	s.bumpRevision(false)
 	var pinned int
 	if err := s.db.QueryRow(`SELECT pinned FROM clip_items WHERE id = ?`, id).Scan(&pinned); err != nil {
 		return false, err
@@ -712,6 +748,7 @@ func (s *Store) UpdateTags(id int64, tags []string) ([]string, error) {
 	if _, err := s.db.Exec(`UPDATE clip_items SET tags_json = ? WHERE id = ?`, raw, id); err != nil {
 		return nil, err
 	}
+	s.bumpRevision(true)
 	return cleaned, nil
 }
 
@@ -811,11 +848,15 @@ func (s *Store) deleteItemsWhere(where string, args ...any) error {
 	}
 	_ = rows.Close()
 
-	if _, err := s.db.Exec(`DELETE FROM clip_items WHERE `+where, args...); err != nil {
+	res, err := s.db.Exec(`DELETE FROM clip_items WHERE `+where, args...)
+	if err != nil {
 		return err
 	}
 	for _, p := range paths {
 		s.removeOrphanImage(p)
+	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		s.bumpRevision(true)
 	}
 	return nil
 }

@@ -28,11 +28,11 @@ type processMemoryCounters struct {
 }
 
 const (
-	// MemoryTrimThresholdBytes is the working set size threshold (50 MB) below which
+	// MemoryTrimThresholdBytes is the working set size threshold (75 MB) below which
 	// the process leaves caches and physical pages untouched.
-	MemoryTrimThresholdBytes = 50 << 20
-	memorySoftMinBytes       = 20 << 20
-	memorySoftMaxBytes       = 36 << 20
+	MemoryTrimThresholdBytes = 75 << 20
+	memorySoftMinBytes       = 24 << 20
+	memorySoftMaxBytes       = 48 << 20
 )
 
 // WorkingSetBytes returns the current physical working set size of the process in bytes.

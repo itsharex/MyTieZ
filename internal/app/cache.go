@@ -37,6 +37,7 @@ func runWithTimeout(timeout time.Duration, fn func() error) error {
 
 type bitmapCache struct {
 	items   map[string]*ui.Bitmap
+	order   []string
 	failed  map[string]bool
 	loading map[string]bool
 }
@@ -51,6 +52,10 @@ func newBitmapCache() *bitmapCache {
 
 func (bc *bitmapCache) clear() {
 	bc.items = make(map[string]*ui.Bitmap)
+	bc.order = nil
+	if len(bc.failed) > 128 {
+		bc.failed = make(map[string]bool)
+	}
 }
 
 func (bc *bitmapCache) len() int {
@@ -58,6 +63,48 @@ func (bc *bitmapCache) len() int {
 		return 0
 	}
 	return len(bc.items)
+}
+
+func (bc *bitmapCache) touch(key string) {
+	n := len(bc.order)
+	if n > 0 && bc.order[n-1] == key {
+		return
+	}
+	for i, k := range bc.order {
+		if k == key {
+			copy(bc.order[i:], bc.order[i+1:])
+			bc.order[n-1] = key
+			return
+		}
+	}
+	bc.order = append(bc.order, key)
+}
+
+// pruneTo keeps up to the keep most recently accessed entries and drops older ones.
+func (bc *bitmapCache) pruneTo(keep int) bool {
+	if bc == nil || len(bc.items) <= keep {
+		return false
+	}
+	if keep <= 0 {
+		bc.clear()
+		return true
+	}
+	// If items were populated directly without touch (e.g. in tests), rebuild order.
+	if len(bc.order) < len(bc.items) {
+		for k := range bc.items {
+			bc.touch(k)
+		}
+	}
+	evict := len(bc.order) - keep
+	if evict <= 0 {
+		return false
+	}
+	for _, k := range bc.order[:evict] {
+		delete(bc.items, k)
+	}
+	copy(bc.order, bc.order[evict:])
+	bc.order = bc.order[:keep]
+	return true
 }
 
 func (bc *bitmapCache) get(win *mygo.Window, key string, maxCount int, fetch func() ([]byte, error)) *ui.Bitmap {
@@ -75,6 +122,7 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 		return nil
 	}
 	if bmp, ok := bc.items[key]; ok {
+		bc.touch(key)
 		return bmp
 	}
 	if bc.failed[key] || bc.loading[key] || win == nil {
@@ -91,13 +139,17 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 		win.Update(func() {
 			delete(bc.loading, key)
 			if err != nil || bmp == nil {
+				if len(bc.failed) >= 128 {
+					bc.failed = make(map[string]bool)
+				}
 				bc.failed[key] = true
 				return
 			}
-			if len(bc.items) >= maxCount {
-				bc.items = make(map[string]*ui.Bitmap)
+			if maxCount > 0 && len(bc.items) >= maxCount {
+				bc.pruneTo(maxCount - 1)
 			}
 			bc.items[key] = bmp
+			bc.touch(key)
 		})
 	}()
 	return nil

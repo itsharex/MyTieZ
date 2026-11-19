@@ -158,6 +158,8 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderChoiceGroup(c, msgs.SettingsBackdrop(), []choiceOption{
 						{label: msgs.SettingsBackdropSolid(), a11y: msgs.SettingsBackdropSolidA11y(), active: a.settings.BackdropMode == "solid", onClick: func() { a.setBackdropMode("solid") }},
 						{label: msgs.SettingsBackdropMica(), a11y: msgs.SettingsBackdropMicaA11y(), active: a.settings.BackdropMode == "mica", onClick: func() { a.setBackdropMode("mica") }},
+						{label: msgs.SettingsBackdropMicaAlt(), a11y: msgs.SettingsBackdropMicaAltA11y(), active: a.settings.BackdropMode == "mica_alt", onClick: func() { a.setBackdropMode("mica_alt") }},
+						{label: msgs.SettingsBackdropAcrylicBase(), a11y: msgs.SettingsBackdropAcrylicBaseA11y(), active: a.settings.BackdropMode == "acrylic_base", onClick: func() { a.setBackdropMode("acrylic_base") }},
 						{label: msgs.SettingsBackdropAcrylic(), a11y: msgs.SettingsBackdropAcrylicA11y(), active: a.settings.BackdropMode == "acrylic", onClick: func() { a.setBackdropMode("acrylic") }},
 					})
 					a.renderChoiceGroup(c, msgs.SettingsColorMode(), []choiceOption{
@@ -539,7 +541,10 @@ func (a *clipApp) renderSettingsGroup(c *ui.Context, title string, expanded *boo
 			p := ui.CollapsibleBase(c, expanded)
 			tr := p.Trigger.FillWidth().MinHeight(50).Padding(0, 16).Radius(radiusCard).
 				Justify(ui.SpaceBetween).AlignItems(ui.Center).Label(title)
-			tr.Background(t.Surface).Children(func() {
+			if tr.Hovered() {
+				tr.Background(t.SurfaceHover)
+			}
+			tr.Children(func() {
 				ui.Text(c, title).FontSize(14.5).FontWeight(700).TextColor(t.Text)
 				ui.Icon(c, iconChevronRight).FontSize(15).TextColor(t.TextMuted).Rotate(90 * p.Progress())
 			})
@@ -570,7 +575,7 @@ func (a *clipApp) renderChoiceGroup(c *ui.Context, title string, opts []choiceOp
 	t := c.Theme()
 	ui.Column(c).FillWidth().Padding(8, 16).Gap(8).Children(func() {
 		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(t.Text)
-		ui.Row(c).FillWidth().Gap(8).Children(func() {
+		ui.Row(c).FillWidth().Wrap().Gap(8).Children(func() {
 			for _, opt := range opts {
 				a.renderChoicePill(c, opt.label, opt.a11y, opt.active, opt.onClick)
 			}
@@ -627,7 +632,7 @@ func b2f(b bool) float32 {
 
 func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel string, active bool, onClick func()) {
 	t := c.Theme()
-	pill := ui.ButtonBase(c).Grow(1).Height(32).Center().Radius(radiusGroup).Label(a11yLabel)
+	pill := ui.ButtonBase(c).Grow(1).Shrink(0).Padding(0, 12).Height(32).Center().Radius(radiusGroup).Label(a11yLabel)
 	bg, border, fg := t.Surface, t.Border.Alpha(0.65), t.Text
 	if active {
 		bg = t.Accent
@@ -643,7 +648,7 @@ func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel string, active
 			onClick()
 		}).
 		Children(func() {
-			ui.Text(c, text).FontSize(13).FontWeight(600).TextColor(fg)
+			ui.Text(c, text).FontSize(13).FontWeight(600).TextColor(fg).SingleLine()
 		})
 }
 

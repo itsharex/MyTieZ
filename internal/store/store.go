@@ -76,7 +76,7 @@ type Settings struct {
 	SensitiveMaskSuffix      int      `json:"sensitive_mask_suffix"`
 	SensitiveMaskEmailDomain bool     `json:"sensitive_mask_email_domain"`
 	ColorMode                string   `json:"color_mode"`    // "system" | "light" | "dark"
-	BackdropMode             string   `json:"backdrop_mode"` // "mica" | "acrylic" | "solid"
+	BackdropMode             string   `json:"backdrop_mode"` // "solid" | "mica" | "mica_alt" | "acrylic_base" | "acrylic"
 	CompactMode        bool   `json:"compact_mode"`
 	HideCardActions    bool   `json:"hide_card_actions"`
 	ShowSourceIcon     bool   `json:"show_source_icon"`
@@ -323,8 +323,10 @@ func (s *Store) LoadSettings() (Settings, error) {
 	if cfg.ColorMode != "system" && cfg.ColorMode != "light" && cfg.ColorMode != "dark" {
 		cfg.ColorMode = "system"
 	}
-	if cfg.BackdropMode != "mica" && cfg.BackdropMode != "acrylic" && cfg.BackdropMode != "solid" {
-		cfg.BackdropMode = "solid"
+	switch cfg.BackdropMode {
+	case "solid", "mica", "mica_alt", "acrylic_base", "acrylic":
+	default:
+		cfg.BackdropMode = DefaultSettings().BackdropMode
 	}
 	if cfg.PasteMethod != "shift_insert" && cfg.PasteMethod != "ctrl_v" && cfg.PasteMethod != "game_mode" {
 		cfg.PasteMethod = "shift_insert"

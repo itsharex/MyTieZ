@@ -76,11 +76,7 @@ func (a *clipApp) renderWindowActionButtons(c *ui.Context) {
 func (a *clipApp) view(c *ui.Context) {
 	c.SetTheme(a.resolveTheme(c))
 	t := c.Theme()
-	if a.usingVibrancy(c) {
-		c.Root().Background(ui.Transparent)
-	} else {
-		c.Root().Background(t.Background)
-	}
+	c.Root().Background(a.rootBackground(c, t))
 
 	ui.Box(c.Key("app-pages")).Fill().Clip().Children(func() {
 		if a.showSettings {
@@ -303,7 +299,7 @@ func (a *clipApp) flushPendingToast(c *ui.Context) {
 			op := p.Root.Animate("toast-opacity", 1, 150*time.Millisecond)
 			p.Root.Row().AlignItems(ui.Center).Gap(8).
 				Padding(8, 14).Radius(radiusCard).
-				Background(t.Surface).Border(1, t.Border).
+				Background(a.floatingSurface(c, t)).Border(1, t.Border).
 				Shadow(0, 6, 18, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
 				Opacity(op).
 				Children(func() {
@@ -568,7 +564,7 @@ func (a *clipApp) renderScrollTopButton(c *ui.Context, t *ui.Theme) {
 	btn := ui.ButtonBase(c.Key("scroll-top-btn")).
 		Absolute().Right(16).Bottom(16).ZIndex(20).
 		Size(34, 34).Center().Radius(17).Label(scrollTopLabel).Tooltip(scrollTopLabel)
-	bg := t.Surface
+	bg := a.floatingSurface(c, t)
 	fg := t.Text
 	if btn.Hovered() {
 		bg = t.Accent

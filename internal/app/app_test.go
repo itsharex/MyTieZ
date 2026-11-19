@@ -208,11 +208,26 @@ func TestSettingsViewInteractions(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("材质毛玻璃"); err != nil {
-		t.Fatal(err)
+	for _, tc := range []struct {
+		label string
+		want  string
+	}{
+		{"材质云母 Alt", "mica_alt"},
+		{"材质标准亚克力", "acrylic_base"},
+		{"材质轻薄亚克力", "acrylic"},
+	} {
+		if err := tt.Click(tc.label); err != nil {
+			t.Fatal(err)
+		}
+		if a.settings.BackdropMode != tc.want {
+			t.Fatalf("expected BackdropMode=%s, got %q", tc.want, a.settings.BackdropMode)
+		}
 	}
-	if a.settings.BackdropMode != "acrylic" {
-		t.Fatalf("expected BackdropMode=acrylic, got %q", a.settings.BackdropMode)
+	if backdropVibrancy("mica_alt") != mygo.VibrancyTabbed {
+		t.Fatalf("expected mica_alt -> VibrancyTabbed, got %v", backdropVibrancy("mica_alt"))
+	}
+	if backdropVibrancy("acrylic_base") != mygo.VibrancyAcrylic || backdropVibrancy("acrylic") != mygo.VibrancyAcrylic {
+		t.Fatalf("expected acrylic modes -> VibrancyAcrylic")
 	}
 	if err := tt.Click("切换悬停显示卡片操作"); err != nil {
 		t.Fatal(err)

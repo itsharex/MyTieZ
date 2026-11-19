@@ -96,19 +96,127 @@ func buildMyTiezTheme(dark bool) *ui.Theme {
 	return t
 }
 
-func backdropVibrancy(mode string) mygo.Vibrancy {
-	switch mode {
-	case "acrylic":
-		return mygo.VibrancyAcrylic
-	case "solid":
-		return mygo.VibrancyNone
-	default:
-		return mygo.VibrancyMica
+type backdropPreset struct {
+	vibrancy          mygo.Vibrancy
+	rootOverlayDark   float32
+	rootOverlayLight  float32
+	surfaceDark       float32
+	surfaceLight      float32
+	surfaceHoverDark  float32
+	surfaceHoverLight float32
+	surfacePressDark  float32
+	surfacePressLight float32
+	borderDark        float32
+	borderLight       float32
+}
+
+// Presets tuned after DeskBox's glass surfaces: keep DWM blur luminous and
+// use subtle white-tinted glass cards with crisp hairline borders in dark mode.
+var backdropPresets = map[string]backdropPreset{
+	"mica": {
+		vibrancy:          mygo.VibrancyMica,
+		rootOverlayDark:   0,
+		rootOverlayLight:  0,
+		surfaceDark:       0.11,
+		surfaceLight:      0.62,
+		surfaceHoverDark:  0.17,
+		surfaceHoverLight: 0.78,
+		surfacePressDark:  0.22,
+		surfacePressLight: 0.88,
+		borderDark:        0.15,
+		borderLight:       0.55,
+	},
+	"mica_alt": {
+		vibrancy:          mygo.VibrancyTabbed,
+		rootOverlayDark:   0.10,
+		rootOverlayLight:  0.10,
+		surfaceDark:       0.10,
+		surfaceLight:      0.48,
+		surfaceHoverDark:  0.16,
+		surfaceHoverLight: 0.64,
+		surfacePressDark:  0.21,
+		surfacePressLight: 0.76,
+		borderDark:        0.16,
+		borderLight:       0.55,
+	},
+	"acrylic_base": {
+		vibrancy:          mygo.VibrancyAcrylic,
+		rootOverlayDark:   0.24,
+		rootOverlayLight:  0.22,
+		surfaceDark:       0.14,
+		surfaceLight:      0.56,
+		surfaceHoverDark:  0.20,
+		surfaceHoverLight: 0.72,
+		surfacePressDark:  0.25,
+		surfacePressLight: 0.82,
+		borderDark:        0.19,
+		borderLight:       0.60,
+	},
+	"acrylic": {
+		vibrancy:          mygo.VibrancyAcrylic,
+		rootOverlayDark:   0.06,
+		rootOverlayLight:  0,
+		surfaceDark:       0.11,
+		surfaceLight:      0.38,
+		surfaceHoverDark:  0.17,
+		surfaceHoverLight: 0.54,
+		surfacePressDark:  0.22,
+		surfacePressLight: 0.68,
+		borderDark:        0.16,
+		borderLight:       0.55,
+	},
+}
+
+func backdropPresetFor(mode string) (backdropPreset, bool) {
+	if mode == "solid" {
+		return backdropPreset{}, false
 	}
+	if p, ok := backdropPresets[mode]; ok {
+		return p, true
+	}
+	return backdropPresets["mica"], true
+}
+
+func backdropVibrancy(mode string) mygo.Vibrancy {
+	if p, ok := backdropPresetFor(mode); ok {
+		return p.vibrancy
+	}
+	return mygo.VibrancyNone
 }
 
 func (a *clipApp) usingVibrancy(c *ui.Context) bool {
 	return c.Vibrancy() && a.settings.BackdropMode != "solid"
+}
+
+func (a *clipApp) rootBackground(c *ui.Context, t *ui.Theme) ui.Color {
+	if !a.usingVibrancy(c) {
+		return t.Background
+	}
+	p, ok := backdropPresetFor(a.settings.BackdropMode)
+	if !ok {
+		return t.Background
+	}
+	if t.Dark {
+		if p.rootOverlayDark <= 0 {
+			return ui.Transparent
+		}
+		// Cool deep tint counteracts Win11 DWM acrylic's warm gray haze.
+		return ui.RGBA(14, 17, 24, p.rootOverlayDark)
+	}
+	if p.rootOverlayLight <= 0 {
+		return ui.Transparent
+	}
+	return t.Background.Alpha(p.rootOverlayLight)
+}
+
+func (a *clipApp) floatingSurface(c *ui.Context, t *ui.Theme) ui.Color {
+	if !a.usingVibrancy(c) {
+		return t.Surface
+	}
+	if t.Dark {
+		return myTiezDarkTheme.Surface.Alpha(0.90)
+	}
+	return myTiezLightTheme.Surface.Alpha(0.94)
 }
 
 func (a *clipApp) applyBackdrop() {
@@ -141,14 +249,22 @@ func (a *clipApp) resolveTheme(c *ui.Context) *ui.Theme {
 		cloned.Spacing *= scale
 	}
 	if vibrancy {
+		p, _ := backdropPresetFor(a.settings.BackdropMode)
 		if useDark {
-			cloned.Surface = cloned.Surface.Alpha(0.72)
-			cloned.SurfaceHover = cloned.SurfaceHover.Alpha(0.84)
+			glass := ui.RGB(255, 255, 255)
+			cloned.Surface = glass.Alpha(p.surfaceDark)
+			cloned.SurfaceHover = glass.Alpha(p.surfaceHoverDark)
+			cloned.SurfacePressed = glass.Alpha(p.surfacePressDark)
+			cloned.Border = glass.Alpha(p.borderDark)
+			cloned.Text = ui.RGB(245, 246, 248)
+			cloned.TextMuted = glass.Alpha(0.76)
 		} else {
-			cloned.Surface = cloned.Surface.Alpha(0.78)
-			cloned.SurfaceHover = cloned.SurfaceHover.Alpha(0.9)
+			cloned.Surface = cloned.Surface.Alpha(p.surfaceLight)
+			cloned.SurfaceHover = cloned.SurfaceHover.Alpha(p.surfaceHoverLight)
+			cloned.SurfacePressed = cloned.SurfacePressed.Alpha(p.surfacePressLight)
+			cloned.Border = cloned.Border.Alpha(p.borderLight)
+			cloned.TextMuted = cloned.Text.Alpha(0.74)
 		}
-		cloned.Border = cloned.Border.Alpha(0.55)
 	}
 	return &cloned
 }

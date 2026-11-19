@@ -126,6 +126,25 @@ func TestStoreSettingsAndLimits(t *testing.T) {
 	cfg.CompactMode = true
 	cfg.NoFocusMode = true
 	cfg.ColorMode = "dark"
+	for _, mode := range []string{"mica", "mica_alt", "acrylic_base", "acrylic"} {
+		cfg.BackdropMode = mode
+		if err := st.SaveSettings(cfg); err != nil {
+			t.Fatal(err)
+		}
+		loadedMode, err := st.LoadSettings()
+		if err != nil || loadedMode.BackdropMode != mode {
+			t.Fatalf("expected BackdropMode=%q, got %q err=%v", mode, loadedMode.BackdropMode, err)
+		}
+	}
+	cfg.BackdropMode = "invalid_mode"
+	if err := st.SaveSettings(cfg); err != nil {
+		t.Fatal(err)
+	}
+	fallbackCfg, err := st.LoadSettings()
+	if err != nil || fallbackCfg.BackdropMode != "solid" {
+		t.Fatalf("expected invalid BackdropMode fallback to solid, got %q err=%v", fallbackCfg.BackdropMode, err)
+	}
+	cfg.BackdropMode = "solid"
 	if err := st.SaveSettings(cfg); err != nil {
 		t.Fatal(err)
 	}

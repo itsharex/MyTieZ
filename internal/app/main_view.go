@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"mytiez/internal/store"
 	"mytiez/locales"
@@ -141,10 +142,12 @@ func (a *clipApp) mainView(c *ui.Context) {
 				})
 				a.renderHeaderIconBtn(c, iconTrash, msgs.HeaderClearUnpinned(), false, false, func() {
 					a.confirmClearOpen = true
+					a.stopKeyRouting()
 				})
 				a.renderHeaderIconBtn(c, iconSettings, msgs.HeaderSettings(), false, false, func() {
 					a.showSettings = true
 					a.confirmAction = ""
+					a.stopKeyRouting()
 				})
 				a.renderHeaderIconBtn(c, iconClear, msgs.HeaderHide(), false, true, func() {
 					a.hidePanel()
@@ -161,14 +164,14 @@ func (a *clipApp) mainView(c *ui.Context) {
 		if p > 0 {
 			ctrlWrap.Padding(2, 16, 8, 16).Gap(8).Children(func() {
 				searchBorder := t.Border
-				if !a.panelNoActivate && a.searchHandle.Focused(c) {
+				if (!a.panelNoActivate && a.searchHandle.Focused(c)) || (a.panelNoActivate && a.routedSearchActive) {
 					searchBorder = t.Accent
 				}
 				ui.Row(c).Height(searchBoxHeight).Padding(0, 12).Gap(8).AlignItems(ui.Center).Radius(radiusControl).
 					Background(t.Surface).Border(1, searchBorder).Transition(colorTransition).
 					ObserveInput(func(ev ui.InputEvent) {
 						if ev.Kind == ui.InputPointerDown {
-							a.activatePanelForInput()
+							a.onSearchBoxPointerDown()
 						}
 					}).
 					Children(func() {
@@ -176,6 +179,11 @@ func (a *clipApp) mainView(c *ui.Context) {
 						searchIn := ui.TextInputBase(c, &a.query).Bind(&a.searchHandle).
 							Grow(1).FontSize(14).FontWeight(500).
 							Placeholder(msgs.SearchPlaceholder()).Label(msgs.SearchLabel())
+						if a.routedCaretPending {
+							a.routedCaretPending = false
+							n := utf8.RuneCountInString(a.query)
+							searchIn.SetTextSelection(n, n)
+						}
 						if searchIn.Changed() && !searchIn.Composing() {
 							a.scheduleSearchReload()
 						}

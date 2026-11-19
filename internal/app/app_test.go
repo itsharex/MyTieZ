@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"mytiez/internal/store"
+	"mytiez/internal/sys"
 	"mytiez/locales"
 
 	"github.com/egoist/mygo"
@@ -1124,6 +1125,64 @@ func TestNoFocusModeSetting(t *testing.T) {
 	a.toggleTagEditor(a.items[0].ID)
 	if a.panelNoActivate {
 		t.Fatal("expected opening tag editor to clear panelNoActivate for text input")
+	}
+}
+
+func TestRoutedSearchNoFocus(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	if _, err := st.UpsertText("微信聊天记录"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertText("second item"); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newClipApp(st, nil)
+	a.settings.NoFocusMode = true
+	a.panelNoActivate = true
+	a.reload()
+
+	// 1. 模拟键盘路由已激活：点击搜索框不应抢焦点，只标记 routedSearchActive
+	a.stopKeyRouter = func() {}
+	a.onSearchBoxPointerDown()
+	if !a.panelNoActivate || !a.routedSearchActive {
+		t.Fatalf("expected routed search without activating panel, got noAct=%v routed=%v", a.panelNoActivate, a.routedSearchActive)
+	}
+
+	// 2. 通过路由按键输入拼音并退格，全程不抢焦点
+	a.applyRoutedKey(sys.RoutedKey{VK: 'W', Text: "w"})
+	a.applyRoutedKey(sys.RoutedKey{VK: 'X', Text: "x"})
+	a.applyRoutedKey(sys.RoutedKey{VK: 'A', Text: "a"})
+	a.applyRoutedKey(sys.RoutedKey{VK: vkBack})
+	if a.query != "wx" || !a.panelNoActivate {
+		t.Fatalf("expected query='wx' and panelNoActivate=true, got query=%q noAct=%v", a.query, a.panelNoActivate)
+	}
+	a.stopSearchTimer()
+	a.reload()
+	if len(a.items) != 1 || a.items[0].Text != "微信聊天记录" {
+		t.Fatalf("expected pinyin search hit '微信聊天记录', got %+v", a.items)
+	}
+
+	// 3. 方向键导航与 Esc 清空搜索
+	a.applyRoutedKey(sys.RoutedKey{VK: vkDown})
+	if a.selected != 0 {
+		t.Fatalf("expected selected=0 after vkDown, got %d", a.selected)
+	}
+	a.applyRoutedKey(sys.RoutedKey{VK: vkEscape})
+	if a.query != "" || a.routedSearchActive || !a.panelNoActivate {
+		t.Fatalf("expected query cleared and no-focus preserved, got query=%q routed=%v noAct=%v", a.query, a.routedSearchActive, a.panelNoActivate)
+	}
+
+	// 4. 无键盘路由时（如 UIPI 高权限窗口回退）：点击搜索框回退为激活窗口
+	a.stopKeyRouting()
+	a.onSearchBoxPointerDown()
+	if a.panelNoActivate {
+		t.Fatal("expected fallback to activatePanelForInput when key router is inactive")
 	}
 }
 

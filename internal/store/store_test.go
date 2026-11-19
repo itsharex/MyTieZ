@@ -369,3 +369,40 @@ func TestListSummariesAndGetByID(t *testing.T) {
 		t.Fatalf("expected full text length %d, got %d", len(longText), len(full.Text))
 	}
 }
+
+func TestPinyinSearch(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	for _, txt := range []string{"微信聊天记录", "重庆火锅", "Go语言入门", "plain english"} {
+		if _, err := st.UpsertText(txt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		query string
+		want  string
+	}{
+		{"weixin", "微信聊天记录"},
+		{"wx", "微信聊天记录"},
+		{"weix", "微信聊天记录"},
+		{"chongqing", "重庆火锅"},
+		{"cq", "重庆火锅"},
+		{"goyy", "Go语言入门"},
+		{"goyuyan", "Go语言入门"},
+		{"english", "plain english"},
+	}
+	for _, tc := range cases {
+		items, err := st.ListSummaries(tc.query, "", 10)
+		if err != nil {
+			t.Fatalf("query %q failed: %v", tc.query, err)
+		}
+		if len(items) == 0 || items[0].Text != tc.want {
+			t.Fatalf("query %q: expected %q, got %+v", tc.query, tc.want, items)
+		}
+	}
+}

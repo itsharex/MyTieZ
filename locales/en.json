@@ -82,7 +82,7 @@
   "settingsSilentStart": "Silent Start",
   "settingsFollowMouse": "Follow Cursor",
   "settingsNoFocusMode": "No Focus Mode (Experimental)",
-  "settingsNoFocusModeDesc": "Show, click cards, and drag without stealing focus; focuses on input click",
+  "settingsNoFocusModeDesc": "Show, search, click, and drag without stealing focus (no IME in search; focuses on tag edit)",
   "settingsAutoHide": "Auto Hide on Blur",
   "settingsPinSearchBox": "Pin Search Bar",
   "settingsScrollTopBtn": "Show Back to Top",

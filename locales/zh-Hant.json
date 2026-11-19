@@ -82,7 +82,7 @@
   "settingsSilentStart": "靜默啟動",
   "settingsFollowMouse": "跟隨滑鼠位置呼出",
   "settingsNoFocusMode": "不搶焦點 (實驗性)",
-  "settingsNoFocusModeDesc": "呼出、點選卡片與拖曳不搶佔焦點，點擊輸入框時自動聚焦",
+  "settingsNoFocusModeDesc": "呼出、搜尋、點選與拖曳均不搶佔焦點（搜尋不支援輸入法，編輯標籤時自動聚焦）",
   "settingsAutoHide": "失焦自動隱藏",
   "settingsPinSearchBox": "固定顯示搜尋列",
   "settingsScrollTopBtn": "顯示回到頂部按鈕",

@@ -57,10 +57,13 @@ type clipApp struct {
 
 	ignoreHash       string
 	ignoreUntil      time.Time
-	winPinned        bool
-	panelNoActivate  bool
-	stopOutsideWatch func()
-	lastOutsideHide  time.Time
+	winPinned          bool
+	panelNoActivate    bool
+	routedSearchActive bool
+	routedCaretPending bool
+	stopOutsideWatch   func()
+	stopKeyRouter      func()
+	lastOutsideHide    time.Time
 	pickingApp       bool
 	quitting         bool
 	resizeTimer      *time.Timer
@@ -160,10 +163,14 @@ func (a *clipApp) applyNoFocusMode(on bool) {
 
 func (a *clipApp) setPanelNoActivate(on bool) {
 	a.panelNoActivate = on
+	if !on {
+		a.routedSearchActive = false
+	}
 	if a.panel != nil && mygo.App.IsReady() {
 		sys.SetWindowNoActivate(a.panel.NativeHandle(), on)
 	}
 	a.syncOutsideClickWatch()
+	a.syncKeyRouter()
 }
 
 func (a *clipApp) syncOutsideClickWatch() {
@@ -290,6 +297,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 	} else {
 		a.panel.ShowInactive()
 		a.syncOutsideClickWatch()
+		a.syncKeyRouter()
 	}
 }
 
@@ -408,6 +416,8 @@ func (a *clipApp) releaseHiddenMemory(idleExpired bool) {
 
 func (a *clipApp) hidePanel() {
 	a.stopOutsideClickWatch()
+	a.stopKeyRouting()
+	a.routedSearchActive = false
 	a.confirmClearOpen = false
 	if a.panel != nil {
 		a.panel.Hide()
@@ -562,6 +572,7 @@ func (a *clipApp) setupTray() {
 	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		a.stopOutsideClickWatch()
+		a.stopKeyRouting()
 		if a.resizeTimer != nil {
 			a.resizeTimer.Stop()
 		}

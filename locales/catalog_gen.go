@@ -778,11 +778,11 @@ func (msgs Messages) SettingsNoFocusMode() string {
 	return Catalog.Format(msgs.locale, "settingsNoFocusMode", nil)
 }
 
-// SettingsNoFocusModeDesc says "呼出、点选卡片与拖拽不抢占焦点，点击输入框时自动聚焦"
+// SettingsNoFocusModeDesc says "呼出、搜索、点选与拖拽均不抢占焦点（无输入法，中文可用拼音搜索；标签编辑时聚焦）"
 // in the language the app shows.
 func SettingsNoFocusModeDesc() string { return In(i18n.Locale()).SettingsNoFocusModeDesc() }
 
-// SettingsNoFocusModeDesc says "呼出、点选卡片与拖拽不抢占焦点，点击输入框时自动聚焦"
+// SettingsNoFocusModeDesc says "呼出、搜索、点选与拖拽均不抢占焦点（无输入法，中文可用拼音搜索；标签编辑时聚焦）"
 // in the language of msgs.
 func (msgs Messages) SettingsNoFocusModeDesc() string {
 	return Catalog.Format(msgs.locale, "settingsNoFocusModeDesc", nil)

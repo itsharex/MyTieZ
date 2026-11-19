@@ -584,7 +584,8 @@ func (s *Store) listItems(query string, kind ClipKind, limit int, summary bool) 
 		encoded, _ := json.Marshal(tag)
 		args = append(args, "%"+string(encoded)+"%")
 	}
-	if kw != "" {
+	pinyinSearch := isASCIIAlphaNum(kw)
+	if kw != "" && !pinyinSearch {
 		like := "%" + kw + "%"
 		conds = append(conds, "(text_content LIKE ? OR preview LIKE ? OR files_json LIKE ? OR source_app LIKE ? OR tags_json LIKE ?)")
 		args = append(args, like, like, like, like, like)
@@ -594,7 +595,11 @@ func (s *Store) listItems(query string, kind ClipKind, limit int, summary bool) 
 	if len(conds) > 0 {
 		where = "WHERE " + strings.Join(conds, " AND ")
 	}
-	args = append(args, limit)
+	queryLimit := limit
+	if pinyinSearch {
+		queryLimit = max(limit*5, 1000)
+	}
+	args = append(args, queryLimit)
 
 	cols := "id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
 	if summary {
@@ -619,7 +624,13 @@ LIMIT ?
 		if err != nil {
 			return nil, err
 		}
+		if pinyinSearch && !itemMatchesKeyword(it, kw) {
+			continue
+		}
 		items = append(items, it)
+		if len(items) >= limit {
+			break
+		}
 	}
 	return items, rows.Err()
 }

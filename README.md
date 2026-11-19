@@ -2,6 +2,11 @@
 
 基于 Go 与原生 UI 框架 [MyGo](https://github.com/egoist/mygo) 重写的轻量级桌面剪贴板管理工具，界面设计与交互灵感源自 [tiez-clipboard](https://github.com/jimuzhe/tiez-clipboard)。
 
+## 下载安装
+
+- **Windows 安装包（amd64，v0.1.3）**：[mytiez-setup-0.1.3-amd64.exe](https://github.com/llxo/MyTieZ/releases/download/v0.1.3/mytiez-setup-0.1.3-amd64.exe)
+- **全部版本**：[GitHub Releases](https://github.com/llxo/MyTieZ/releases/latest)
+
 ## 功能特性
 
 - **多类型剪贴板历史**：支持纯文本、富文本（HTML 预览）、链接（URL）、代码片段、图片（缩略图预览）与文件列表，内置启发式链接/代码识别。

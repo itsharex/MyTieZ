@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -465,5 +466,40 @@ func TestPrivacyDetectionAndMasking(t *testing.T) {
 	}
 	if !HasSensitiveTag(it.Tags) {
 		t.Fatalf("expected saved item tagged sensitive, got %+v", it.Tags)
+	}
+}
+
+func TestListSummariesRichTextAndLargePinyin(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	richHTML := `<b>重点</b>内容`
+	if _, err := st.SaveText("重点内容", SaveOptions{HTML: richHTML}); err != nil {
+		t.Fatal(err)
+	}
+	summaries, err := st.ListSummaries("", KindRichText, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summaries) != 1 || summaries[0].HTML != richHTML {
+		t.Fatalf("expected rich_text summary HTML %q, got %+v", richHTML, summaries)
+	}
+
+	largeText := strings.Repeat("a", 1100) + " 微信支付"
+	if _, err := st.SaveText(largeText, SaveOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := st.ListSummaries("wxzf", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 || hits[0].Kind != KindText {
+		t.Fatalf("expected pinyin search to match large text, got %+v", hits)
+	}
+	if hits[0].Text != "" {
+		t.Fatalf("expected large text cleared in summary result, got len=%d", len(hits[0].Text))
 	}
 }

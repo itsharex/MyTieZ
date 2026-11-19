@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
 
 	"mytiez/internal/store"
@@ -96,6 +97,7 @@ type clipApp struct {
 	hotkeyMods         ui.Modifiers
 	hotkeyHandle       ui.Handle
 	pendingToast       string
+	memTrimming        atomic.Bool
 }
 
 func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
@@ -140,7 +142,7 @@ func Run(iconPNG []byte) {
 	mygo.App.WhenReady(app.ready)
 
 	if err := mygo.App.Run(); err != nil {
-		log.Fatal(err)
+		log.Printf("run app: %v", err)
 	}
 }
 
@@ -382,8 +384,9 @@ func (a *clipApp) releaseHiddenMemory() {
 	if !overMemory {
 		return
 	}
-	if mygo.App.IsReady() {
+	if mygo.App.IsReady() && a.memTrimming.CompareAndSwap(false, true) {
 		go func() {
+			defer a.memTrimming.Store(false)
 			if sys.WorkingSetBytes() > sys.MemoryTrimThresholdBytes {
 				debug.FreeOSMemory()
 				sys.TrimMemory()

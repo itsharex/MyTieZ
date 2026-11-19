@@ -321,6 +321,7 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 
 	hovered := row.Hovered()
 	pressed := row.Pressed()
+	selected := a.selected >= 0 && a.selected == row.Index
 	bg := t.Surface
 	borderColor := t.Border
 	var translateY float32
@@ -332,6 +333,13 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 		shadowAlpha = 0.04
 		if t.Dark {
 			shadowAlpha = 0.16
+		}
+	case selected:
+		bg = t.Surface.Mix(t.Accent, 0.08)
+		borderColor = t.Accent
+		shadowAlpha = 0.08
+		if t.Dark {
+			shadowAlpha = 0.28
 		}
 	case hovered:
 		borderColor = t.Border.Mix(t.TextMuted, 0.28)

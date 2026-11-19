@@ -365,14 +365,24 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 					kind := k
 					label := kindLabels[kind]
 					checked := slices.Contains(a.settings.PrivacyKinds, kind)
-					ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-						cb := checked
-						if ui.Checkbox(c, &cb, "").Label(label).Changed() {
-							a.togglePrivacyKind(kind)
-						}
-						ui.Text(c, label).FontSize(12.5).TextColor(t.Text).SingleLine().
-							OnClick(func() { a.togglePrivacyKind(kind) })
-					})
+					ui.ButtonBase(c).Row().AlignItems(ui.Center).Gap(6).Label(label).
+						OnClick(func() { a.togglePrivacyKind(kind) }).
+						Children(func() {
+							boxBg := t.Background
+							boxBorder := t.Border
+							if checked {
+								boxBg = t.Accent
+								boxBorder = t.Accent
+							}
+							ui.Box(c).Size(15, 15).Center().Radius(4).
+								Background(boxBg).Border(1, boxBorder).Transition(colorTransition).
+								Children(func() {
+									if checked {
+										ui.Text(c, "✓").FontSize(10).Bold().TextColor(t.AccentText)
+									}
+								})
+							ui.Text(c, label).FontSize(12.5).TextColor(t.Text).SingleLine()
+						})
 				}
 			})
 		})

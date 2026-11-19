@@ -732,7 +732,7 @@ func TestLightweightSettings(t *testing.T) {
 	if err := tt.Click("切换粘贴后删除"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 320)
 	tt.Advance(250 * time.Millisecond)
 	if err := tt.Click("Ctrl+V"); err != nil {
 		t.Fatal(err)
@@ -752,7 +752,7 @@ func TestLightweightSettings(t *testing.T) {
 	if !a.settings.DeleteAfterPaste || a.settings.QuickPasteModifier != "alt" {
 		t.Fatalf("expected DeleteAfterPaste=true and QuickPasteModifier=alt, got %+v", a.settings)
 	}
-	tt.Wheel(panelWidth/2, panelHeight/2, 0, -200)
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, -320)
 	tt.Advance(250 * time.Millisecond)
 	if err := tt.Click("剪贴板设置"); err != nil {
 		t.Fatal(err)

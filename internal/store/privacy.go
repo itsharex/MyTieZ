@@ -3,6 +3,7 @@ package store
 import (
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 )
 
@@ -31,6 +32,42 @@ func HasSensitiveTag(tags []string) bool {
 		}
 	}
 	return false
+}
+
+var (
+	customRulesMu     sync.RWMutex
+	cachedCustomInput string
+	cachedCustomRegex []*regexp.Regexp
+)
+
+func compiledCustomRules(customRules string) []*regexp.Regexp {
+	if strings.TrimSpace(customRules) == "" {
+		return nil
+	}
+	customRulesMu.RLock()
+	if customRules == cachedCustomInput {
+		res := cachedCustomRegex
+		customRulesMu.RUnlock()
+		return res
+	}
+	customRulesMu.RUnlock()
+
+	var compiled []*regexp.Regexp
+	for _, rawLine := range strings.Split(customRules, "\n") {
+		rule := strings.TrimSpace(rawLine)
+		if rule == "" || strings.HasPrefix(rule, "#") {
+			continue
+		}
+		if re, err := regexp.Compile(rule); err == nil {
+			compiled = append(compiled, re)
+		}
+	}
+
+	customRulesMu.Lock()
+	cachedCustomInput = customRules
+	cachedCustomRegex = compiled
+	customRulesMu.Unlock()
+	return compiled
 }
 
 // ContainsSensitiveInfo checks text against enabled built-in kinds and custom regex lines.
@@ -67,12 +104,8 @@ func ContainsSensitiveInfo(text string, kinds []string, customRules string) bool
 		return true
 	}
 
-	for _, rawLine := range strings.Split(customRules, "\n") {
-		rule := strings.TrimSpace(rawLine)
-		if rule == "" || strings.HasPrefix(rule, "#") {
-			continue
-		}
-		if re, err := regexp.Compile(rule); err == nil && re.MatchString(text) {
+	for _, re := range compiledCustomRules(customRules) {
+		if re.MatchString(text) {
 			return true
 		}
 	}

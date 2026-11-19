@@ -668,7 +668,12 @@ func (s *Store) listItems(query string, kind ClipKind, limit int, summary bool) 
 
 	cols := "id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
 	if summary {
-		cols = "id, kind, content_hash, CASE WHEN length(text_content) <= 1024 THEN text_content ELSE '' END, CASE WHEN kind = 'richtext' THEN substr(html_content, 1, 8192) ELSE '' END, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
+		textCol := "CASE WHEN length(text_content) <= 1024 THEN text_content ELSE '' END"
+		if pinyinSearch {
+			// 拼音搜索最多匹配前 2048 个 rune，取前 8192 字符参与匹配后若超过 1024 字节再清空，兼顾召回与内存占用
+			textCol = "substr(text_content, 1, 8192)"
+		}
+		cols = "id, kind, content_hash, " + textCol + ", CASE WHEN kind = 'rich_text' THEN substr(html_content, 1, 8192) ELSE '' END, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
 	}
 
 	rows, err := s.db.Query(`
@@ -691,6 +696,9 @@ LIMIT ?
 		}
 		if pinyinSearch && !itemMatchesKeyword(it, kw) {
 			continue
+		}
+		if summary && pinyinSearch && len(it.Text) > 1024 {
+			it.Text = ""
 		}
 		items = append(items, it)
 		if len(items) >= limit {

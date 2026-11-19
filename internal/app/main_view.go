@@ -733,19 +733,27 @@ func (a *clipApp) renderImagePreview(c *ui.Context, item store.ClipItem) {
 	}
 	if bmp := a.getOrLoadThumb(item.ImagePath); bmp != nil {
 		iw, ih := bmp.Size()
-		// 横宽图直接用 FillWidth + MaxHeight 交由布局引擎按 aspect 自动撑满卡片真实内容宽度
+		// 横宽图使用 FillWidth + Cover 铺满卡片内容宽度，避免 1px 边框或最小高度限制导致左右/上下留白
 		if !a.settings.CompactMode && iw > 0 && ih > 0 && float32(iw) >= maxW && float32(iw)*maxH/float32(ih) >= maxW {
-			ui.Image(c, bmp).FillWidth().MinHeight(24).MaxHeight(maxH).Fit(ui.Contain).
-				Radius(radiusControl).Border(1, t.Border)
+			estH := max(float32(28), maxW*float32(ih)/float32(iw))
+			ui.Image(c, bmp).FillWidth().MinHeight(28).MaxHeight(maxH).Fit(ui.Cover).
+				Radius(imagePreviewRadius(estH)).Border(1, t.Border)
 			return
 		}
 		w, h := fitImageSize(bmp, maxW, maxH)
-		ui.Image(c, bmp).Size(w, h).Fit(ui.Contain).Radius(radiusControl).
+		ui.Image(c, bmp).Size(w, h).Fit(ui.Cover).Radius(imagePreviewRadius(min(w, h))).
 			Border(1, t.Border)
 		return
 	}
 	// 异步加载完成前保持占位高度，防止列表发生跳动
 	ui.Box(c).Size(min(100, maxW), maxH).Radius(radiusControl).Background(t.SurfaceHover)
+}
+
+func imagePreviewRadius(shortSide float32) float32 {
+	if shortSide >= 56 {
+		return radiusControl
+	}
+	return max(radiusMicro, min(radiusControl, shortSide*0.25))
 }
 
 func fitImageSize(bmp *ui.Bitmap, maxW, maxH float32) (float32, float32) {

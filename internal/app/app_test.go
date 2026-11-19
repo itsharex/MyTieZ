@@ -1,7 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"image"
+	"image/color"
+	"image/png"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -1393,6 +1396,58 @@ func TestWideImagePreviewFitsCardWidth(t *testing.T) {
 		if h <= 0 || h > 100 {
 			t.Fatalf("winW=%d: expected fitted height in (0, 100], got %.1f", winW, h)
 		}
+	}
+
+	// 验证超宽长图（如 1654x157 降采样到 720x68）实际渲染时水平填满卡片内容宽度，无左右留白
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	img := image.NewRGBA(image.Rect(0, 0, 720, 68))
+	red := color.RGBA{R: 220, G: 40, B: 40, A: 255}
+	for y := 0; y < 68; y++ {
+		for x := 0; x < 720; x++ {
+			img.SetRGBA(x, y, red)
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	it, err := st.SaveImage(buf.Bytes(), store.SaveOptions{Deduplicate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appInst := newClipApp(st, nil)
+	appInst.thumbs.items[it.ImagePath] = ui.NewBitmap(img)
+	appInst.reload()
+
+	tt := ui.NewTester(appInst.view, panelWidth, panelHeight)
+	tt.SetScale(1)
+	tt.Frame()
+	shot := tt.Image()
+	bounds := shot.Bounds()
+	// 查找红色图片像素分布的水平跨度，应填满卡片内容宽度（panelWidth - 60 = 340，含 1px 边框）
+	minX, maxX := bounds.Max.X, bounds.Min.X
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			c := shot.RGBAAt(x, y)
+			if c.R > 180 && c.G < 80 && c.B < 80 {
+				if x < minX {
+					minX = x
+				}
+				if x > maxX {
+					maxX = x
+				}
+			}
+		}
+	}
+	renderedW := maxX - minX + 1
+	expectedMinW := int(appInst.cardContentWidth()) - 4
+	if renderedW < expectedMinW {
+		t.Fatalf("expected ultra-wide image to fill card content width (>= %dpx), got %dpx (minX=%d, maxX=%d)", expectedMinW, renderedW, minX, maxX)
 	}
 }
 

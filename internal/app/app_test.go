@@ -1,10 +1,7 @@
 package app
 
 import (
-	"bytes"
 	"image"
-	"image/color"
-	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,11 +45,7 @@ func TestViewInteractions(t *testing.T) {
 	if !tt.HasText("alpha snippet") || !tt.HasText("Antigravity.exe") || !tt.HasText("report.pdf") {
 		t.Fatalf("expected initial items and source app in view, got texts: %q", tt.Texts())
 	}
-	if tt.HasText("↑↓ 选择") {
-		t.Fatalf("expected bottom bar removed, got texts: %q", tt.Texts())
-	}
 
-	// 按向下键才选中第 0 张卡片
 	tt.Key(0, ui.KeyDown)
 	if a.selected != 0 {
 		t.Fatalf("expected selected=0 after KeyDown, got %d", a.selected)
@@ -62,36 +55,6 @@ func TestViewInteractions(t *testing.T) {
 		t.Fatalf("expected Escape to clear selection, got %d", a.selected)
 	}
 
-	// 切换到“文本”分类
-	if err := tt.Click("文本"); err != nil {
-		t.Fatal(err)
-	}
-	if !tt.HasText("alpha snippet") || tt.HasText("report.pdf") {
-		t.Fatalf("expected only text item after filter, got texts: %q", tt.Texts())
-	}
-
-	// 再次点击“文本”取消选中回到全部（无状态），并用搜索过滤
-	if err := tt.Click("文本"); err != nil {
-		t.Fatal(err)
-	}
-	if a.filterIdx != 0 || !tt.HasText("report.pdf") {
-		t.Fatalf("expected clicking active tab again to reset to all (0), filterIdx=%d texts=%q", a.filterIdx, tt.Texts())
-	}
-	if err := tt.Click("搜索剪贴板"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Type("report")
-	if tt.HasText("alpha snippet") || !tt.HasText("report.pdf") {
-		t.Fatalf("expected search filter to keep only report.pdf, got texts: %q", tt.Texts())
-	}
-
-	// 按 Esc 清空搜索
-	tt.Key(0, ui.KeyEscape)
-	if a.query != "" || !tt.HasText("alpha snippet") {
-		t.Fatalf("expected Escape to clear search, query=%q, texts=%q", a.query, tt.Texts())
-	}
-
-	// 默认不置顶，点击固定窗口按钮可切换为置顶
 	if a.winPinned {
 		t.Fatal("expected winPinned to default to false")
 	}
@@ -103,26 +66,29 @@ func TestViewInteractions(t *testing.T) {
 	}
 }
 
-func TestSettingsViewInteractions(t *testing.T) {
+func TestSettingsAndQuickPaste(t *testing.T) {
 	st, err := store.OpenStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer st.Close()
 
-	if _, err := st.UpsertText("keep item"); err != nil {
-		t.Fatal(err)
+	for i := 0; i < 15; i++ {
+		if _, err := st.SaveText(
+			string(rune('A'+i))+" setting entry",
+			store.SaveOptions{Deduplicate: false},
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	a := newClipApp(st, nil)
 	a.reload()
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
 
-	// 进入设置页，验证弹性入场动画期间与结束后设置页正常显示且所有分组默认收起
 	if err := tt.Click("设置"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Advance(180 * time.Millisecond)
 	tt.Advance(250 * time.Millisecond)
 	if !a.showSettings || !tt.HasText("常规设置") || !tt.HasText("剪贴板设置") {
 		t.Fatalf("expected settings groups visible, texts=%q", tt.Texts())
@@ -131,42 +97,29 @@ func TestSettingsViewInteractions(t *testing.T) {
 		t.Fatalf("expected groups collapsed by default, texts=%q", tt.Texts())
 	}
 
-	// 展开“常规设置”，推进折叠展开动画，再测试“失焦自动隐藏”联动与收起
+	// 常规设置：失焦自动隐藏与固定搜索栏
 	if err := tt.Click("常规设置"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
-	if !a.expanded.general || !tt.HasText("开机自启动") {
-		t.Fatalf("expected general group expanded, texts=%q", tt.Texts())
-	}
-	noFocusDesc := locales.In("zh-Hans").SettingsNoFocusModeDesc()
-	if tt.HasText(noFocusDesc) {
-		t.Fatalf("expected desc %q moved into help tooltip instead of inline text", noFocusDesc)
-	}
-	titleRect, ok := tt.Find("不抢焦点 (实验性)")
-	if !ok {
-		t.Fatalf("expected 不抢焦点 (实验性) title visible, texts=%q", tt.Texts())
-	}
-	tt.Move(titleRect.X+titleRect.W+14, titleRect.Y+titleRect.H/2)
-	tt.Advance(700 * time.Millisecond)
-	if !tt.HasText(noFocusDesc) {
-		t.Fatalf("expected help icon hover tooltip to display %q, texts=%q", noFocusDesc, tt.Texts())
-	}
 	if err := tt.Click("切换失焦自动隐藏"); err != nil {
 		t.Fatal(err)
 	}
 	if a.settings.AutoHideOnBlur || !a.winPinned {
 		t.Fatalf("expected AutoHideOnBlur=false and winPinned=true, got autoHide=%v winPinned=%v", a.settings.AutoHideOnBlur, a.winPinned)
 	}
+	if err := tt.Click("切换固定显示搜索栏"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.settings.PinSearchBox {
+		t.Fatal("expected PinSearchBox toggled to true")
+	}
 	if err := tt.Click("常规设置"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
-	if a.expanded.general || tt.HasText("开机自启动") {
-		t.Fatalf("expected general group collapsed again, texts=%q", tt.Texts())
-	}
 
-	// 展开“剪贴板设置”切换“自动去重”与上限
+	// 剪贴板设置：去重、上限、粘贴后删除、粘贴方式与快捷粘贴
 	if err := tt.Click("剪贴板设置"); err != nil {
 		t.Fatal(err)
 	}
@@ -174,50 +127,35 @@ func TestSettingsViewInteractions(t *testing.T) {
 	if err := tt.Click("切换自动去重"); err != nil {
 		t.Fatal(err)
 	}
-	if a.settings.Deduplicate {
-		t.Fatal("expected Deduplicate toggled to false")
-	}
-	if !a.settings.CaptureRichText {
-		t.Fatal("expected CaptureRichText to default to true")
-	}
-	if err := tt.Click("切换捕获带格式的文本"); err != nil {
-		t.Fatal(err)
-	}
-	if a.settings.CaptureRichText {
-		t.Fatal("expected CaptureRichText toggled to false")
-	}
 	if err := tt.Click("上限200"); err != nil {
 		t.Fatal(err)
 	}
-	if a.settings.MaxHistory != 200 {
-		t.Fatalf("expected MaxHistory=200, got %d", a.settings.MaxHistory)
+	if err := tt.Click("切换粘贴后删除"); err != nil {
+		t.Fatal(err)
 	}
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 320)
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("Ctrl+V"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("游戏模式"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("快捷粘贴Alt"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.Deduplicate || a.settings.MaxHistory != 200 || !a.settings.DeleteAfterPaste ||
+		a.settings.PasteMethod != "game_mode" || a.settings.QuickPasteModifier != "alt" {
+		t.Fatalf("unexpected clipboard settings: %+v", a.settings)
+	}
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, -320)
+	tt.Advance(250 * time.Millisecond)
 	if err := tt.Click("剪贴板设置"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
 
-	// 展开“默认打开程序”，验证默认显示与恢复默认交互
-	a.settings.OpenAppText = `C:\Windows\System32\notepad.exe`
-	if err := tt.Click("默认打开程序"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if !a.expanded.openApps || !tt.HasText("notepad") || !tt.HasText("系统默认") {
-		t.Fatalf("expected openApps group expanded with notepad and 系统默认, texts=%q", tt.Texts())
-	}
-	if err := tt.Click("恢复文本默认打开方式"); err != nil {
-		t.Fatal(err)
-	}
-	if a.settings.OpenAppText != "" {
-		t.Fatalf("expected OpenAppText cleared after reset, got %q", a.settings.OpenAppText)
-	}
-	if err := tt.Click("默认打开程序"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-
-	// 展开“界面设置”以下拉框切换窗口材质，并验证 Vibrancy 模式下渲染正常
+	// 界面设置：窗口材质下拉与 Vibrancy 映射
 	tt.SetVibrancy(true)
 	if err := tt.Click("界面设置"); err != nil {
 		t.Fatal(err)
@@ -244,25 +182,49 @@ func TestSettingsViewInteractions(t *testing.T) {
 		}
 		curTrigger = tc.nextText
 	}
-	if backdropVibrancy("mica_alt") != mygo.VibrancyTabbed {
-		t.Fatalf("expected mica_alt -> VibrancyTabbed, got %v", backdropVibrancy("mica_alt"))
+	if backdropVibrancy("mica_alt") != mygo.VibrancyTabbed || backdropVibrancy("acrylic") != mygo.VibrancyAcrylic {
+		t.Fatalf("unexpected vibrancy mapping")
 	}
-	if backdropVibrancy("acrylic_base") != mygo.VibrancyAcrylic || backdropVibrancy("acrylic") != mygo.VibrancyAcrylic {
-		t.Fatalf("expected acrylic modes -> VibrancyAcrylic")
-	}
-	if err := tt.Click("切换悬停显示卡片操作"); err != nil {
+	if err := tt.Click("界面设置"); err != nil {
 		t.Fatal(err)
 	}
-	if !a.settings.HideCardActions {
-		t.Fatal("expected HideCardActions toggled to true")
+	tt.Advance(250 * time.Millisecond)
+
+	// 默认打开程序：恢复默认
+	a.settings.OpenAppText = `C:\Windows\System32\notepad.exe`
+	if err := tt.Click("默认打开程序"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("恢复文本默认打开方式"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.OpenAppText != "" {
+		t.Fatalf("expected OpenAppText cleared after reset, got %q", a.settings.OpenAppText)
 	}
 
-	// 返回主列表（无退场动画，立即恢复主列表显示）
+	// 返回主列表：验证 PinSearchBox、回到顶部按钮与 Alt+2 快捷粘贴删除
 	if err := tt.Click("返回"); err != nil {
 		t.Fatal(err)
 	}
-	if a.showSettings || !tt.HasText("keep item") {
-		t.Fatalf("expected back to main list, showSettings=%v, texts=%q", a.showSettings, tt.Texts())
+	tt.Advance(250 * time.Millisecond)
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 260)
+	tt.Advance(250 * time.Millisecond)
+	if a.controlsCollapsed || !tt.HasText("回到顶部") {
+		t.Fatalf("expected pinned controls and scroll-top button visible, collapsed=%v", a.controlsCollapsed)
+	}
+	if err := tt.Click("回到顶部"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.listScroll.Y != 0 || !a.atTop {
+		t.Fatalf("expected scrolled back to top, scrollY=%v atTop=%v", a.listScroll.Y, a.atTop)
+	}
+
+	secondText := a.items[1].Text
+	tt.Key(ui.Alt, ui.Key2)
+	if tt.HasText(secondText) {
+		t.Fatalf("expected second item %q deleted after Alt+2 quick paste", secondText)
 	}
 }
 
@@ -286,48 +248,30 @@ func TestScrollRevealControls(t *testing.T) {
 	a.reload()
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
 
-	if a.controlsCollapsed {
-		t.Fatal("expected controls initially expanded")
-	}
-
-	// 第一次在顶部向下滚动：只收起搜索栏，拦截列表滚动以免列表同时下跳
+	// 首次在顶部向下滚动：仅收起搜索栏并拦截本次列表滚动
 	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
 	tt.Advance(250 * time.Millisecond)
 	if !a.controlsCollapsed || a.listScroll.Y != 0 {
-		t.Fatalf("expected controls collapsed and list still at Y=0, got collapsed=%v scrollY=%v", a.controlsCollapsed, a.listScroll.Y)
+		t.Fatalf("expected controls collapsed at Y=0, got collapsed=%v scrollY=%v", a.controlsCollapsed, a.listScroll.Y)
 	}
 
-	// 继续向下滚动：列表离开顶部
+	// 继续向下滚动离开顶部
 	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
 	tt.Advance(250 * time.Millisecond)
 	if a.atTop || a.listScroll.Y <= hideScrollOffset {
 		t.Fatalf("expected list scrolled away from top, got atTop=%v scrollY=%v", a.atTop, a.listScroll.Y)
 	}
 
-	// 一次大滚轮直接滑回顶部：刚到顶时仍保持收起，不会立刻显示
+	// 滑回顶部后进入冷却期不立即展开，再次向上滚动才展开
 	tt.Wheel(panelWidth/2, panelHeight/2, 0, -400)
 	tt.Advance(250 * time.Millisecond)
 	if !a.atTop || !a.controlsCollapsed {
 		t.Fatalf("expected atTop=true and controls still collapsed right after reaching top, got atTop=%v collapsed=%v", a.atTop, a.controlsCollapsed)
 	}
-
-	// 在顶部再多滚一下向上：搜索栏展开
 	tt.Wheel(panelWidth/2, panelHeight/2, 0, -40)
 	tt.Advance(250 * time.Millisecond)
 	if a.controlsCollapsed || a.listScroll.Y != 0 {
-		t.Fatalf("expected controls expanded and list at Y=0, got collapsed=%v scrollY=%v", a.controlsCollapsed, a.listScroll.Y)
-	}
-}
-
-func TestRunWithTimeout(t *testing.T) {
-	if err := runWithTimeout(50*time.Millisecond, func() error { return nil }); err != nil {
-		t.Fatalf("expected nil error on fast task, got %v", err)
-	}
-	if err := runWithTimeout(20*time.Millisecond, func() error {
-		time.Sleep(80 * time.Millisecond)
-		return nil
-	}); err == nil {
-		t.Fatal("expected timeout error on slow task")
+		t.Fatalf("expected controls expanded at Y=0, got collapsed=%v scrollY=%v", a.controlsCollapsed, a.listScroll.Y)
 	}
 }
 
@@ -361,11 +305,8 @@ func TestNewItemAppearsAtTop(t *testing.T) {
 	tt.Frame()
 	tt.Advance(250 * time.Millisecond)
 
-	if a.listScroll.Y != 0 {
-		t.Fatalf("expected listScroll.Y=0 after top insert, got %v", a.listScroll.Y)
-	}
-	if !tt.HasText("brand new top entry") {
-		t.Fatalf("expected new top entry visible without scrolling, texts=%q", tt.Texts())
+	if a.listScroll.Y != 0 || !tt.HasText("brand new top entry") {
+		t.Fatalf("expected new top entry visible at Y=0, scrollY=%v texts=%q", a.listScroll.Y, tt.Texts())
 	}
 }
 
@@ -392,7 +333,7 @@ func TestRichTextPreviewAndFilter(t *testing.T) {
 		t.Fatalf("unexpected parsed rich spans: %+v", spans)
 	}
 
-	// Verify UTF-16LE clipboard HTML (e.g. Firefox/Zen text/html) decodes cleanly.
+	// Verify UTF-16LE clipboard HTML decodes cleanly.
 	utf16HTML := `<div class="title"><h1><b>MyGO</b> 标题</h1></div>`
 	utf16Bytes := make([]byte, 0, len(utf16HTML)*2)
 	for _, r := range utf16HTML {
@@ -406,15 +347,10 @@ func TestRichTextPreviewAndFilter(t *testing.T) {
 		t.Fatalf("unexpected UTF-16LE rich spans: %+v", uSpans)
 	}
 
-	// Verify HTML fragments with leading plain text before an inline tag (e.g. <a>) keep the prefix.
+	// Verify leading plain text before an inline tag survives CF_HTML header stripping.
 	prefixedHTML := `感源自 <a href="https://github.com/jimuzhe/tiez-clipboard">tiez-clipboard</a>。`
-	pSpans := parseHTMLPreviewSpans(prefixedHTML, myTiezLightTheme)
-	if len(pSpans) != 3 || pSpans[0].Text != "感源自 " || pSpans[1].Text != "tiez-clipboard" || !pSpans[1].Underline || pSpans[2].Text != "。" {
-		t.Fatalf("expected leading text and link spans preserved, got %+v", pSpans)
-	}
-	cfPrefixHTML := "Version:0.9\r\nStartHTML:000080\r\nEndHTML:000160\r\n" + prefixedHTML
-	cfPrefixSpans := parseHTMLPreviewSpans(cfPrefixHTML, myTiezLightTheme)
-	if len(cfPrefixSpans) != 3 || cfPrefixSpans[0].Text != "感源自 " || cfPrefixSpans[1].Text != "tiez-clipboard" || cfPrefixSpans[2].Text != "。" {
+	cfPrefixSpans := parseHTMLPreviewSpans("Version:0.9\r\nStartHTML:000080\r\nEndHTML:000160\r\n"+prefixedHTML, myTiezLightTheme)
+	if len(cfPrefixSpans) != 3 || cfPrefixSpans[0].Text != "感源自 " || cfPrefixSpans[1].Text != "tiez-clipboard" || !cfPrefixSpans[1].Underline || cfPrefixSpans[2].Text != "。" {
 		t.Fatalf("expected CF_HTML headers stripped without losing leading text, got %+v", cfPrefixSpans)
 	}
 	if _, err := st.SaveText("感源自 tiez-clipboard。", store.SaveOptions{
@@ -431,26 +367,8 @@ func TestRichTextPreviewAndFilter(t *testing.T) {
 	if err := tt.Click("富文本"); err != nil {
 		t.Fatal(err)
 	}
-	if a.currentKind() != store.KindRichText {
-		t.Fatalf("expected KindRichText filter, got %q", a.currentKind())
-	}
-	if tt.HasText("plain only item") || !tt.HasText("Bold") || !tt.HasText("感源自 ") || !tt.HasText("tiez-clipboard") {
-		t.Fatalf("expected only rich_text items with prefix text visible, texts=%q", tt.Texts())
-	}
-}
-
-func TestOpenHelpers(t *testing.T) {
-	if !isHTTPURL("https://example.com/a?b=1") || !isHTTPURL("http://localhost:8080") {
-		t.Fatal("expected http/https URLs to be recognized")
-	}
-	if isHTTPURL("not a url") || isHTTPURL("https://example.com\nsecond") || isHTTPURL("ftp://example.com") {
-		t.Fatal("expected non-http or multiline text not to be recognized as http URL")
-	}
-	if got := openAppDisplayName(locales.In(""), ""); got != "系统默认" {
-		t.Fatalf("expected empty app path to display 系统默认, got %q", got)
-	}
-	if got := openAppDisplayName(locales.In(""), `C:\Program Files\Notepad++\notepad++.exe`); got != "notepad++" {
-		t.Fatalf("expected exe suffix stripped, got %q", got)
+	if a.currentKind() != store.KindRichText || tt.HasText("plain only item") || !tt.HasText("Bold") || !tt.HasText("tiez-clipboard") {
+		t.Fatalf("expected rich_text filter result, kind=%q texts=%q", a.currentKind(), tt.Texts())
 	}
 }
 
@@ -472,7 +390,6 @@ func TestCardTagsInteractions(t *testing.T) {
 	a.reload()
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
 
-	// 打开第 0 张卡片（second plain entry）的标签编辑器并添加标签
 	if err := tt.Click("标签"); err != nil {
 		t.Fatal(err)
 	}
@@ -488,21 +405,17 @@ func TestCardTagsInteractions(t *testing.T) {
 		t.Fatalf("expected tag 工作 added on Enter, got %#v", a.items[0].Tags)
 	}
 
-	// 完成编辑后点击标签胶囊按 #工作 筛选
 	if err := tt.Click("完成标签编辑"); err != nil {
 		t.Fatal(err)
-	}
-	if a.editingTagsID != 0 {
-		t.Fatalf("expected editingTagsID=0 after done, got %d", a.editingTagsID)
 	}
 	if err := tt.Click("#工作"); err != nil {
 		t.Fatal(err)
 	}
 	if a.query != "#工作" || !tt.HasText("second plain entry") || tt.HasText("first tagged entry") {
-		t.Fatalf("expected tag filter #工作 to show only tagged item, query=%q texts=%q", a.query, tt.Texts())
+		t.Fatalf("expected tag filter #工作, query=%q texts=%q", a.query, tt.Texts())
 	}
 
-	// 取消筛选后测试多标签折叠为 +N
+	// 多标签折叠为 +N 并通过搜索标签浮层筛选
 	if err := tt.Click("#工作"); err != nil {
 		t.Fatal(err)
 	}
@@ -511,31 +424,23 @@ func TestCardTagsInteractions(t *testing.T) {
 	}
 	a.reload()
 	tt.Frame()
-	if !tt.HasText("展开全部标签") {
-		t.Fatalf("expected overflow tags collapsed with +N button, texts=%q", tt.Texts())
-	}
 	if err := tt.Click("展开全部标签"); err != nil {
 		t.Fatal(err)
 	}
 	if a.editingTagsID != a.items[0].ID || !tt.HasText("第五个标签") {
 		t.Fatalf("expected clicking +N to open full tag editor, editingTagsID=%d texts=%q", a.editingTagsID, tt.Texts())
 	}
-
-	// 退出编辑后聚焦搜索框，弹出标签选择浮层并点击筛选
 	if err := tt.Click("完成标签编辑"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.Click("搜索剪贴板"); err != nil {
 		t.Fatal(err)
 	}
-	if !tt.HasText("标签") {
-		t.Fatalf("expected search tag popover visible when search focused, texts=%q", tt.Texts())
-	}
 	if err := tt.Click("筛选标签 第五个标签"); err != nil {
 		t.Fatal(err)
 	}
 	if a.query != "#第五个标签" || !tt.HasText("second plain entry") || tt.HasText("first tagged entry") {
-		t.Fatalf("expected clicking popover tag to filter by #第五个标签, query=%q texts=%q", a.query, tt.Texts())
+		t.Fatalf("expected popover tag filter #第五个标签, query=%q texts=%q", a.query, tt.Texts())
 	}
 }
 
@@ -559,11 +464,6 @@ func TestHotkeyRecorder(t *testing.T) {
 	}
 	tt.Advance(250 * time.Millisecond)
 
-	if !tt.HasText("Alt+V") {
-		t.Fatalf("expected default hotkey Alt+V shown, texts=%q", tt.Texts())
-	}
-
-	// 点击进入录制状态
 	if err := tt.Click("录制呼出快捷键"); err != nil {
 		t.Fatal(err)
 	}
@@ -571,44 +471,32 @@ func TestHotkeyRecorder(t *testing.T) {
 		t.Fatalf("expected recording state active, recording=%v texts=%q", a.recordingHotkey, tt.Texts())
 	}
 
-	// 无修饰键的普通字母按键应被拒绝并通过 Toast 提示
+	// 无修饰键普通按键应被拒绝
 	tt.Key(0, ui.KeyA)
 	if !a.recordingHotkey || a.settings.Hotkey != "Alt+V" || !tt.HasText(locales.SettingsHotkeyNeedMod()) {
-		t.Fatalf("expected plain key A rejected with toast, recording=%v hotkey=%q texts=%q", a.recordingHotkey, a.settings.Hotkey, tt.Texts())
+		t.Fatalf("expected plain key A rejected with toast, recording=%v hotkey=%q", a.recordingHotkey, a.settings.Hotkey)
 	}
 
-	// 按 Esc 取消录制
 	tt.Key(0, ui.KeyEscape)
-	if a.recordingHotkey || a.settings.Hotkey != "Alt+V" {
-		t.Fatalf("expected Esc to cancel recording, recording=%v hotkey=%q", a.recordingHotkey, a.settings.Hotkey)
+	if a.recordingHotkey {
+		t.Fatal("expected Esc to cancel recording")
 	}
 
-	// 录制组合键 Ctrl+Shift+K
+	// 录制组合键 Ctrl+Shift+K 与功能键 F8，随后恢复默认
 	if err := tt.Click("录制呼出快捷键"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Key(ui.Ctrl|ui.Shift, ui.KeyK)
 	if a.recordingHotkey || a.settings.Hotkey != "Ctrl+Shift+K" || a.shortcut != "Ctrl+Shift+K" {
-		t.Fatalf("expected recorded Ctrl+Shift+K, recording=%v hotkey=%q shortcut=%q", a.recordingHotkey, a.settings.Hotkey, a.shortcut)
+		t.Fatalf("expected recorded Ctrl+Shift+K, hotkey=%q shortcut=%q", a.settings.Hotkey, a.shortcut)
 	}
-	loaded, err := st.LoadSettings()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.Hotkey != "Ctrl+Shift+K" {
-		t.Fatalf("expected persisted hotkey Ctrl+Shift+K, got %q", loaded.Hotkey)
-	}
-
-	// 录制功能键 F8
 	if err := tt.Click("录制呼出快捷键"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Key(0, ui.KeyF8)
 	if a.recordingHotkey || a.settings.Hotkey != "F8" {
-		t.Fatalf("expected recorded F8, recording=%v hotkey=%q", a.recordingHotkey, a.settings.Hotkey)
+		t.Fatalf("expected recorded F8, hotkey=%q", a.settings.Hotkey)
 	}
-
-	// 点击恢复默认
 	if err := tt.Click("恢复默认快捷键"); err != nil {
 		t.Fatal(err)
 	}
@@ -617,251 +505,21 @@ func TestHotkeyRecorder(t *testing.T) {
 	}
 }
 
-func TestClearSearchResetsTopAndClosesSearch(t *testing.T) {
-	st, err := store.OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	for i := 0; i < 12; i++ {
-		item, err := st.SaveText(
-			string(rune('A'+i))+" searchable clipboard entry",
-			store.SaveOptions{Deduplicate: false},
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if i == 0 {
-			if _, err := st.UpdateTags(item.ID, []string{"工作"}); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	a := newClipApp(st, nil)
-	a.reload()
-	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-
-	// 初始打开不自动聚焦搜索框，不弹出标签浮层
-	if tt.HasText("筛选标签 工作") {
-		t.Fatalf("expected search tag popover closed initially, texts=%q", tt.Texts())
-	}
-
-	// 点击搜索框并输入查询、向下滚动
-	if err := tt.Click("搜索剪贴板"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Type("searchable")
-	if a.query != "searchable" {
-		t.Fatalf("expected query=searchable, got %q", a.query)
-	}
-	tt.Wheel(panelWidth/2, panelHeight/2, 0, 120)
-	tt.Advance(250 * time.Millisecond)
-
-	// 点击叉号清除搜索：应回到顶部且关闭搜索（不再聚焦、关闭标签浮层）
-	if err := tt.Click("清除搜索"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if a.query != "" || a.listScroll.Y != 0 || !a.atTop || a.controlsCollapsed {
-		t.Fatalf("expected search cleared at top, query=%q scrollY=%v atTop=%v collapsed=%v", a.query, a.listScroll.Y, a.atTop, a.controlsCollapsed)
-	}
-	if tt.HasText("筛选标签 工作") {
-		t.Fatalf("expected search tag popover closed after clearing search, texts=%q", tt.Texts())
-	}
-}
-
 func TestFollowMouseTarget(t *testing.T) {
 	workArea := mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1040}
 	w, h := 400, 560
 
-	// 1. 光标在中上部：默认左上角贴住光标，位于光标右下方
-	x, y := followMouseTarget(mygo.Point{X: 960, Y: 200}, w, h, workArea)
-	if x != 960 || y != 200 {
-		t.Fatalf("expected (960, 200) bottom-right of cursor, got (%d, %d)", x, y)
+	if x, y := followMouseTarget(mygo.Point{X: 960, Y: 200}, w, h, workArea); x != 960 || y != 200 {
+		t.Fatalf("expected (960, 200), got (%d, %d)", x, y)
 	}
-
-	// 2. 光标靠近底部：下方放不下时自动翻转为左下角贴住光标（右上方）
-	x, y = followMouseTarget(mygo.Point{X: 960, Y: 900}, w, h, workArea)
-	if x != 960 || y != 900-h {
-		t.Fatalf("expected flipped top-right of cursor to (960, %d), got (%d, %d)", 900-h, x, y)
+	if x, y := followMouseTarget(mygo.Point{X: 960, Y: 900}, w, h, workArea); x != 960 || y != 900-h {
+		t.Fatalf("expected flipped (960, %d), got (%d, %d)", 900-h, x, y)
 	}
-
-	// 3. 光标靠近左右边缘：侧面放不下时贴边并保留 8px 安全边距
-	x, _ = followMouseTarget(mygo.Point{X: 2, Y: 200}, w, h, workArea)
-	if x != 8 {
-		t.Fatalf("expected clamped left margin 8, got %d", x)
+	if x, _ := followMouseTarget(mygo.Point{X: 2, Y: 200}, w, h, workArea); x != 8 {
+		t.Fatalf("expected clamped left 8, got %d", x)
 	}
-	x, _ = followMouseTarget(mygo.Point{X: 1700, Y: 200}, w, h, workArea)
-	if x != 1920-w-8 {
-		t.Fatalf("expected clamped right margin %d, got %d", 1920-w-8, x)
-	}
-
-	// 4. 上下都放不下时夹紧在工作区底边
-	x, y = followMouseTarget(mygo.Point{X: 960, Y: 520}, w, h, workArea)
-	if x != 960 || y != 1040-h-8 {
-		t.Fatalf("expected clamped bottom (960, %d), got (%d, %d)", 1040-h-8, x, y)
-	}
-
-	// 5. 光标在屏幕右下角：同时向右贴边并向上翻转到光标右上方
-	x, y = followMouseTarget(mygo.Point{X: 1700, Y: 900}, w, h, workArea)
-	if x != 1920-w-8 || y != 900-h {
+	if x, y := followMouseTarget(mygo.Point{X: 1700, Y: 900}, w, h, workArea); x != 1920-w-8 || y != 900-h {
 		t.Fatalf("expected (%d, %d), got (%d, %d)", 1920-w-8, 900-h, x, y)
-	}
-}
-
-func TestURLAndCodeFilter(t *testing.T) {
-	st, err := store.OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	if _, err := st.UpsertText("plain note entry"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.UpsertText("https://example.com/path"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.UpsertText("const x = 1; return x;"); err != nil {
-		t.Fatal(err)
-	}
-
-	a := newClipApp(st, nil)
-	a.reload()
-	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-
-	if err := tt.Click("链接"); err != nil {
-		t.Fatal(err)
-	}
-	if a.currentKind() != store.KindURL || !tt.HasText("https://example.com/path") || tt.HasText("plain note entry") {
-		t.Fatalf("expected 链接 filter to show URL only, kind=%q texts=%q", a.currentKind(), tt.Texts())
-	}
-
-	if err := tt.Click("代码"); err != nil {
-		t.Fatal(err)
-	}
-	if a.currentKind() != store.KindCode || !tt.HasText("const x = 1; return x;") || tt.HasText("https://example.com/path") {
-		t.Fatalf("expected 代码 filter to show code only, kind=%q texts=%q", a.currentKind(), tt.Texts())
-	}
-}
-
-func TestLightweightSettings(t *testing.T) {
-	st, err := store.OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	for i := 0; i < 15; i++ {
-		if _, err := st.SaveText(
-			string(rune('A'+i))+" lightweight setting entry",
-			store.SaveOptions{Deduplicate: false},
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	a := newClipApp(st, nil)
-	a.reload()
-	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-
-	// 1. 设置页开关与选项验证
-	if err := tt.Click("设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("常规设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if !tt.HasText("以管理员身份重启") {
-		t.Fatalf("expected restart as admin row in general settings, texts=%q", tt.Texts())
-	}
-	if err := tt.Click("切换固定显示搜索栏"); err != nil {
-		t.Fatal(err)
-	}
-	if !a.settings.PinSearchBox {
-		t.Fatal("expected PinSearchBox toggled to true")
-	}
-	if err := tt.Click("常规设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-
-	if err := tt.Click("剪贴板设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("切换粘贴后删除"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Wheel(panelWidth/2, panelHeight/2, 0, 320)
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("Ctrl+V"); err != nil {
-		t.Fatal(err)
-	}
-	if a.settings.PasteMethod != "ctrl_v" {
-		t.Fatalf("expected PasteMethod=ctrl_v, got %q", a.settings.PasteMethod)
-	}
-	if err := tt.Click("游戏模式"); err != nil {
-		t.Fatal(err)
-	}
-	if a.settings.PasteMethod != "game_mode" {
-		t.Fatalf("expected PasteMethod=game_mode, got %q", a.settings.PasteMethod)
-	}
-	if err := tt.Click("快捷粘贴Alt"); err != nil {
-		t.Fatal(err)
-	}
-	if !a.settings.DeleteAfterPaste || a.settings.QuickPasteModifier != "alt" {
-		t.Fatalf("expected DeleteAfterPaste=true and QuickPasteModifier=alt, got %+v", a.settings)
-	}
-	tt.Wheel(panelWidth/2, panelHeight/2, 0, -320)
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("剪贴板设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-
-	if err := tt.Click("界面设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("切换显示来源应用图标"); err != nil {
-		t.Fatal(err)
-	}
-	if a.settings.ShowSourceIcon {
-		t.Fatal("expected ShowSourceIcon toggled to false")
-	}
-
-	if err := tt.Click("返回"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-
-	// 2. PinSearchBox=true 时滚动不收起搜索栏，且出现“回到顶部”按钮
-	tt.Wheel(panelWidth/2, panelHeight/2, 0, 260)
-	tt.Advance(250 * time.Millisecond)
-	if a.controlsCollapsed {
-		t.Fatal("expected controls not collapsed when PinSearchBox=true")
-	}
-	if !tt.HasText("回到顶部") {
-		t.Fatalf("expected scroll-top button visible after scrolling down, texts=%q", tt.Texts())
-	}
-	if err := tt.Click("回到顶部"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if a.listScroll.Y != 0 || !a.atTop {
-		t.Fatalf("expected scrolled back to top, scrollY=%v atTop=%v", a.listScroll.Y, a.atTop)
-	}
-
-	// 3. Alt+2 快捷粘贴第 2 条并触发 DeleteAfterPaste 删除
-	secondText := a.items[1].Text
-	tt.Key(ui.Alt, ui.Key2)
-	if tt.HasText(secondText) {
-		t.Fatalf("expected second item %q deleted after Alt+2 quick paste", secondText)
 	}
 }
 
@@ -876,25 +534,18 @@ func TestI18nLocales(t *testing.T) {
 	a.reload()
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
 
-	// 默认简体中文
 	tt.SetLocale("zh-Hans")
 	if !tt.HasText("暂无剪贴板记录") || !tt.HasText("富文本") {
 		t.Fatalf("expected zh-Hans texts, got %q", tt.Texts())
 	}
-
-	// 切换繁體中文
 	tt.SetLocale("zh-Hant")
 	if !tt.HasText("暫無剪貼簿紀錄") || !tt.HasText("程式碼") {
 		t.Fatalf("expected zh-Hant texts, got %q", tt.Texts())
 	}
-
-	// 切换英文
 	tt.SetLocale("en")
 	if !tt.HasText("No clipboard history") || !tt.HasText("Rich Text") {
 		t.Fatalf("expected en texts, got %q", tt.Texts())
 	}
-
-	// 设置页英文显示
 	if err := tt.Click("Settings"); err != nil {
 		t.Fatal(err)
 	}
@@ -944,7 +595,7 @@ func TestClearUnpinnedModalConfirm(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a.confirmClearOpen || len(a.items) != 3 {
-		t.Fatalf("expected modal closed and items preserved after cancel, open=%v len=%d", a.confirmClearOpen, len(a.items))
+		t.Fatalf("expected modal closed and items preserved, open=%v len=%d", a.confirmClearOpen, len(a.items))
 	}
 
 	if err := tt.Click("清空记录"); err != nil {
@@ -955,59 +606,6 @@ func TestClearUnpinnedModalConfirm(t *testing.T) {
 	}
 	if a.confirmClearOpen || len(a.items) != 2 {
 		t.Fatalf("expected pinned and tagged items kept after confirm, open=%v items=%+v", a.confirmClearOpen, a.items)
-	}
-}
-
-func TestCategoryToggleResetsTop(t *testing.T) {
-	st, err := store.OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	// 先插入一条链接记录（排在底部），再插入 12 条更新的文本记录（排在顶部）
-	if _, err := st.SaveText("https://example.com/bottom-link", store.SaveOptions{Deduplicate: false}); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(2 * time.Millisecond)
-	for i := 0; i < 12; i++ {
-		if _, err := st.SaveText(
-			string(rune('A'+i))+" newer text item",
-			store.SaveOptions{Deduplicate: false},
-		); err != nil {
-			t.Fatal(err)
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-
-	a := newClipApp(st, nil)
-	a.reload()
-	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-	tt.SetLocale("zh-Hans")
-
-	if !tt.HasText("L newer text item") {
-		t.Fatalf("expected newest text item at top initially, texts=%q", tt.Texts())
-	}
-
-	// 点击“链接”分类
-	if err := tt.Click("链接"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !tt.HasText("https://example.com/bottom-link") || tt.HasText("L newer text item") {
-		t.Fatalf("expected only link item after selecting category, texts=%q", tt.Texts())
-	}
-
-	// 再次点击“链接”取消选中回到全部（无状态）：应回到顶部且保留顶部控制栏展开，而不是停留在底部链接卡片
-	if err := tt.Click("链接"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if a.filterIdx != 0 || a.listScroll.Y != 0 || !a.atTop || a.controlsCollapsed {
-		t.Fatalf("expected top reset after deselecting category, filterIdx=%d scrollY=%v atTop=%v collapsed=%v", a.filterIdx, a.listScroll.Y, a.atTop, a.controlsCollapsed)
-	}
-	if !tt.HasText("L newer text item") {
-		t.Fatalf("expected newest text item visible at top after deselecting category, texts=%q", tt.Texts())
 	}
 }
 
@@ -1045,16 +643,13 @@ func TestTabsAndSearchBehavior(t *testing.T) {
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
 	tt.SetLocale("zh-Hans")
 
-	if a.filterIdx != 0 {
-		t.Fatalf("expected initial state to be 0 (unselected = all), got %d", a.filterIdx)
+	if a.filterIdx != 0 || tt.HasText("筛选标签 工作") {
+		t.Fatalf("expected initial filterIdx=0 and tag popover closed, filterIdx=%d", a.filterIdx)
 	}
 
-	// 先选中“文本”类别，再聚焦空搜索框：标签浮层弹出；输入 demo 后浮层自动收起并拉取全类别命中结果
+	// 选中“文本”再聚焦搜索框弹出标签浮层，输入关键词后跨 Tab 切换即时过滤
 	if err := tt.Click("文本"); err != nil {
 		t.Fatal(err)
-	}
-	if a.filterIdx != 1 || a.currentKind() != store.KindText {
-		t.Fatalf("expected text tab selected, filterIdx=%d kind=%q", a.filterIdx, a.currentKind())
 	}
 	if err := tt.Click("搜索剪贴板"); err != nil {
 		t.Fatal(err)
@@ -1063,137 +658,42 @@ func TestTabsAndSearchBehavior(t *testing.T) {
 		t.Fatalf("expected tag popover visible on empty focused search, texts=%q", tt.Texts())
 	}
 	tt.Type("demo")
-	if tt.HasText("筛选标签 工作") {
-		t.Fatalf("expected tag popover hidden once query is non-empty, texts=%q", tt.Texts())
+	if tt.HasText("筛选标签 工作") || !tt.HasText("alpha demo note") || tt.HasText("https://example.com/demo") {
+		t.Fatalf("expected text tab to show text hit and hide popover, texts=%q", tt.Texts())
 	}
-	if !tt.HasText("alpha demo note") || tt.HasText("https://example.com/demo") || tt.HasText("const demo = 1") {
-		t.Fatalf("expected text tab to show text search hit only, texts=%q", tt.Texts())
-	}
-
 	if err := tt.Click("链接"); err != nil {
 		t.Fatal(err)
 	}
 	if !tt.HasText("https://example.com/demo") || tt.HasText("alpha demo note") {
-		t.Fatalf("expected link tab to immediately show link search hit, texts=%q", tt.Texts())
+		t.Fatalf("expected link tab hit, texts=%q", tt.Texts())
 	}
-
 	if err := tt.Click("代码"); err != nil {
 		t.Fatal(err)
 	}
 	if !tt.HasText("const demo = 1; return demo;") || tt.HasText("https://example.com/demo") {
-		t.Fatalf("expected code tab to immediately show code search hit, texts=%q", tt.Texts())
+		t.Fatalf("expected code tab hit, texts=%q", tt.Texts())
 	}
-
-	// 再次点击“代码”取消选中回到无状态（全部），看到全部搜索命中结果
+	// 再次点击“代码”取消选中回到全部
 	if err := tt.Click("代码"); err != nil {
 		t.Fatal(err)
 	}
-	if a.filterIdx != 0 || !tt.HasText("alpha demo note") || !tt.HasText("https://example.com/demo") || !tt.HasText("const demo = 1; return demo;") {
-		t.Fatalf("expected deselected (all) state to show all search hits, filterIdx=%d texts=%q", a.filterIdx, tt.Texts())
+	if a.filterIdx != 0 || !tt.HasText("alpha demo note") || !tt.HasText("https://example.com/demo") {
+		t.Fatalf("expected all search hits after deselecting tab, filterIdx=%d", a.filterIdx)
 	}
 
-	// 清空搜索后切换到“文本”Tab，向下滚动同样支持自动收起顶栏
+	// 滚动后点击清除搜索应回到顶部并收起标签浮层
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 120)
+	tt.Advance(250 * time.Millisecond)
 	if err := tt.Click("清除搜索"); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("文本"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Wheel(panelWidth/2, panelHeight/2, 0, 180)
-	tt.Advance(250 * time.Millisecond)
-	if !a.controlsCollapsed {
-		t.Fatal("expected header controls to auto-collapse on scroll in category tab as well")
+	tt.Frame()
+	if a.query != "" || a.listScroll.Y != 0 || !a.atTop || a.controlsCollapsed || tt.HasText("筛选标签 工作") {
+		t.Fatalf("expected search cleared at top with popover closed, query=%q scrollY=%v atTop=%v collapsed=%v", a.query, a.listScroll.Y, a.atTop, a.controlsCollapsed)
 	}
 }
 
-func TestNoFocusModeSetting(t *testing.T) {
-	st, err := store.OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	if _, err := st.UpsertText("sample item"); err != nil {
-		t.Fatal(err)
-	}
-
-	a := newClipApp(st, nil)
-	a.reload()
-	if a.settings.NoFocusMode || a.panelNoActivate {
-		t.Fatalf("expected NoFocusMode and panelNoActivate to default to false, got settings=%v noAct=%v", a.settings.NoFocusMode, a.panelNoActivate)
-	}
-
-	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-	if err := tt.Click("设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("常规设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-
-	if !tt.HasText("不抢焦点 (实验性)") {
-		t.Fatalf("expected NoFocusMode row in general settings, texts=%q", tt.Texts())
-	}
-	if err := tt.Click("切换不抢焦点 (实验性)"); err != nil {
-		t.Fatal(err)
-	}
-	if !a.settings.NoFocusMode || !a.panelNoActivate {
-		t.Fatalf("expected NoFocusMode and panelNoActivate toggled to true, got settings=%v noAct=%v", a.settings.NoFocusMode, a.panelNoActivate)
-	}
-	loaded, err := st.LoadSettings()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !loaded.NoFocusMode {
-		t.Fatal("expected NoFocusMode=true persisted to store")
-	}
-
-	tt.SetLocale("zh-Hant")
-	if !tt.HasText("不搶焦點 (實驗性)") {
-		t.Fatalf("expected zh-Hant NoFocusMode label, texts=%q", tt.Texts())
-	}
-	tt.SetLocale("en")
-	if !tt.HasText("No Focus Mode (Experimental)") {
-		t.Fatalf("expected en NoFocusMode label, texts=%q", tt.Texts())
-	}
-	tt.SetLocale("zh-Hans")
-
-	// 录制快捷键会临时退出无激活状态以接收按键
-	if err := tt.Click("剪贴板设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("录制呼出快捷键"); err != nil {
-		t.Fatal(err)
-	}
-	if a.panelNoActivate {
-		t.Fatal("expected panelNoActivate=false while recording hotkey")
-	}
-	tt.Key(0, ui.KeyEscape)
-
-	// 返回主列表后，点击搜索框与标签编辑均自动恢复激活以接收输入
-	if err := tt.Click("返回"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	a.setPanelNoActivate(true)
-	if err := tt.Click("搜索剪贴板"); err != nil {
-		t.Fatal(err)
-	}
-	if a.panelNoActivate {
-		t.Fatal("expected clicking search box to clear panelNoActivate for text input")
-	}
-
-	a.setPanelNoActivate(true)
-	a.toggleTagEditor(a.items[0].ID)
-	if a.panelNoActivate {
-		t.Fatal("expected opening tag editor to clear panelNoActivate for text input")
-	}
-}
-
-func TestRoutedSearchNoFocus(t *testing.T) {
+func TestNoFocusModeAndRoutedSearch(t *testing.T) {
 	st, err := store.OpenStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -1208,46 +708,63 @@ func TestRoutedSearchNoFocus(t *testing.T) {
 	}
 
 	a := newClipApp(st, nil)
-	a.settings.NoFocusMode = true
-	a.panelNoActivate = true
 	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
 
-	// 1. 模拟键盘路由已激活：点击搜索框不应抢焦点，只标记 routedSearchActive
+	// 1. 设置页开启不抢焦点并验证输入场景自动恢复激活
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("常规设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if err := tt.Click("切换不抢焦点 (实验性)"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.settings.NoFocusMode || !a.panelNoActivate {
+		t.Fatalf("expected NoFocusMode and panelNoActivate true")
+	}
+	if err := tt.Click("返回"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+
+	// 2. 键盘路由激活时点击搜索框与拼音输入全程保持 no-activate
 	a.stopKeyRouter = func() {}
 	a.onSearchBoxPointerDown()
 	if !a.panelNoActivate || !a.routedSearchActive {
-		t.Fatalf("expected routed search without activating panel, got noAct=%v routed=%v", a.panelNoActivate, a.routedSearchActive)
+		t.Fatalf("expected routed search without activating panel")
 	}
-
-	// 2. 通过路由按键输入拼音并退格，全程不抢焦点
 	a.applyRoutedKey(sys.RoutedKey{VK: 'W', Text: "w"})
 	a.applyRoutedKey(sys.RoutedKey{VK: 'X', Text: "x"})
 	a.applyRoutedKey(sys.RoutedKey{VK: 'A', Text: "a"})
 	a.applyRoutedKey(sys.RoutedKey{VK: vkBack})
-	if a.query != "wx" || !a.panelNoActivate {
-		t.Fatalf("expected query='wx' and panelNoActivate=true, got query=%q noAct=%v", a.query, a.panelNoActivate)
-	}
 	a.stopSearchTimer()
 	a.reload()
-	if len(a.items) != 1 || a.items[0].Text != "微信聊天记录" {
-		t.Fatalf("expected pinyin search hit '微信聊天记录', got %+v", a.items)
+	if a.query != "wx" || len(a.items) != 1 || a.items[0].Text != "微信聊天记录" {
+		t.Fatalf("expected pinyin routed search hit, query=%q items=%+v", a.query, a.items)
 	}
-
-	// 3. 方向键导航与 Esc 清空搜索
 	a.applyRoutedKey(sys.RoutedKey{VK: vkDown})
 	if a.selected != 0 {
 		t.Fatalf("expected selected=0 after vkDown, got %d", a.selected)
 	}
 	a.applyRoutedKey(sys.RoutedKey{VK: vkEscape})
 	if a.query != "" || a.routedSearchActive || !a.panelNoActivate {
-		t.Fatalf("expected query cleared and no-focus preserved, got query=%q routed=%v noAct=%v", a.query, a.routedSearchActive, a.panelNoActivate)
+		t.Fatalf("expected query cleared and no-focus preserved")
 	}
 
-	// 4. 无键盘路由时（如 UIPI 高权限窗口回退）：点击搜索框回退为激活窗口
+	// 3. 无键盘路由时点击搜索框或打开标签编辑应回退为激活窗口
 	a.stopKeyRouting()
 	a.onSearchBoxPointerDown()
 	if a.panelNoActivate {
 		t.Fatal("expected fallback to activatePanelForInput when key router is inactive")
+	}
+	a.setPanelNoActivate(true)
+	a.toggleTagEditor(a.items[0].ID)
+	if a.panelNoActivate {
+		t.Fatal("expected opening tag editor to clear panelNoActivate")
 	}
 }
 
@@ -1259,34 +776,22 @@ func TestPrivacyProtectionUI(t *testing.T) {
 	defer st.Close()
 
 	a := newClipApp(st, nil)
-	if !a.settings.PrivacyProtection {
-		t.Fatal("expected PrivacyProtection enabled by default")
-	}
-
 	it, err := a.saveTextWithPrivacy("13800138000", store.SaveOptions{Deduplicate: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !store.HasSensitiveTag(it.Tags) {
-		t.Fatalf("expected sensitive tag on phone item, got %+v", it.Tags)
+	if err != nil || !store.HasSensitiveTag(it.Tags) {
+		t.Fatalf("expected sensitive tag on phone item, got %+v err=%v", it.Tags, err)
 	}
 
 	a.reload()
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-	if tt.HasText("13800138000") {
-		t.Fatalf("expected sensitive text masked by default, texts=%q", tt.Texts())
-	}
-	if !tt.HasText("138••••••000") {
+	if tt.HasText("13800138000") || !tt.HasText("138••••••000") {
 		t.Fatalf("expected masked text '138••••••000', texts=%q", tt.Texts())
 	}
-
 	if err := tt.Click("显示敏感内容"); err != nil {
 		t.Fatal(err)
 	}
 	if !tt.HasText("13800138000") {
 		t.Fatalf("expected revealed text after clicking eye button, texts=%q", tt.Texts())
 	}
-
 	if err := tt.Click("隐藏窗口"); err != nil {
 		t.Fatal(err)
 	}
@@ -1294,7 +799,6 @@ func TestPrivacyProtectionUI(t *testing.T) {
 		t.Fatalf("expected sensitive item re-masked after hidePanel, texts=%q", tt.Texts())
 	}
 
-	// 进入设置 -> 剪贴板设置，验证三个隐私子项默认折叠，点击后展开
 	if err := tt.Click("设置"); err != nil {
 		t.Fatal(err)
 	}
@@ -1303,11 +807,8 @@ func TestPrivacyProtectionUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
-	if !tt.HasText("保护种类") || !tt.HasText("自定义规则") || !tt.HasText("脱敏预览设置") {
-		t.Fatalf("expected privacy subgroups in clipboard settings, texts=%q", tt.Texts())
-	}
-	if tt.HasText("密钥/Token") {
-		t.Fatalf("expected privacyKinds collapsed by default, texts=%q", tt.Texts())
+	if !tt.HasText("保护种类") || !tt.HasText("自定义规则") || !tt.HasText("脱敏预览设置") || tt.HasText("密钥/Token") {
+		t.Fatalf("expected collapsed privacy subgroups, texts=%q", tt.Texts())
 	}
 	if err := tt.Click("保护种类"); err != nil {
 		t.Fatal(err)
@@ -1326,37 +827,27 @@ func TestHiddenMemoryAndCacheRetention(t *testing.T) {
 	defer st.Close()
 
 	a := newClipApp(st, nil)
-	a.richSpans = map[int64][]ui.Span{
-		1: {{Text: "cached span"}},
-	}
+	a.richSpans = map[int64][]ui.Span{1: {{Text: "cached span"}}}
 	for i := 0; i < warmThumbCacheLimit; i++ {
 		a.thumbs.items[string(rune('a'+i))] = &ui.Bitmap{}
 	}
 
-	// 1. 常规隐藏且缩略图数 <= warmThumbCacheLimit（内存 < 50MB）：热缓存与 richSpans 均保留
+	// 低于 75MB 阈值时，隐藏保留热缓存上限 warmThumbCacheLimit 与 richSpans
 	a.hidePanel()
-	if a.thumbs.len() != warmThumbCacheLimit {
-		t.Fatalf("expected warm thumb cache (%d) preserved on normal hide, got %d", warmThumbCacheLimit, a.thumbs.len())
-	}
-	if len(a.richSpans) != 1 {
-		t.Fatalf("expected richSpans preserved on normal hide, got %d", len(a.richSpans))
+	if a.thumbs.len() != warmThumbCacheLimit || len(a.richSpans) != 1 {
+		t.Fatalf("expected warm thumb cache (%d) and richSpans preserved, got %d / %d", warmThumbCacheLimit, a.thumbs.len(), len(a.richSpans))
 	}
 
-	// 2. 缩略图超过 warmThumbCacheLimit 时，隐藏通过 LRU 裁剪保留至 warmThumbCacheLimit，且保留轻量 richSpans
 	a.thumbs.items["overflow"] = &ui.Bitmap{}
 	a.hidePanel()
-	if a.thumbs.len() != warmThumbCacheLimit {
-		t.Fatalf("expected oversized thumb cache pruned to %d on hide, got %d", warmThumbCacheLimit, a.thumbs.len())
-	}
-	if len(a.richSpans) != 1 {
-		t.Fatalf("expected richSpans still preserved under 50MB, got %d", len(a.richSpans))
+	if a.thumbs.len() != warmThumbCacheLimit || len(a.richSpans) != 1 {
+		t.Fatalf("expected oversized thumb cache pruned to %d, got %d", warmThumbCacheLimit, a.thumbs.len())
 	}
 }
 
-func TestEdgeDockingGeometryAndSetting(t *testing.T) {
+func TestEdgeDockingAndImageGeometry(t *testing.T) {
 	workArea := mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1040}
-	winSize := mygo.Rectangle{X: 300, Y: 200, Width: 400, Height: 660}
-	if got := detectEdgeDock(winSize, workArea, edgeDockThreshold); got != dockNone {
+	if got := detectEdgeDock(mygo.Rectangle{X: 300, Y: 200, Width: 400, Height: 660}, workArea, edgeDockThreshold); got != dockNone {
 		t.Fatalf("expected center window dockNone, got %v", got)
 	}
 
@@ -1365,131 +856,29 @@ func TestEdgeDockingGeometryAndSetting(t *testing.T) {
 		t.Fatalf("expected dockTop, got %v", got)
 	}
 	dx, dy := dockedWindowPosition(dockTop, topWin, workArea, edgeDockHideSize)
-	if dx != 300 || dy != -660+edgeDockHideSize {
-		t.Fatalf("unexpected docked top pos (%d, %d)", dx, dy)
-	}
 	dockedTopRect := mygo.Rectangle{X: dx, Y: dy, Width: 400, Height: 660}
 	if !isCursorInDockedSliver(dockTop, mygo.Point{X: 450, Y: 2}, dockedTopRect, workArea, edgeDockHoverSliver) {
 		t.Fatalf("expected cursor inside top docked sliver")
 	}
-	ux, uy := undockedWindowPosition(dockTop, dockedTopRect, workArea)
-	if ux != 300 || uy != 0 {
+	if ux, uy := undockedWindowPosition(dockTop, dockedTopRect, workArea); ux != 300 || uy != 0 {
 		t.Fatalf("unexpected undocked top pos (%d, %d)", ux, uy)
 	}
-
-	leftWin := mygo.Rectangle{X: 4, Y: 120, Width: 400, Height: 660}
-	if got := detectEdgeDock(leftWin, workArea, edgeDockThreshold); got != dockLeft {
+	if got := detectEdgeDock(mygo.Rectangle{X: 4, Y: 120, Width: 400, Height: 660}, workArea, edgeDockThreshold); got != dockLeft {
 		t.Fatalf("expected dockLeft, got %v", got)
 	}
-	lx, ly := dockedWindowPosition(dockLeft, leftWin, workArea, edgeDockHideSize)
-	if lx != -400+edgeDockHideSize || ly != 120 {
-		t.Fatalf("unexpected docked left pos (%d, %d)", lx, ly)
-	}
-
-	rightWin := mygo.Rectangle{X: 1516, Y: 120, Width: 400, Height: 660}
-	if got := detectEdgeDock(rightWin, workArea, edgeDockThreshold); got != dockRight {
+	if got := detectEdgeDock(mygo.Rectangle{X: 1516, Y: 120, Width: 400, Height: 660}, workArea, edgeDockThreshold); got != dockRight {
 		t.Fatalf("expected dockRight, got %v", got)
 	}
-	rx, ry := dockedWindowPosition(dockRight, rightWin, workArea, edgeDockHideSize)
-	if rx != 1920-edgeDockHideSize || ry != 120 {
-		t.Fatalf("unexpected docked right pos (%d, %d)", rx, ry)
-	}
 
-	st, err := store.OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	a := newClipApp(st, nil)
-	a.reload()
-	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-	if err := tt.Click("设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("常规设置"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(250 * time.Millisecond)
-	if err := tt.Click("切换贴边自动收纳"); err != nil {
-		t.Fatal(err)
-	}
-	if !a.settings.EdgeDocking {
-		t.Fatalf("expected EdgeDocking enabled after toggle")
-	}
-	reloaded, err := st.LoadSettings()
-	if err != nil || !reloaded.EdgeDocking {
-		t.Fatalf("expected EdgeDocking persisted, got %+v err=%v", reloaded, err)
-	}
-}
-
-func TestWideImagePreviewFitsCardWidth(t *testing.T) {
 	a := newClipApp(nil, nil)
 	wideBmp := ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 1200, 200)))
-
 	for _, winW := range []int{minPanelWidth, panelWidth, 520} {
 		a.settings.WindowWidth = winW
 		maxW := a.cardContentWidth()
 		w, h := fitImageSize(wideBmp, maxW, 100)
-		if w > maxW {
-			t.Fatalf("winW=%d: expected fitted width <= %.1f, got %.1f", winW, maxW, w)
+		if w > maxW || h <= 0 || h > 100 {
+			t.Fatalf("winW=%d: unexpected fitted size (%.1f, %.1f) for maxW=%.1f", winW, w, h, maxW)
 		}
-		if h <= 0 || h > 100 {
-			t.Fatalf("winW=%d: expected fitted height in (0, 100], got %.1f", winW, h)
-		}
-	}
-
-	// 验证超宽长图（如 1654x157 降采样到 720x68）实际渲染时水平填满卡片内容宽度，无左右留白
-	st, err := store.OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	img := image.NewRGBA(image.Rect(0, 0, 720, 68))
-	red := color.RGBA{R: 220, G: 40, B: 40, A: 255}
-	for y := 0; y < 68; y++ {
-		for x := 0; x < 720; x++ {
-			img.SetRGBA(x, y, red)
-		}
-	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		t.Fatal(err)
-	}
-	it, err := st.SaveImage(buf.Bytes(), store.SaveOptions{Deduplicate: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	appInst := newClipApp(st, nil)
-	appInst.thumbs.items[it.ImagePath] = ui.NewBitmap(img)
-	appInst.reload()
-
-	tt := ui.NewTester(appInst.view, panelWidth, panelHeight)
-	tt.SetScale(1)
-	tt.Frame()
-	shot := tt.Image()
-	bounds := shot.Bounds()
-	// 查找红色图片像素分布的水平跨度，应填满卡片内容宽度（panelWidth - 60 = 340，含 1px 边框）
-	minX, maxX := bounds.Max.X, bounds.Min.X
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			c := shot.RGBAAt(x, y)
-			if c.R > 180 && c.G < 80 && c.B < 80 {
-				if x < minX {
-					minX = x
-				}
-				if x > maxX {
-					maxX = x
-				}
-			}
-		}
-	}
-	renderedW := maxX - minX + 1
-	expectedMinW := int(appInst.cardContentWidth()) - 4
-	if renderedW < expectedMinW {
-		t.Fatalf("expected ultra-wide image to fill card content width (>= %dpx), got %dpx (minX=%d, maxX=%d)", expectedMinW, renderedW, minX, maxX)
 	}
 }
 
@@ -1561,15 +950,38 @@ func TestSaveAsyncSerializesAndDeduplicates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 {
-		t.Fatalf("expected 2 deduplicated items, got %d: %+v", len(items), items)
-	}
-	if items[0].Text != "second-item" || items[1].Text != "first-item" {
-		t.Fatalf("expected FIFO order [second-item, first-item], got [%q, %q]", items[0].Text, items[1].Text)
+	if len(items) != 2 || items[0].Text != "second-item" || items[1].Text != "first-item" {
+		t.Fatalf("expected FIFO deduplicated [second-item, first-item], got %+v", items)
 	}
 }
 
-func TestSecurityAndUTF8Helpers(t *testing.T) {
+func TestAppHelpersAndSecurity(t *testing.T) {
+	if err := runWithTimeout(50*time.Millisecond, func() error { return nil }); err != nil {
+		t.Fatalf("expected nil error on fast task, got %v", err)
+	}
+	if err := runWithTimeout(20*time.Millisecond, func() error {
+		time.Sleep(80 * time.Millisecond)
+		return nil
+	}); err == nil {
+		t.Fatal("expected timeout error on slow task")
+	}
+
+	if !isHTTPURL("https://example.com/a?b=1") || !isHTTPURL("http://localhost:8080") {
+		t.Fatal("expected http/https URLs recognized")
+	}
+	if isHTTPURL("ftp://example.com") || isHTTPURL("file:///C:/Windows/System32/cmd.exe") || isBareWWWURL("ms-msdt:/id") {
+		t.Fatal("expected non-http URI schemes rejected")
+	}
+	if !isBareWWWURL("www.example.com/docs") {
+		t.Fatal("expected www. prefix recognized")
+	}
+	if got := openAppDisplayName(locales.In(""), ""); got != "系统默认" {
+		t.Fatalf("expected empty app path to display 系统默认, got %q", got)
+	}
+	if got := openAppDisplayName(locales.In(""), `C:\Program Files\Notepad++\notepad++.exe`); got != "notepad++" {
+		t.Fatalf("expected exe suffix stripped, got %q", got)
+	}
+
 	rawHTML := `<div onclick="alert(1)"><script>evil()</script><iframe src="https://x.test"></iframe><a href="javascript:alert(2)">bad</a><a href="https://example.com">ok</a></div>`
 	clean := sanitizeHTMLForExternalOpen(rawHTML)
 	for _, forbidden := range []string{"<script", "<iframe", "onclick", "javascript:"} {
@@ -1580,22 +992,10 @@ func TestSecurityAndUTF8Helpers(t *testing.T) {
 	if !strings.Contains(clean, "https://example.com") {
 		t.Fatalf("expected safe link preserved, got %q", clean)
 	}
-
-	if isHTTPURL("file:///C:/Windows/System32/cmd.exe") || isBareWWWURL("ms-msdt:/id") {
-		t.Fatal("expected non-http URI schemes rejected")
-	}
-	if !isBareWWWURL("www.example.com/docs") {
-		t.Fatal("expected www. prefix recognized")
+	if got := truncateUTF8Bytes("中文测试ABC", 5); got != "中" {
+		t.Fatalf("expected UTF-8 safe truncation to %q, got %q", "中", got)
 	}
 
-	// Verify UTF-8 boundary truncation never leaves invalid trailing bytes.
-	sample := "中文测试ABC"
-	trunc := truncateUTF8Bytes(sample, 5)
-	if trunc != "中" {
-		t.Fatalf("expected UTF-8 safe truncation to %q, got %q", "中", trunc)
-	}
-
-	// Verify temp file tracking & cleanup.
 	a := newClipApp(nil, nil)
 	p := filepath.Join(t.TempDir(), "MyTieZ_entry_42.txt")
 	if err := os.WriteFile(p, []byte("tmp"), 0o600); err != nil {

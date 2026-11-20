@@ -22,7 +22,7 @@ func appVersion() string {
 			return v
 		}
 	}
-	return "0.1.3"
+	return "dev"
 }
 
 func (a *clipApp) checkForUpdates(manual bool) {

@@ -357,11 +357,6 @@ func (a *clipApp) renderBackdropSelectRow(c *ui.Context, msgs locales.Messages) 
 				ui.Text(c, curLabel).FontSize(13).FontWeight(600).TextColor(t.Text).SingleLine()
 				ui.Icon(c, iconChevronDown).FontSize(14).TextColor(t.TextMuted)
 			})
-		if trig.Changed() {
-			a.confirmAction = ""
-			a.applyBackdrop()
-			a.persistSettings()
-		}
 		sa := shadowAlpha(t, 0.12, 0.34)
 		sel.Popup(func(panel ui.Element) {
 			panel.Margin(4, 0, 0, 0).Padding(4).Radius(radiusGroup).
@@ -382,6 +377,11 @@ func (a *clipApp) renderBackdropSelectRow(c *ui.Context, msgs locales.Messages) 
 				})
 			}
 		})
+		if trig.Changed() {
+			a.confirmAction = ""
+			a.applyBackdrop()
+			a.persistSettings()
+		}
 	})
 }
 

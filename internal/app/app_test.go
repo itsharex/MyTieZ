@@ -180,6 +180,9 @@ func TestSettingsAndQuickPaste(t *testing.T) {
 		if a.settings.BackdropMode != tc.want {
 			t.Fatalf("expected BackdropMode=%s, got %q", tc.want, a.settings.BackdropMode)
 		}
+		if loaded, err := a.store.LoadSettings(); err != nil || loaded.BackdropMode != tc.want {
+			t.Fatalf("expected persisted BackdropMode=%s, got %q err=%v", tc.want, loaded.BackdropMode, err)
+		}
 		curTrigger = tc.nextText
 	}
 	if backdropVibrancy("mica_alt") != mygo.VibrancyTabbed || backdropVibrancy("acrylic") != mygo.VibrancyAcrylic {

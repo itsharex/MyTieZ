@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -578,5 +579,108 @@ func TestConcurrentSaveDeduplicate(t *testing.T) {
 	}
 	if len(items) != 2 {
 		t.Fatalf("expected exactly 2 deduplicated items (1 rich_text + 1 image), got %d: %+v", len(items), items)
+	}
+}
+
+func TestSensitiveEncryptionLifecycle(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("DPAPI encryption is Windows-only")
+	}
+	dir := t.TempDir()
+	st, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secretText := "sk-live-secret-99887766"
+	secretHTML := "<code>sk-live-secret-99887766</code>"
+	it, err := st.SaveText(secretText, SaveOptions{
+		Deduplicate: true,
+		HTML:        secretHTML,
+		Tags:        []string{SensitiveTag},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Text != secretText || it.HTML != secretHTML {
+		t.Fatalf("expected returned item decrypted, got text=%q html=%q", it.Text, it.HTML)
+	}
+
+	var rawText, rawHTML, rawPreview string
+	if err := st.db.QueryRow(`SELECT text_content, html_content, preview FROM clip_items WHERE id = ?`, it.ID).Scan(&rawText, &rawHTML, &rawPreview); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(rawText, EncryptPrefix) || !strings.HasPrefix(rawHTML, EncryptPrefix) || !strings.HasPrefix(rawPreview, EncryptPrefix) {
+		t.Fatalf("expected raw DB fields encrypted with %q, got text=%q html=%q preview=%q", EncryptPrefix, rawText, rawHTML, rawPreview)
+	}
+	if strings.Contains(rawText, secretText) || strings.Contains(rawPreview, secretText) {
+		t.Fatal("raw DB fields must not contain plaintext")
+	}
+
+	got, err := st.GetByID(it.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Text != secretText || got.HTML != secretHTML || got.Preview != secretText {
+		t.Fatalf("expected GetByID decrypted, got %+v", got)
+	}
+
+	// Plain keyword & ASCII search should both match encrypted sensitive items.
+	hits, err := st.ListSummaries("998877", "", 20)
+	if err != nil || len(hits) != 1 || hits[0].ID != it.ID {
+		t.Fatalf("expected ASCII search to hit encrypted item, hits=%+v err=%v", hits, err)
+	}
+	hitsCN, err := st.ListSummaries("sk-live", "", 20)
+	if err != nil || len(hitsCN) != 1 || hitsCN[0].ID != it.ID {
+		t.Fatalf("expected keyword search to hit encrypted item, hits=%+v err=%v", hitsCN, err)
+	}
+
+	// Removing sensitive tag should decrypt fields in DB.
+	if _, err := st.UpdateTags(it.ID, []string{"work"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.QueryRow(`SELECT text_content, html_content, preview FROM clip_items WHERE id = ?`, it.ID).Scan(&rawText, &rawHTML, &rawPreview); err != nil {
+		t.Fatal(err)
+	}
+	if rawText != secretText || rawHTML != secretHTML || rawPreview != secretText {
+		t.Fatalf("expected plaintext after removing sensitive tag, got text=%q html=%q preview=%q", rawText, rawHTML, rawPreview)
+	}
+
+	// Adding sensitive tag back should re-encrypt fields in DB.
+	if _, err := st.UpdateTags(it.ID, []string{"work", SensitiveTag}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.QueryRow(`SELECT text_content, html_content, preview FROM clip_items WHERE id = ?`, it.ID).Scan(&rawText, &rawHTML, &rawPreview); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(rawText, EncryptPrefix) || !strings.HasPrefix(rawHTML, EncryptPrefix) || !strings.HasPrefix(rawPreview, EncryptPrefix) {
+		t.Fatalf("expected re-encrypted fields after adding sensitive tag, got text=%q", rawText)
+	}
+
+	// Simulate legacy plaintext sensitive row and verify OpenStore aligns it.
+	legacy, err := st.SaveText("legacy-secret-1234", SaveOptions{Tags: []string{"normal"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE clip_items SET tags_json = '["sensitive"]' WHERE id = ?`, legacy.ID); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.Close()
+
+	st2, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st2.Close()
+
+	if err := st2.db.QueryRow(`SELECT text_content, preview FROM clip_items WHERE id = ?`, legacy.ID).Scan(&rawText, &rawPreview); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(rawText, EncryptPrefix) || !strings.HasPrefix(rawPreview, EncryptPrefix) {
+		t.Fatalf("expected OpenStore to encrypt legacy sensitive row, got text=%q preview=%q", rawText, rawPreview)
+	}
+	aligned, err := st2.GetByID(legacy.ID)
+	if err != nil || aligned.Text != "legacy-secret-1234" {
+		t.Fatalf("expected aligned item decrypted on read, got %+v err=%v", aligned, err)
 	}
 }

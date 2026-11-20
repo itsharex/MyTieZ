@@ -219,6 +219,7 @@ func OpenStore(baseDir string) (*Store, error) {
 	st := &Store{db: db, baseDir: baseDir, imageDir: imageDir}
 	st.revision.Store(1)
 	st.tagRevision.Store(1)
+	st.alignSensitiveEncryption()
 	return st, nil
 }
 
@@ -581,19 +582,20 @@ SELECT id, source_app, source_path, tags_json FROM clip_items WHERE kind = ? AND
 				keepApp, keepPath = existingApp, existingPath
 			}
 			mergedTagsJSON := existingTagsJSON
+			var mergedTags []string
+			_ = json.Unmarshal([]byte(existingTagsJSON), &mergedTags)
 			if len(opts.Tags) > 0 {
-				var cur []string
-				_ = json.Unmarshal([]byte(existingTagsJSON), &cur)
-				merged := normalizeTags(append(cur, opts.Tags...))
-				if b, err := json.Marshal(merged); err == nil {
+				mergedTags = normalizeTags(append(mergedTags, opts.Tags...))
+				if b, err := json.Marshal(mergedTags); err == nil {
 					mergedTagsJSON = string(b)
 				}
 			}
+			storeText, storeHTML, storePreview := encryptSensitiveFields(item.Text, item.HTML, item.Preview, HasSensitiveTag(mergedTags))
 			if _, err := tx.Exec(`
 UPDATE clip_items
 SET text_content = ?, html_content = ?, image_path = ?, files_json = ?, preview = ?, source_app = ?, source_path = ?, byte_size = ?, tags_json = ?, updated_at = ?
 WHERE id = ?
-`, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, keepApp, keepPath, item.ByteSize, mergedTagsJSON, now, existingID); err != nil {
+`, storeText, storeHTML, item.ImagePath, filesJSON, storePreview, keepApp, keepPath, item.ByteSize, mergedTagsJSON, now, existingID); err != nil {
 				return ClipItem{}, err
 			}
 			targetID = existingID
@@ -604,15 +606,17 @@ WHERE id = ?
 
 	if targetID == 0 {
 		tagsJSON := "[]"
-		if cleanTags := normalizeTags(opts.Tags); len(cleanTags) > 0 {
+		cleanTags := normalizeTags(opts.Tags)
+		if len(cleanTags) > 0 {
 			if b, err := json.Marshal(cleanTags); err == nil {
 				tagsJSON = string(b)
 			}
 		}
+		storeText, storeHTML, storePreview := encryptSensitiveFields(item.Text, item.HTML, item.Preview, HasSensitiveTag(cleanTags))
 		res, err := tx.Exec(`
 INSERT INTO clip_items (kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-`, string(item.Kind), item.Hash, item.Text, item.HTML, item.ImagePath, filesJSON, item.Preview, sourceApp, sourcePath, item.ByteSize, tagsJSON, now, now)
+`, string(item.Kind), item.Hash, storeText, storeHTML, item.ImagePath, filesJSON, storePreview, sourceApp, sourcePath, item.ByteSize, tagsJSON, now, now)
 		if err != nil {
 			return ClipItem{}, err
 		}
@@ -683,8 +687,9 @@ func (s *Store) listItems(query string, kind ClipKind, limit int, summary bool) 
 	pinyinSearch := isASCIIAlphaNum(kw)
 	if kw != "" && !pinyinSearch {
 		like := "%" + kw + "%"
-		conds = append(conds, "(text_content LIKE ? OR preview LIKE ? OR files_json LIKE ? OR source_app LIKE ? OR tags_json LIKE ?)")
-		args = append(args, like, like, like, like, like)
+		conds = append(conds, "((text_content LIKE ? OR preview LIKE ? OR files_json LIKE ? OR source_app LIKE ? OR tags_json LIKE ?) OR text_content LIKE ? OR preview LIKE ?)")
+		encPrefixLike := EncryptPrefix + "%"
+		args = append(args, like, like, like, like, like, encPrefixLike, encPrefixLike)
 	}
 
 	where := ""
@@ -692,19 +697,19 @@ func (s *Store) listItems(query string, kind ClipKind, limit int, summary bool) 
 		where = "WHERE " + strings.Join(conds, " AND ")
 	}
 	queryLimit := limit
-	if pinyinSearch {
+	if pinyinSearch || kw != "" {
 		queryLimit = max(limit*5, 1000)
 	}
 	args = append(args, queryLimit)
 
 	cols := "id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
 	if summary {
-		textCol := "CASE WHEN length(text_content) <= 1024 THEN text_content ELSE '' END"
-		if pinyinSearch {
-			// 拼音搜索最多匹配前 2048 个 rune，取前 8192 字符参与匹配后若超过 1024 字节再清空，兼顾召回与内存占用
-			textCol = "substr(text_content, 1, 8192)"
+		textCol := "CASE WHEN text_content LIKE 'dpapi:%' OR length(text_content) <= 1024 THEN text_content ELSE '' END"
+		if pinyinSearch || kw != "" {
+			// 关键词/拼音搜索时加密字段需完整取出以便解密后匹配，未加密字段限制在 8192 字符以内
+			textCol = "CASE WHEN text_content LIKE 'dpapi:%' THEN text_content ELSE substr(text_content, 1, 8192) END"
 		}
-		cols = "id, kind, content_hash, " + textCol + ", CASE WHEN kind = 'rich_text' THEN substr(html_content, 1, 8192) ELSE '' END, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
+		cols = "id, kind, content_hash, " + textCol + ", CASE WHEN kind = 'rich_text' THEN (CASE WHEN html_content LIKE 'dpapi:%' THEN html_content ELSE substr(html_content, 1, 8192) END) ELSE '' END, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at"
 	}
 
 	rows, err := s.db.Query(`
@@ -727,9 +732,14 @@ LIMIT ?
 		}
 		if pinyinSearch && !itemMatchesKeyword(it, kw) {
 			continue
+		} else if !pinyinSearch && kw != "" && !itemMatchesPlainKeyword(it, kw) {
+			continue
 		}
-		if summary && pinyinSearch && len(it.Text) > 1024 {
+		if summary && len(it.Text) > 1024 {
 			it.Text = ""
+		}
+		if summary && it.Kind == KindRichText && len(it.HTML) > 8192 {
+			it.HTML = string([]rune(it.HTML)[:min(len([]rune(it.HTML)), 8192)])
 		}
 		items = append(items, it)
 		if len(items) >= limit {
@@ -792,7 +802,24 @@ func (s *Store) UpdateTags(id int64, tags []string) ([]string, error) {
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	if _, err := s.db.Exec(`UPDATE clip_items SET tags_json = ? WHERE id = ?`, raw, id); err != nil {
+
+	var curText, curHTML, curPreview string
+	if err := s.db.QueryRow(`SELECT text_content, html_content, preview FROM clip_items WHERE id = ?`, id).Scan(&curText, &curHTML, &curPreview); err != nil {
+		if err == sql.ErrNoRows {
+			if _, execErr := s.db.Exec(`UPDATE clip_items SET tags_json = ? WHERE id = ?`, raw, id); execErr != nil {
+				return nil, execErr
+			}
+			s.bumpRevision(true)
+			return cleaned, nil
+		}
+		return nil, err
+	}
+
+	nextText, nextHTML, nextPreview := encryptSensitiveFields(curText, curHTML, curPreview, HasSensitiveTag(cleaned))
+	if _, err := s.db.Exec(
+		`UPDATE clip_items SET tags_json = ?, text_content = ?, html_content = ?, preview = ? WHERE id = ?`,
+		raw, nextText, nextHTML, nextPreview, id,
+	); err != nil {
 		return nil, err
 	}
 	s.bumpRevision(true)
@@ -984,7 +1011,106 @@ func scanItem(r rowScanner) (ClipItem, error) {
 	if tagsJSON != "" && tagsJSON != "[]" {
 		_ = json.Unmarshal([]byte(tagsJSON), &it.Tags)
 	}
+	decryptItemFields(&it)
 	return it, nil
+}
+
+func encryptSensitiveFields(text, html, preview string, sensitive bool) (string, string, string) {
+	if sensitive {
+		return encryptString(text), encryptString(html), encryptString(preview)
+	}
+	return decryptString(text), decryptString(html), decryptString(preview)
+}
+
+func decryptItemFields(it *ClipItem) {
+	if it == nil {
+		return
+	}
+	it.Text = decryptString(it.Text)
+	it.HTML = decryptString(it.HTML)
+	it.Preview = decryptString(it.Preview)
+}
+
+func itemMatchesPlainKeyword(it ClipItem, kw string) bool {
+	lowerKW := strings.ToLower(kw)
+	if strings.Contains(strings.ToLower(it.Text), lowerKW) ||
+		strings.Contains(strings.ToLower(it.Preview), lowerKW) ||
+		strings.Contains(strings.ToLower(it.SourceApp), lowerKW) {
+		return true
+	}
+	for _, f := range it.Files {
+		if strings.Contains(strings.ToLower(f), lowerKW) {
+			return true
+		}
+	}
+	for _, tag := range it.Tags {
+		if strings.Contains(strings.ToLower(tag), lowerKW) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) alignSensitiveEncryption() {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	rows, err := s.db.Query(`
+SELECT id, text_content, html_content, preview, tags_json
+FROM clip_items
+WHERE text_content LIKE ? OR preview LIKE ? OR html_content LIKE ?
+   OR lower(tags_json) LIKE '%sensitive%'
+   OR tags_json LIKE '%密码%'
+   OR lower(tags_json) LIKE '%password%'
+`, EncryptPrefix+"%", EncryptPrefix+"%", EncryptPrefix+"%")
+	if err != nil {
+		return
+	}
+	type alignRow struct {
+		id      int64
+		text    string
+		html    string
+		preview string
+	}
+	var updates []alignRow
+	for rows.Next() {
+		var id int64
+		var text, html, preview, tagsJSON string
+		if err := rows.Scan(&id, &text, &html, &preview, &tagsJSON); err != nil {
+			continue
+		}
+		var tags []string
+		if tagsJSON != "" && tagsJSON != "[]" {
+			_ = json.Unmarshal([]byte(tagsJSON), &tags)
+		}
+		nextText, nextHTML, nextPreview := encryptSensitiveFields(text, html, preview, HasSensitiveTag(tags))
+		if nextText != text || nextHTML != html || nextPreview != preview {
+			updates = append(updates, alignRow{
+				id:      id,
+				text:    nextText,
+				html:    nextHTML,
+				preview: nextPreview,
+			})
+		}
+	}
+	_ = rows.Close()
+	if len(updates) == 0 {
+		return
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, u := range updates {
+		if _, err := tx.Exec(
+			`UPDATE clip_items SET text_content = ?, html_content = ?, preview = ? WHERE id = ?`,
+			u.text, u.html, u.preview, u.id,
+		); err != nil {
+			return
+		}
+	}
+	_ = tx.Commit()
 }
 
 func makeTextPreview(s string) string {

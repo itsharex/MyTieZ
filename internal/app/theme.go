@@ -111,6 +111,7 @@ func buildMyTiezTheme(dark bool) *ui.Theme {
 
 type backdropPreset struct {
 	vibrancy          mygo.Vibrancy
+	isMica            bool
 	rootOverlayDark   float32
 	rootOverlayLight  float32
 	surfaceDark       float32
@@ -123,34 +124,37 @@ type backdropPreset struct {
 	borderLight       float32
 }
 
-// Presets tuned after DeskBox's glass surfaces: keep DWM blur luminous and
-// use subtle white-tinted glass cards with crisp hairline borders in dark mode.
+// Mica / Mica Alt layer a matte tinted veil over DWM vibrancy so only a soft
+// wallpaper-like tint bleeds through, while Acrylic presets keep DeskBox's
+// luminous translucent glass surfaces.
 var backdropPresets = map[string]backdropPreset{
 	"mica": {
 		vibrancy:          mygo.VibrancyMica,
-		rootOverlayDark:   0,
-		rootOverlayLight:  0,
-		surfaceDark:       0.11,
-		surfaceLight:      0.62,
-		surfaceHoverDark:  0.17,
-		surfaceHoverLight: 0.78,
-		surfacePressDark:  0.22,
-		surfacePressLight: 0.88,
-		borderDark:        0.15,
-		borderLight:       0.55,
+		isMica:            true,
+		rootOverlayDark:   0.72,
+		rootOverlayLight:  0.68,
+		surfaceDark:       0.06,
+		surfaceLight:      0.86,
+		surfaceHoverDark:  0.095,
+		surfaceHoverLight: 0.94,
+		surfacePressDark:  0.13,
+		surfacePressLight: 0.98,
+		borderDark:        0.09,
+		borderLight:       0.075,
 	},
 	"mica_alt": {
 		vibrancy:          mygo.VibrancyTabbed,
-		rootOverlayDark:   0.10,
-		rootOverlayLight:  0.10,
-		surfaceDark:       0.10,
-		surfaceLight:      0.48,
-		surfaceHoverDark:  0.16,
-		surfaceHoverLight: 0.64,
-		surfacePressDark:  0.21,
-		surfacePressLight: 0.76,
-		borderDark:        0.16,
-		borderLight:       0.55,
+		isMica:            true,
+		rootOverlayDark:   0.58,
+		rootOverlayLight:  0.52,
+		surfaceDark:       0.075,
+		surfaceLight:      0.90,
+		surfaceHoverDark:  0.11,
+		surfaceHoverLight: 0.96,
+		surfacePressDark:  0.145,
+		surfacePressLight: 0.99,
+		borderDark:        0.10,
+		borderLight:       0.09,
 	},
 	"acrylic_base": {
 		vibrancy:          mygo.VibrancyAcrylic,
@@ -213,6 +217,9 @@ func (a *clipApp) rootBackground(c *ui.Context, t *ui.Theme) ui.Color {
 		if p.rootOverlayDark <= 0 {
 			return ui.Transparent
 		}
+		if p.isMica {
+			return ui.RGBA(28, 28, 30, p.rootOverlayDark)
+		}
 		// Cool deep tint counteracts Win11 DWM acrylic's warm gray haze.
 		return ui.RGBA(14, 17, 24, p.rootOverlayDark)
 	}
@@ -270,13 +277,22 @@ func (a *clipApp) resolveTheme(c *ui.Context) *ui.Theme {
 			cloned.SurfacePressed = glass.Alpha(p.surfacePressDark)
 			cloned.Border = glass.Alpha(p.borderDark)
 			cloned.Text = ui.RGB(245, 246, 248)
-			cloned.TextMuted = glass.Alpha(0.76)
+			if p.isMica {
+				cloned.TextMuted = glass.Alpha(0.68)
+			} else {
+				cloned.TextMuted = glass.Alpha(0.76)
+			}
 		} else {
 			cloned.Surface = cloned.Surface.Alpha(p.surfaceLight)
 			cloned.SurfaceHover = cloned.SurfaceHover.Alpha(p.surfaceHoverLight)
 			cloned.SurfacePressed = cloned.SurfacePressed.Alpha(p.surfacePressLight)
-			cloned.Border = cloned.Border.Alpha(p.borderLight)
-			cloned.TextMuted = cloned.Text.Alpha(0.74)
+			if p.isMica {
+				cloned.Border = ui.RGBA(0, 0, 0, p.borderLight)
+				cloned.TextMuted = cloned.Text.Alpha(0.68)
+			} else {
+				cloned.Border = cloned.Border.Alpha(p.borderLight)
+				cloned.TextMuted = cloned.Text.Alpha(0.74)
+			}
 		}
 	}
 	return &cloned

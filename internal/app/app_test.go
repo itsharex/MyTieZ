@@ -1007,3 +1007,41 @@ func TestAppHelpersAndSecurity(t *testing.T) {
 		t.Fatalf("expected tracked temp file removed on cleanup, err=%v", err)
 	}
 }
+
+func TestMicaPresets(t *testing.T) {
+	mica, ok := backdropPresetFor("mica")
+	if !ok || !mica.isMica || mica.vibrancy != mygo.VibrancyMica {
+		t.Fatalf("unexpected mica preset: %+v ok=%v", mica, ok)
+	}
+	micaAlt, ok := backdropPresetFor("mica_alt")
+	if !ok || !micaAlt.isMica || micaAlt.vibrancy != mygo.VibrancyTabbed {
+		t.Fatalf("unexpected mica_alt preset: %+v ok=%v", micaAlt, ok)
+	}
+	acrylicBase, ok := backdropPresetFor("acrylic_base")
+	if !ok || acrylicBase.isMica || acrylicBase.vibrancy != mygo.VibrancyAcrylic {
+		t.Fatalf("unexpected acrylic_base preset: %+v ok=%v", acrylicBase, ok)
+	}
+	acrylic, ok := backdropPresetFor("acrylic")
+	if !ok || acrylic.isMica || acrylic.vibrancy != mygo.VibrancyAcrylic {
+		t.Fatalf("unexpected acrylic preset: %+v ok=%v", acrylic, ok)
+	}
+
+	// Mica presets keep higher matte root opacity than Acrylic so they stay subtly tinted instead of glassy.
+	if mica.rootOverlayDark <= micaAlt.rootOverlayDark || micaAlt.rootOverlayDark <= acrylicBase.rootOverlayDark {
+		t.Fatalf("expected dark root opacity mica > mica_alt > acrylic_base, got %.2f / %.2f / %.2f",
+			mica.rootOverlayDark, micaAlt.rootOverlayDark, acrylicBase.rootOverlayDark)
+	}
+	if mica.rootOverlayLight <= micaAlt.rootOverlayLight || micaAlt.rootOverlayLight <= acrylicBase.rootOverlayLight {
+		t.Fatalf("expected light root opacity mica > mica_alt > acrylic_base, got %.2f / %.2f / %.2f",
+			mica.rootOverlayLight, micaAlt.rootOverlayLight, acrylicBase.rootOverlayLight)
+	}
+	// Mica cards stay more opaque in light mode and less glassy in dark mode than Acrylic.
+	if mica.surfaceLight <= acrylicBase.surfaceLight || micaAlt.surfaceLight <= mica.surfaceLight {
+		t.Fatalf("expected light card opacity acrylic_base < mica < mica_alt, got %.2f / %.2f / %.2f",
+			acrylicBase.surfaceLight, mica.surfaceLight, micaAlt.surfaceLight)
+	}
+	if mica.surfaceDark >= acrylic.surfaceDark || micaAlt.surfaceDark >= acrylic.surfaceDark {
+		t.Fatalf("expected dark card fill lower than acrylic glass, got mica=%.3f mica_alt=%.3f acrylic=%.3f",
+			mica.surfaceDark, micaAlt.surfaceDark, acrylic.surfaceDark)
+	}
+}

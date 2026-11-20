@@ -3,6 +3,7 @@
 package sys
 
 import (
+	"sync/atomic"
 	"time"
 	"unicode/utf16"
 	"unsafe"
@@ -14,6 +15,7 @@ var (
 	user32            = windows.NewLazySystemDLL("user32.dll")
 	procSendInput     = user32.NewProc("SendInput")
 	procMapVirtualKey = user32.NewProc("MapVirtualKeyW")
+	gameModeSeq       atomic.Uint64
 )
 
 const (
@@ -80,14 +82,15 @@ func releaseModifiers() {
 	)
 }
 
-// SendPaste simulates Shift+Insert (the default paste scheme) into the focused window.
-func SendPaste() error {
-	return SendPasteWith("shift_insert", "", false)
+// CancelGameModePaste aborts any in-flight game_mode keystroke injection.
+func CancelGameModePaste() {
+	gameModeSeq.Add(1)
 }
 
 // SendPasteWith simulates pasting into the currently focused window using the
 // specified method ("shift_insert", "ctrl_v", or "game_mode").
 func SendPasteWith(method, text string, isTextKind bool) error {
+	seq := gameModeSeq.Add(1)
 	releaseModifiers()
 	time.Sleep(50 * time.Millisecond)
 
@@ -113,7 +116,7 @@ func SendPasteWith(method, text string, isTextKind bool) error {
 		)
 
 	case "game_mode":
-		return sendGameModeText(text)
+		return sendGameModeText(text, seq)
 
 	default: // "shift_insert"
 		shiftScan := scanCode(vkShift)
@@ -142,11 +145,18 @@ func SendPasteWith(method, text string, isTextKind bool) error {
 	}
 }
 
-func sendGameModeText(text string) error {
+func sendGameModeText(text string, seq uint64) error {
 	time.Sleep(250 * time.Millisecond)
+	if gameModeSeq.Load() != seq {
+		return nil
+	}
 	targetHWND, _, _ := procGetForegroundWindow.Call()
 
 	units := utf16.Encode([]rune(text))
+	const maxGameModeUnits = 4096
+	if len(units) > maxGameModeUnits {
+		units = units[:maxGameModeUnits]
+	}
 	total := len(units)
 	downDelay, upDelay, checkInterval := 10*time.Millisecond, 10*time.Millisecond, 20
 	if total > 800 {
@@ -157,6 +167,9 @@ func sendGameModeText(text string) error {
 
 	enterScan := scanCode(vkReturn)
 	for i, u := range units {
+		if gameModeSeq.Load() != seq {
+			return nil
+		}
 		if i%checkInterval == 0 && targetHWND != 0 {
 			curHWND, _, _ := procGetForegroundWindow.Call()
 			if curHWND != targetHWND {
@@ -167,15 +180,23 @@ func sendGameModeText(text string) error {
 			continue
 		}
 		if u == '\n' {
-			_ = sendInputs(inputStruct{inputType: inputKeyboard, ki: keyboardInput{wVk: vkReturn, wScan: enterScan, dwFlags: keyeventfScancode}})
+			if err := sendInputs(inputStruct{inputType: inputKeyboard, ki: keyboardInput{wVk: vkReturn, wScan: enterScan, dwFlags: keyeventfScancode}}); err != nil {
+				return err
+			}
 			time.Sleep(downDelay)
-			_ = sendInputs(inputStruct{inputType: inputKeyboard, ki: keyboardInput{wVk: vkReturn, wScan: enterScan, dwFlags: keyeventfScancode | keyeventfKeyUp}})
+			if err := sendInputs(inputStruct{inputType: inputKeyboard, ki: keyboardInput{wVk: vkReturn, wScan: enterScan, dwFlags: keyeventfScancode | keyeventfKeyUp}}); err != nil {
+				return err
+			}
 			time.Sleep(upDelay)
 			continue
 		}
-		_ = sendInputs(inputStruct{inputType: inputKeyboard, ki: keyboardInput{wScan: u, dwFlags: keyeventfUnicode}})
+		if err := sendInputs(inputStruct{inputType: inputKeyboard, ki: keyboardInput{wScan: u, dwFlags: keyeventfUnicode}}); err != nil {
+			return err
+		}
 		time.Sleep(downDelay)
-		_ = sendInputs(inputStruct{inputType: inputKeyboard, ki: keyboardInput{wScan: u, dwFlags: keyeventfUnicode | keyeventfKeyUp}})
+		if err := sendInputs(inputStruct{inputType: inputKeyboard, ki: keyboardInput{wScan: u, dwFlags: keyeventfUnicode | keyeventfKeyUp}}); err != nil {
+			return err
+		}
 		time.Sleep(upDelay)
 	}
 	return nil

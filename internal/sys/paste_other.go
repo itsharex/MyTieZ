@@ -2,9 +2,7 @@
 
 package sys
 
-func SendPaste() error {
-	return nil
-}
+func CancelGameModePaste() {}
 
 func SendPasteWith(method, text string, isTextKind bool) error {
 	return nil

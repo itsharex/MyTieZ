@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"mytiez/locales"
 
 	"github.com/egoist/mygo"
+	"golang.org/x/net/html"
 )
 
 func (a *clipApp) setStatus(msg string) {
@@ -39,7 +41,7 @@ func (a *clipApp) openItem(item store.ClipItem) {
 	switch item.Kind {
 	case store.KindText, store.KindURL, store.KindCode:
 		trimmed := strings.TrimSpace(item.Text)
-		if item.Kind == store.KindURL || isHTTPURL(trimmed) {
+		if isHTTPURL(trimmed) || isBareWWWURL(trimmed) {
 			targetURL := trimmed
 			if strings.HasPrefix(strings.ToLower(targetURL), "www.") {
 				targetURL = "https://" + targetURL
@@ -54,6 +56,7 @@ func (a *clipApp) openItem(item store.ClipItem) {
 			a.setStatus(locales.StatusWriteTmpErr(err.Error()))
 			return
 		}
+		a.trackTempFile(tmpPath)
 		if err := launchTarget(appPath, tmpPath); err != nil {
 			a.setStatus(locales.StatusOpenErr(err.Error()))
 		}
@@ -62,12 +65,15 @@ func (a *clipApp) openItem(item store.ClipItem) {
 		content := item.HTML
 		if strings.TrimSpace(content) == "" {
 			content = item.Text
+		} else {
+			content = sanitizeHTMLForExternalOpen(content)
 		}
 		tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("MyTieZ_entry_%d.html", item.ID))
 		if err := os.WriteFile(tmpPath, []byte(content), 0o600); err != nil {
 			a.setStatus(locales.StatusWriteTmpErr(err.Error()))
 			return
 		}
+		a.trackTempFile(tmpPath)
 		if err := launchTarget(appPath, tmpPath); err != nil {
 			a.setStatus(locales.StatusOpenErr(err.Error()))
 		}
@@ -104,6 +110,107 @@ func (a *clipApp) openItem(item store.ClipItem) {
 			a.setStatus(locales.StatusFileMissing())
 		}
 	}
+}
+
+func isBareWWWURL(raw string) bool {
+	if raw == "" || strings.ContainsAny(raw, "\r\n \t") {
+		return false
+	}
+	return strings.HasPrefix(strings.ToLower(raw), "www.")
+}
+
+func (a *clipApp) trackTempFile(p string) {
+	if p == "" {
+		return
+	}
+	if a.tempFiles == nil {
+		a.tempFiles = make(map[string]struct{})
+	}
+	a.tempFiles[p] = struct{}{}
+}
+
+func (a *clipApp) removeTempFilesForID(id int64) {
+	if id == 0 || len(a.tempFiles) == 0 {
+		return
+	}
+	for _, ext := range []string{".txt", ".html"} {
+		p := filepath.Join(os.TempDir(), fmt.Sprintf("MyTieZ_entry_%d%s", id, ext))
+		if _, ok := a.tempFiles[p]; ok {
+			_ = os.Remove(p)
+			delete(a.tempFiles, p)
+		}
+	}
+}
+
+func (a *clipApp) cleanupTempFiles() {
+	for p := range a.tempFiles {
+		_ = os.Remove(p)
+	}
+	a.tempFiles = nil
+}
+
+func sanitizeHTMLForExternalOpen(raw string) string {
+	doc, err := html.Parse(strings.NewReader(raw))
+	if err != nil {
+		return html.EscapeString(raw)
+	}
+	stripUnsafeHTMLNodes(doc)
+	var buf bytes.Buffer
+	if err := html.Render(&buf, doc); err != nil {
+		return html.EscapeString(raw)
+	}
+	return buf.String()
+}
+
+func stripUnsafeHTMLNodes(n *html.Node) {
+	for c := n.FirstChild; c != nil; {
+		next := c.NextSibling
+		if c.Type == html.ElementNode {
+			tag := strings.ToLower(c.Data)
+			switch tag {
+			case "script", "iframe", "frame", "frameset", "object", "embed", "applet", "base":
+				n.RemoveChild(c)
+				c = next
+				continue
+			case "meta":
+				if hasMetaRefreshOrCSP(c.Attr) {
+					n.RemoveChild(c)
+					c = next
+					continue
+				}
+			}
+			c.Attr = filterSafeHTMLAttrs(c.Attr)
+		}
+		stripUnsafeHTMLNodes(c)
+		c = next
+	}
+}
+
+func hasMetaRefreshOrCSP(attrs []html.Attribute) bool {
+	for _, a := range attrs {
+		if strings.EqualFold(a.Key, "http-equiv") {
+			return true
+		}
+	}
+	return false
+}
+
+func filterSafeHTMLAttrs(attrs []html.Attribute) []html.Attribute {
+	out := attrs[:0]
+	for _, a := range attrs {
+		k := strings.ToLower(strings.TrimSpace(a.Key))
+		if strings.HasPrefix(k, "on") {
+			continue
+		}
+		if k == "href" || k == "src" || k == "action" || k == "formaction" || k == "xlink:href" {
+			v := strings.ToLower(strings.TrimSpace(a.Val))
+			if strings.HasPrefix(v, "javascript:") || strings.HasPrefix(v, "vbscript:") || strings.HasPrefix(v, "data:text/html") {
+				continue
+			}
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func isHTTPURL(raw string) bool {

@@ -3,13 +3,10 @@
 package sys
 
 import (
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 var (
@@ -206,9 +203,9 @@ func noActivateWndProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 
 // StartOutsideClickWatch installs a low-level mouse hook while a non-activating
 // window is open and invokes onOutside when a mouse click occurs outside hwnd.
-func StartOutsideClickWatch(hwnd uintptr, onOutside func()) func() {
+func StartOutsideClickWatch(hwnd uintptr, onOutside func()) (func(), bool) {
 	if hwnd == 0 || onOutside == nil {
-		return func() {}
+		return func() {}, false
 	}
 	mouseHookOnce.Do(func() {
 		mouseHookCB = syscall.NewCallback(lowLevelMouseProc)
@@ -221,9 +218,6 @@ func StartOutsideClickWatch(hwnd uintptr, onOutside func()) func() {
 	}
 	activeMouseWatch.Store(st)
 
-	tidReady := make(chan uint32, 1)
-	pumpDone := make(chan struct{})
-
 	go func() {
 		for {
 			select {
@@ -235,46 +229,14 @@ func StartOutsideClickWatch(hwnd uintptr, onOutside func()) func() {
 		}
 	}()
 
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		defer close(pumpDone)
-
-		var m winMsg
-		// Force creation of the thread message queue before advertising tid.
-		procPeekMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0, pmNoRemove)
-		tid := windows.GetCurrentThreadId()
-		hhook, _, _ := procSetWindowsHookExW.Call(whMouseLL, mouseHookCB, 0, 0)
-		tidReady <- tid
-		if hhook == 0 {
-			return
-		}
-		defer procUnhookWindowsHookEx.Call(hhook)
-
-		for {
-			r, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
-			if int32(r) <= 0 {
-				break
-			}
-			procTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
-			procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
-		}
-	}()
-
-	tid := <-tidReady
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			activeMouseWatch.CompareAndSwap(st, nil)
-			close(st.stopCh)
-			if tid != 0 {
-				procPostThreadMessageW.Call(uintptr(tid), uintptr(wmQuit), 0, 0)
-			}
-			<-pumpDone
-		})
-	}
+	return startLLHook(whMouseLL, mouseHookCB, func() {
+		activeMouseWatch.CompareAndSwap(st, nil)
+		close(st.stopCh)
+	})
 }
 
+// nativePtr converts a Windows hook lParam (pointing to C-allocated hook struct
+// valid for the duration of the callback) into an unsafe.Pointer.
 func nativePtr(addr uintptr) unsafe.Pointer {
 	return *(*unsafe.Pointer)(unsafe.Pointer(&addr))
 }

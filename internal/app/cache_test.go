@@ -29,3 +29,13 @@ func TestDecodeThumbBitmapDownscales(t *testing.T) {
 		t.Fatalf("expected downscaled size within 720x200, got %dx%d", w, h)
 	}
 }
+
+func TestBitmapCacheGenerationIncrementsOnClear(t *testing.T) {
+	bc := newBitmapCache()
+	g0 := bc.gen
+	bc.items["k"] = nil
+	bc.clear()
+	if bc.gen != g0+1 || len(bc.items) != 0 {
+		t.Fatalf("expected clear to increment gen (%d -> %d) and empty items", g0, bc.gen)
+	}
+}

@@ -10,7 +10,6 @@ import (
 
 	"mytiez/internal/store"
 	"mytiez/internal/sys"
-	"mytiez/locales"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -60,6 +59,7 @@ type clipApp struct {
 	richSpans         map[int64][]ui.Span
 	richSpansDark     bool
 	revealedSensitive map[int64]bool
+	tempFiles         map[string]struct{}
 
 	ignoreHash       string
 	ignoreUntil      time.Time
@@ -77,6 +77,8 @@ type clipApp struct {
 	quitting         bool
 	resizeTimer      *time.Timer
 	searchTimer      *time.Timer
+	persistTimer     *time.Timer
+	persistPending   bool
 	updateTimer      *time.Timer
 	updateChecking   bool
 	updateInstalling bool
@@ -164,207 +166,6 @@ func (a *clipApp) applyAutoHide(autoHide bool) {
 	a.syncOutsideClickWatch()
 }
 
-func (a *clipApp) applyNoFocusMode(on bool) {
-	a.settings.NoFocusMode = on
-	a.setPanelNoActivate(on)
-	if a.panel != nil && mygo.App.IsReady() {
-		a.panel.SetAlwaysOnTop(a.winPinned || a.panelNoActivate)
-	}
-	a.syncOutsideClickWatch()
-}
-
-func (a *clipApp) setPanelNoActivate(on bool) {
-	a.panelNoActivate = on
-	if !on {
-		a.routedSearchActive = false
-	}
-	if a.panel != nil && mygo.App.IsReady() {
-		sys.SetWindowNoActivate(a.panel.NativeHandle(), on)
-	}
-	a.syncOutsideClickWatch()
-	a.syncKeyRouter()
-}
-
-func (a *clipApp) syncOutsideClickWatch() {
-	shouldWatch := a.panel != nil && mygo.App.IsReady() && a.panel.IsVisible() &&
-		a.settings.NoFocusMode && a.panelNoActivate && !a.winPinned && !a.pickingApp
-	if !shouldWatch {
-		a.stopOutsideClickWatch()
-		return
-	}
-	if a.stopOutsideWatch != nil {
-		return
-	}
-	hwnd := a.panel.NativeHandle()
-	if hwnd == 0 {
-		return
-	}
-	a.stopOutsideWatch = sys.StartOutsideClickWatch(hwnd, func() {
-		if a.panel == nil {
-			return
-		}
-		a.panel.Update(func() {
-			if a.panel == nil || !a.panel.IsVisible() {
-				return
-			}
-			if !a.settings.NoFocusMode || !a.panelNoActivate || a.winPinned || a.pickingApp {
-				return
-			}
-			a.lastOutsideHide = time.Now()
-			a.hidePanel()
-		})
-	})
-}
-
-func (a *clipApp) stopOutsideClickWatch() {
-	if a.stopOutsideWatch != nil {
-		stop := a.stopOutsideWatch
-		a.stopOutsideWatch = nil
-		stop()
-	}
-}
-
-func (a *clipApp) activatePanelForInput() {
-	if !a.panelNoActivate {
-		return
-	}
-	a.setPanelNoActivate(false)
-	if a.panel != nil && mygo.App.IsReady() {
-		a.panel.SetAlwaysOnTop(a.winPinned)
-		a.panel.Show()
-		a.panel.Focus()
-	}
-}
-
-func (a *clipApp) switchHotkey(newKey string) error {
-	if newKey == "" {
-		return nil
-	}
-	if !mygo.App.IsReady() {
-		a.shortcut = newKey
-		return nil
-	}
-	if newKey == a.shortcut && mygo.GlobalShortcut.IsRegistered(newKey) {
-		return nil
-	}
-	oldKey := a.shortcut
-	if oldKey != "" {
-		mygo.GlobalShortcut.Unregister(oldKey)
-	}
-	if err := mygo.GlobalShortcut.Register(newKey, a.togglePanelFromHotkey); err != nil {
-		if oldKey != "" && !mygo.GlobalShortcut.IsRegistered(oldKey) {
-			_ = mygo.GlobalShortcut.Register(oldKey, a.togglePanelFromHotkey)
-		}
-		return err
-	}
-	a.shortcut = newKey
-	if a.trayOpenItem != nil {
-		a.trayOpenItem.SetAccelerator(newKey)
-	}
-	return nil
-}
-
-func (a *clipApp) showPanel() {
-	a.showPanelWithFocus(!a.settings.NoFocusMode)
-}
-
-func (a *clipApp) showPanelWithFocus(focus bool) {
-	if a.panel == nil {
-		return
-	}
-	sys.TrackForegroundWindow()
-	wasDocked := a.edgeDock != dockNone
-	if wasDocked {
-		a.undockWindow(false)
-	}
-	if !a.panel.IsVisible() {
-		// 非固定窗口每次重新呼出从「全部」Tab 开始，避免遗忘停留在旧子分类中
-		a.filterIdx = 0
-		cursor := mygo.Screen.CursorScreenPoint()
-		d := mygo.Screen.DisplayNearestPoint(cursor)
-		w, h := a.panel.Size()
-		if w <= 0 {
-			w = max(minPanelWidth, a.settings.WindowWidth)
-		}
-		if h <= 0 {
-			h = max(minPanelHeight, a.settings.WindowHeight)
-		}
-		var x, y int
-		if a.settings.FollowMouse {
-			x, y = followMouseTarget(cursor, w, h, d.WorkArea)
-		} else {
-			x, y = centeredPanelTarget(w, h, d.WorkArea)
-		}
-		a.panel.SetPosition(x, y)
-	}
-	a.stopSearchTimer()
-	a.selected = -1
-	a.confirmClearOpen = false
-	a.resetScrollToTop()
-	a.reloadIfStale()
-	a.scrollListToTop()
-	a.setPanelNoActivate(!focus)
-	// 不抢焦点呼出时必须置顶，否则非置顶窗口执行 ShowInactive 会被压在当前前台窗口后面
-	a.panel.SetAlwaysOnTop(a.winPinned || !focus)
-	a.lastShowAt = time.Now()
-	if focus {
-		a.panel.Show()
-		a.panel.Focus()
-	} else {
-		a.panel.ShowInactive()
-		a.syncOutsideClickWatch()
-		a.syncKeyRouter()
-	}
-}
-
-func followMouseTarget(cursor mygo.Point, w, h int, workArea mygo.Rectangle) (int, int) {
-	const edgePad = 8
-	x := cursor.X
-	y := cursor.Y
-
-	minX := workArea.X + edgePad
-	maxX := workArea.X + workArea.Width - w - edgePad
-	if maxX < minX {
-		x = workArea.X
-	} else {
-		x = max(minX, min(x, maxX))
-	}
-
-	minY := workArea.Y + edgePad
-	maxY := workArea.Y + workArea.Height - h - edgePad
-	if maxY < minY {
-		return x, workArea.Y
-	}
-	if y > maxY {
-		aboveY := cursor.Y - h
-		if aboveY >= minY {
-			y = aboveY
-		} else {
-			y = maxY
-		}
-	}
-	if y < minY {
-		y = minY
-	}
-	return x, y
-}
-
-func centeredPanelTarget(w, h int, workArea mygo.Rectangle) (int, int) {
-	x := workArea.X + (workArea.Width-w)/2
-	y := workArea.Y + (workArea.Height-h)/3
-	if workArea.Width > w {
-		x = max(workArea.X, min(x, workArea.X+workArea.Width-w))
-	} else {
-		x = workArea.X
-	}
-	if workArea.Height > h {
-		y = max(workArea.Y, min(y, workArea.Y+workArea.Height-h))
-	} else {
-		y = workArea.Y
-	}
-	return x, y
-}
-
 // releaseHiddenMemory prunes caches and trims OS working set pages as needed.
 // Under the 75 MB working set threshold, up to warmThumbCacheLimit (8) recently
 // viewed thumbnails and richSpans are preserved on hide to avoid wake-up CPU spikes.
@@ -396,39 +197,17 @@ func (a *clipApp) releaseHiddenMemory() {
 	}
 }
 
-func (a *clipApp) hidePanel() {
-	a.stopOutsideClickWatch()
-	a.stopKeyRouting()
-	a.edgeDock = dockNone
-	a.routedSearchActive = false
-	a.revealedSensitive = nil
-	a.confirmClearOpen = false
+func (a *clipApp) panelWidth() float32 {
+	winW := float32(a.settings.WindowWidth)
 	if a.panel != nil {
-		a.panel.Hide()
+		if w, _ := a.panel.Size(); w > 0 {
+			winW = float32(w)
+		}
 	}
-	if a.settings.NoFocusMode {
-		a.setPanelNoActivate(true)
+	if winW <= 0 {
+		winW = panelWidth
 	}
-	a.releaseHiddenMemory()
-}
-
-func (a *clipApp) togglePanel() {
-	a.togglePanelWithFocus(!a.settings.NoFocusMode)
-}
-
-func (a *clipApp) togglePanelFromHotkey() {
-	a.togglePanelWithFocus(!a.settings.NoFocusMode)
-}
-
-func (a *clipApp) togglePanelWithFocus(focus bool) {
-	if a.panel == nil {
-		return
-	}
-	if a.panel.IsVisible() && a.edgeDock == dockNone {
-		a.hidePanel()
-	} else {
-		a.showPanelWithFocus(focus)
-	}
+	return winW
 }
 
 func (a *clipApp) saveWindowSize() {
@@ -503,7 +282,7 @@ func (a *clipApp) ready() {
 		if s == "" {
 			continue
 		}
-		if err := mygo.GlobalShortcut.Register(s, a.togglePanelFromHotkey); err == nil {
+		if err := mygo.GlobalShortcut.Register(s, a.togglePanel); err == nil {
 			a.shortcut = s
 			a.settings.Hotkey = s
 			break
@@ -526,74 +305,6 @@ func (a *clipApp) ready() {
 	if !mygo.App.WasOpenedAtLogin() && !a.settings.SilentStart {
 		a.showPanel()
 	}
-}
-
-func (a *clipApp) setupTray() {
-	tray, err := mygo.NewTray(mygo.TrayOptions{
-		Icon:    a.iconPNG,
-		ToolTip: locales.TrayTooltip(),
-	})
-	if err != nil {
-		log.Printf("create tray: %v", err)
-		return
-	}
-	a.tray = tray
-	a.updateTrayMenu()
-	a.tray.OnClick(func() {
-		if time.Since(a.lastOutsideHide) < 300*time.Millisecond {
-			return
-		}
-		a.togglePanel()
-	})
-	mygo.App.OnLocaleChanged(func(string) {
-		a.updateTrayMenu()
-	})
-	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
-		a.quitting = true
-	})
-	mygo.App.OnQuitCanceled(func() {
-		a.quitting = false
-	})
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
-		a.stopOutsideClickWatch()
-		a.stopKeyRouting()
-		a.stopEdgeDocking()
-		if a.resizeTimer != nil {
-			a.resizeTimer.Stop()
-		}
-		a.stopSearchTimer()
-		if a.updateTimer != nil {
-			a.updateTimer.Stop()
-		}
-		a.saveWindowSize()
-		if a.stopWatch != nil {
-			a.stopWatch()
-		}
-		if a.stopTrack != nil {
-			close(a.stopTrack)
-			a.stopTrack = nil
-		}
-		if a.tray != nil {
-			a.tray.Destroy()
-		}
-	})
-}
-
-func (a *clipApp) updateTrayMenu() {
-	if a.tray == nil {
-		return
-	}
-	a.trayOpenItem = &mygo.MenuItem{
-		Label:       locales.TrayOpen(),
-		Accelerator: a.shortcut,
-		Click:       func(*mygo.MenuItem, *mygo.Window) { a.showPanel() },
-	}
-	menu := mygo.NewMenu([]*mygo.MenuItem{
-		a.trayOpenItem,
-		mygo.Separator(),
-		{Role: mygo.RoleQuit, Label: locales.TrayQuit()},
-	})
-	a.tray.SetMenu(menu)
 }
 
 func (a *clipApp) startForegroundTracker() {

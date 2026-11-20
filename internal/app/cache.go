@@ -40,6 +40,7 @@ type bitmapCache struct {
 	order   []string
 	failed  map[string]bool
 	loading map[string]bool
+	gen     uint64
 }
 
 func newBitmapCache() *bitmapCache {
@@ -51,6 +52,7 @@ func newBitmapCache() *bitmapCache {
 }
 
 func (bc *bitmapCache) clear() {
+	bc.gen++
 	bc.items = make(map[string]*ui.Bitmap)
 	bc.order = nil
 	if len(bc.failed) > 128 {
@@ -129,6 +131,7 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 		return nil
 	}
 	bc.loading[key] = true
+	gen := bc.gen
 	go func() {
 		var bmp *ui.Bitmap
 		err := runWithTimeout(bitmapFetchTimeout, func() error {
@@ -138,6 +141,9 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 		})
 		win.Update(func() {
 			delete(bc.loading, key)
+			if gen != bc.gen {
+				return
+			}
 			if err != nil || bmp == nil {
 				if len(bc.failed) >= 128 {
 					bc.failed = make(map[string]bool)

@@ -218,6 +218,7 @@ func (a *clipApp) deleteItem(id int64) {
 		log.Printf("delete item: %v", err)
 		return
 	}
+	a.removeTempFilesForID(id)
 	a.reload()
 }
 
@@ -240,18 +241,48 @@ func (a *clipApp) clearAll() {
 		log.Printf("clear all: %v", err)
 		return
 	}
+	a.cleanupTempFiles()
 	a.thumbs.clear()
 	a.richSpans = nil
 	a.reload()
 }
 
 func (a *clipApp) persistSettings() {
+	if a.persistTimer != nil {
+		a.persistTimer.Stop()
+		a.persistTimer = nil
+	}
+	a.persistPending = false
 	if a.store == nil {
 		return
 	}
 	if err := a.store.SaveSettings(a.settings); err != nil {
 		log.Printf("save settings: %v", err)
 	}
+}
+
+func (a *clipApp) schedulePersistSettings() {
+	a.persistPending = true
+	if a.persistTimer != nil {
+		a.persistTimer.Reset(300 * time.Millisecond)
+		return
+	}
+	a.persistTimer = time.AfterFunc(300*time.Millisecond, func() {
+		if a.panel != nil {
+			a.panel.Update(a.flushPendingSettingsPersist)
+		}
+	})
+}
+
+func (a *clipApp) flushPendingSettingsPersist() {
+	if a.persistTimer != nil {
+		a.persistTimer.Stop()
+		a.persistTimer = nil
+	}
+	if !a.persistPending {
+		return
+	}
+	a.persistSettings()
 }
 
 func (a *clipApp) resetSettings() {
@@ -418,6 +449,9 @@ func (a *clipApp) onClipboardChanged() {
 		if err != nil || len(files) == 0 {
 			return
 		}
+		if h, err := store.FilesContentHash(files); err == nil && a.shouldIgnore(h) {
+			return
+		}
 		a.saveAsync(func() (string, error) {
 			it, err := a.store.SaveFiles(files, opts)
 			return it.Hash, err
@@ -456,15 +490,34 @@ func (a *clipApp) onClipboardChanged() {
 			return
 		}
 		opts.HTML = htmlStr
+		snap := privacySnapshot{
+			enabled:     a.settings.PrivacyProtection,
+			kinds:       slices.Clone(a.settings.PrivacyKinds),
+			customRules: a.settings.PrivacyCustomRules,
+		}
 		a.saveAsync(func() (string, error) {
-			it, err := a.saveTextWithPrivacy(text, opts)
+			it, err := a.saveTextWithPrivacySnapshot(text, opts, snap)
 			return it.Hash, err
 		})
 	}
 }
 
+type privacySnapshot struct {
+	enabled     bool
+	kinds       []string
+	customRules string
+}
+
 func (a *clipApp) saveTextWithPrivacy(text string, opts store.SaveOptions) (store.ClipItem, error) {
-	if a.settings.PrivacyProtection && store.ContainsSensitiveInfo(text, a.settings.PrivacyKinds, a.settings.PrivacyCustomRules) {
+	return a.saveTextWithPrivacySnapshot(text, opts, privacySnapshot{
+		enabled:     a.settings.PrivacyProtection,
+		kinds:       a.settings.PrivacyKinds,
+		customRules: a.settings.PrivacyCustomRules,
+	})
+}
+
+func (a *clipApp) saveTextWithPrivacySnapshot(text string, opts store.SaveOptions, snap privacySnapshot) (store.ClipItem, error) {
+	if snap.enabled && store.ContainsSensitiveInfo(text, snap.kinds, snap.customRules) {
 		opts.Tags = append(opts.Tags, store.SensitiveTag)
 	}
 	return a.store.SaveText(text, opts)

@@ -5,7 +5,9 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1564,5 +1566,44 @@ func TestSaveAsyncSerializesAndDeduplicates(t *testing.T) {
 	}
 	if items[0].Text != "second-item" || items[1].Text != "first-item" {
 		t.Fatalf("expected FIFO order [second-item, first-item], got [%q, %q]", items[0].Text, items[1].Text)
+	}
+}
+
+func TestSecurityAndUTF8Helpers(t *testing.T) {
+	rawHTML := `<div onclick="alert(1)"><script>evil()</script><iframe src="https://x.test"></iframe><a href="javascript:alert(2)">bad</a><a href="https://example.com">ok</a></div>`
+	clean := sanitizeHTMLForExternalOpen(rawHTML)
+	for _, forbidden := range []string{"<script", "<iframe", "onclick", "javascript:"} {
+		if strings.Contains(strings.ToLower(clean), forbidden) {
+			t.Fatalf("expected %q stripped from sanitized HTML, got %q", forbidden, clean)
+		}
+	}
+	if !strings.Contains(clean, "https://example.com") {
+		t.Fatalf("expected safe link preserved, got %q", clean)
+	}
+
+	if isHTTPURL("file:///C:/Windows/System32/cmd.exe") || isBareWWWURL("ms-msdt:/id") {
+		t.Fatal("expected non-http URI schemes rejected")
+	}
+	if !isBareWWWURL("www.example.com/docs") {
+		t.Fatal("expected www. prefix recognized")
+	}
+
+	// Verify UTF-8 boundary truncation never leaves invalid trailing bytes.
+	sample := "中文测试ABC"
+	trunc := truncateUTF8Bytes(sample, 5)
+	if trunc != "中" {
+		t.Fatalf("expected UTF-8 safe truncation to %q, got %q", "中", trunc)
+	}
+
+	// Verify temp file tracking & cleanup.
+	a := newClipApp(nil, nil)
+	p := filepath.Join(t.TempDir(), "MyTieZ_entry_42.txt")
+	if err := os.WriteFile(p, []byte("tmp"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.trackTempFile(p)
+	a.cleanupTempFiles()
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Fatalf("expected tracked temp file removed on cleanup, err=%v", err)
 	}
 }

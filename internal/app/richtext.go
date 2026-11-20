@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 	"golang.org/x/net/html"
@@ -90,7 +91,7 @@ func parseHTMLPreviewSpans(rawHTML string, t *ui.Theme) []ui.Span {
 		return nil
 	}
 	if len(frag) > maxRichPreviewHTMLBytes {
-		frag = frag[:maxRichPreviewHTMLBytes]
+		frag = truncateUTF8Bytes(frag, maxRichPreviewHTMLBytes)
 	}
 	doc, err := html.Parse(strings.NewReader(frag))
 	if err != nil {
@@ -161,6 +162,17 @@ func parseHTMLPreviewSpans(rawHTML string, t *ui.Theme) []ui.Span {
 		}
 	}
 	return spans
+}
+
+func truncateUTF8Bytes(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	n := maxBytes
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func extractHTMLFragment(raw string) string {

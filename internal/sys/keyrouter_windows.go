@@ -4,7 +4,6 @@ package sys
 
 import (
 	"os"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -120,10 +119,6 @@ func StartKeyRouter(onKey func(RoutedKey)) (func(), bool) {
 	}
 	activeKeyWatch.Store(st)
 
-	tidReady := make(chan uint32, 1)
-	hookOK := make(chan bool, 1)
-	pumpDone := make(chan struct{})
-
 	go func() {
 		for {
 			select {
@@ -135,52 +130,10 @@ func StartKeyRouter(onKey func(RoutedKey)) (func(), bool) {
 		}
 	}()
 
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		defer close(pumpDone)
-
-		var m winMsg
-		procPeekMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0, pmNoRemove)
-		tid := windows.GetCurrentThreadId()
-		hhook, _, _ := procSetWindowsHookExW.Call(whKeyboardLL, keyHookCB, 0, 0)
-		tidReady <- tid
-		hookOK <- (hhook != 0)
-		if hhook == 0 {
-			return
-		}
-		defer procUnhookWindowsHookEx.Call(hhook)
-
-		for {
-			r, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
-			if int32(r) <= 0 {
-				break
-			}
-			procTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
-			procDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
-		}
-	}()
-
-	tid := <-tidReady
-	ok := <-hookOK
-	if !ok {
+	return startLLHook(whKeyboardLL, keyHookCB, func() {
 		activeKeyWatch.CompareAndSwap(st, nil)
 		close(st.stopCh)
-		<-pumpDone
-		return func() {}, false
-	}
-
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			activeKeyWatch.CompareAndSwap(st, nil)
-			close(st.stopCh)
-			if tid != 0 {
-				procPostThreadMessageW.Call(uintptr(tid), uintptr(wmQuit), 0, 0)
-			}
-			<-pumpDone
-		})
-	}, true
+	})
 }
 
 func keyDownAsync(vk uint32) bool {

@@ -70,6 +70,22 @@ func compiledCustomRules(customRules string) []*regexp.Regexp {
 	return compiled
 }
 
+// InvalidCustomRuleLines returns 1-based line numbers of non-empty custom rules
+// that fail Go regexp compilation.
+func InvalidCustomRuleLines(customRules string) []int {
+	var invalid []int
+	for i, rawLine := range strings.Split(customRules, "\n") {
+		rule := strings.TrimSpace(rawLine)
+		if rule == "" || strings.HasPrefix(rule, "#") {
+			continue
+		}
+		if _, err := regexp.Compile(rule); err != nil {
+			invalid = append(invalid, i+1)
+		}
+	}
+	return invalid
+}
+
 // ContainsSensitiveInfo checks text against enabled built-in kinds and custom regex lines.
 func ContainsSensitiveInfo(text string, kinds []string, customRules string) bool {
 	if len(text) > 5000 || strings.HasPrefix(text, "data:") {

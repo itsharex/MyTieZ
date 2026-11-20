@@ -51,32 +51,40 @@ func matchPinyin(text, query string) bool {
 			break
 		}
 	}
+	failed := make(map[uint64]struct{})
 	for i := range runes {
-		if matchPinyinAt(runes[i:], q) {
+		if matchPinyinAt(runes, i, q, 0, failed) {
 			return true
 		}
 	}
 	return false
 }
 
-func matchPinyinAt(runes []rune, q string) bool {
-	if q == "" {
+func matchPinyinAt(runes []rune, pos int, q string, qOff int, failed map[uint64]struct{}) bool {
+	if qOff >= len(q) {
 		return true
 	}
-	if len(runes) == 0 {
+	if pos >= len(runes) {
 		return false
 	}
-	r := runes[0]
+	memoKey := (uint64(pos) << 32) | uint64(uint32(qOff))
+	if _, seen := failed[memoKey]; seen {
+		return false
+	}
+
+	r := runes[pos]
 	pys := runePinyins(r)
 	if pys == "" {
 		lr := unicode.ToLower(r)
-		qr, size := utf8.DecodeRuneInString(q)
-		if lr != qr {
-			return false
+		qr, size := utf8.DecodeRuneInString(q[qOff:])
+		if lr == qr && matchPinyinAt(runes, pos+1, q, qOff+size, failed) {
+			return true
 		}
-		return matchPinyinAt(runes[1:], q[size:])
+		failed[memoKey] = struct{}{}
+		return false
 	}
 
+	rem := q[qOff:]
 	for pys != "" {
 		var py string
 		if comma := strings.IndexByte(pys, ','); comma >= 0 {
@@ -90,18 +98,19 @@ func matchPinyinAt(runes []rune, q string) bool {
 			continue
 		}
 		// Full pinyin match or trailing prefix match (e.g. "weix" -> "微信")
-		if strings.HasPrefix(q, py) {
-			if matchPinyinAt(runes[1:], q[len(py):]) {
+		if strings.HasPrefix(rem, py) {
+			if matchPinyinAt(runes, pos+1, q, qOff+len(py), failed) {
 				return true
 			}
-		} else if strings.HasPrefix(py, q) {
+		} else if strings.HasPrefix(py, rem) {
 			return true
 		}
 		// Initial match (e.g. "wx" -> "微信")
-		if q[0] == py[0] && matchPinyinAt(runes[1:], q[1:]) {
+		if rem[0] == py[0] && matchPinyinAt(runes, pos+1, q, qOff+1, failed) {
 			return true
 		}
 	}
+	failed[memoKey] = struct{}{}
 	return false
 }
 

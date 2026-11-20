@@ -2,6 +2,9 @@ package store
 
 import (
 	"bytes"
+	"database/sql"
+	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -682,5 +685,103 @@ func TestSensitiveEncryptionLifecycle(t *testing.T) {
 	aligned, err := st2.GetByID(legacy.ID)
 	if err != nil || aligned.Text != "legacy-secret-1234" {
 		t.Fatalf("expected aligned item decrypted on read, got %+v err=%v", aligned, err)
+	}
+}
+
+func TestStoreSearchTagExactAndBeyond1000(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// Verify UpdateTags on missing ID returns sql.ErrNoRows.
+	if _, err := st.UpdateTags(999999, []string{"work"}); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected sql.ErrNoRows for missing ID, got %v", err)
+	}
+
+	// Verify SQL wildcard chars in tags are matched literally via json_each.
+	it1, err := st.SaveText("tag literal item", SaveOptions{Tags: []string{"work_1", "100%"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SaveText("tag similar item", SaveOptions{Tags: []string{"workA1", "1000"}}); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := st.ListSummaries("#work_1", "", 10)
+	if err != nil || len(hits) != 1 || hits[0].ID != it1.ID {
+		t.Fatalf("expected exact #work_1 tag match, got %+v err=%v", hits, err)
+	}
+	hitsPct, err := st.ListSummaries("#100%", "", 10)
+	if err != nil || len(hitsPct) != 1 || hitsPct[0].ID != it1.ID {
+		t.Fatalf("expected exact #100%% tag match, got %+v err=%v", hitsPct, err)
+	}
+
+	// Insert > 1000 newer items and ensure oldest item remains searchable.
+	target, err := st.SaveText("古老的微信账单记录", SaveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := st.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UnixMilli() + 10000
+	for i := 0; i < 1050; i++ {
+		txt := fmt.Sprintf("filler entry %d", i)
+		if _, err := tx.Exec(`
+INSERT INTO clip_items (kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at)
+VALUES ('text', ?, ?, '', '', '[]', ?, 'test', '', 16, 0, '[]', ?, ?)
+`, hashBytes([]byte(txt)), txt, txt, now+int64(i), now+int64(i)); err != nil {
+			_ = tx.Rollback()
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	pyHits, err := st.ListSummaries("wxzd", "", 20)
+	if err != nil || len(pyHits) != 1 || pyHits[0].ID != target.ID {
+		t.Fatalf("expected pinyin search to find item beyond 1000 rows, got %+v err=%v", pyHits, err)
+	}
+}
+
+func TestDPAPICorruptPayloadErrors(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("DPAPI encryption is Windows-only")
+	}
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	it, err := st.SaveText("corrupt-check", SaveOptions{Tags: []string{SensitiveTag}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE clip_items SET text_content = 'dpapi:!!!invalid-base64!!!' WHERE id = ?`, it.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetByID(it.ID); err == nil {
+		t.Fatal("expected GetByID to return error on corrupted DPAPI payload")
+	}
+	if _, err := st.UpdateTags(it.ID, []string{"plain"}); err == nil {
+		t.Fatal("expected UpdateTags to return error when decrypting corrupted DPAPI payload")
+	}
+}
+
+func TestPinyinPolyphoneMemoAndInvalidRegexLines(t *testing.T) {
+	// Polyphonic dense string with long mismatched ASCII query should return rapidly.
+	text := strings.Repeat("长乐朝阳重行", 80)
+	query := strings.Repeat("czx", 18) + "zzz"
+	if matchPinyin(text, query) {
+		t.Fatal("expected mismatched polyphonic query to return false")
+	}
+
+	invalid := InvalidCustomRuleLines("^valid-\\d+$\n# comment\n[unclosed\n\n(?invalid)")
+	if len(invalid) != 2 || invalid[0] != 3 || invalid[1] != 5 {
+		t.Fatalf("expected invalid line numbers [3, 5], got %v", invalid)
 	}
 }

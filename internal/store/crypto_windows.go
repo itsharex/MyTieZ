@@ -4,6 +4,7 @@ package store
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"unsafe"
 
@@ -13,9 +14,9 @@ import (
 // EncryptPrefix marks DPAPI-protected fields persisted in SQLite.
 const EncryptPrefix = "dpapi:"
 
-func encryptString(plain string) string {
+func encryptString(plain string) (string, error) {
 	if plain == "" || strings.HasPrefix(plain, EncryptPrefix) {
-		return plain
+		return plain, nil
 	}
 	inBytes := []byte(plain)
 	var inBlob windows.DataBlob
@@ -32,7 +33,7 @@ func encryptString(plain string) string {
 		windows.CRYPTPROTECT_UI_FORBIDDEN,
 		&outBlob,
 	); err != nil {
-		return plain
+		return "", fmt.Errorf("dpapi encrypt: %w", err)
 	}
 	defer func() {
 		if outBlob.Data != nil {
@@ -40,17 +41,17 @@ func encryptString(plain string) string {
 		}
 	}()
 	out := unsafe.Slice(outBlob.Data, outBlob.Size)
-	return EncryptPrefix + base64.StdEncoding.EncodeToString(out)
+	return EncryptPrefix + base64.StdEncoding.EncodeToString(out), nil
 }
 
-func decryptString(value string) string {
+func decryptString(value string) (string, error) {
 	if !strings.HasPrefix(value, EncryptPrefix) {
-		return value
+		return value, nil
 	}
 	payload := strings.TrimPrefix(value, EncryptPrefix)
 	raw, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil || len(raw) == 0 {
-		return value
+		return "", fmt.Errorf("dpapi decode: invalid payload")
 	}
 	var inBlob windows.DataBlob
 	inBlob.Size = uint32(len(raw))
@@ -66,7 +67,7 @@ func decryptString(value string) string {
 		windows.CRYPTPROTECT_UI_FORBIDDEN,
 		&outBlob,
 	); err != nil {
-		return value
+		return "", fmt.Errorf("dpapi decrypt: %w", err)
 	}
 	defer func() {
 		if outBlob.Data != nil {
@@ -74,7 +75,7 @@ func decryptString(value string) string {
 		}
 	}()
 	if outBlob.Size == 0 || outBlob.Data == nil {
-		return ""
+		return "", nil
 	}
-	return string(unsafe.Slice(outBlob.Data, outBlob.Size))
+	return string(unsafe.Slice(outBlob.Data, outBlob.Size)), nil
 }

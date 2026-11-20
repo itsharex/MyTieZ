@@ -52,12 +52,9 @@ func (a *clipApp) renderHeaderIconBtn(c *ui.Context, icon *ui.SVG, label string,
 	} else {
 		btn.AnimatePose(ui.Pose{}, ui.Snappy)
 	}
-	shadowAlpha := float32(0.06)
-	if t.Dark {
-		shadowAlpha = 0.22
-	}
+	sa := shadowAlpha(t, 0.06, 0.22)
 	btn.Background(bg).Border(1, border).
-		Shadow(0, 1, 3, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+		Shadow(0, 1, 3, 0, ui.RGBA(0, 0, 0, sa)).
 		Transition(colorTransition).
 		OnClick(onClick).
 		Children(func() { ui.Icon(c, icon).FontSize(16).TextColor(fg) })
@@ -288,10 +285,7 @@ func (a *clipApp) flushPendingToast(c *ui.Context) {
 		a.pendingToast = ""
 	}
 	t := c.Theme()
-	shadowAlpha := float32(0.12)
-	if t.Dark {
-		shadowAlpha = 0.32
-	}
+	sa := shadowAlpha(t, 0.12, 0.32)
 	ui.ToastViewportBase(c, func(viewport ui.Element, toasts []ui.Toast) {
 		viewport.Top(52).Justify(ui.Start).AlignItems(ui.Center).Gap(6)
 		for _, ts := range toasts {
@@ -300,7 +294,7 @@ func (a *clipApp) flushPendingToast(c *ui.Context) {
 			p.Root.Row().AlignItems(ui.Center).Gap(8).
 				Padding(8, 14).Radius(radiusCard).
 				Background(a.floatingSurface(c, t)).Border(1, t.Border).
-				Shadow(0, 6, 18, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+				Shadow(0, 6, 18, 0, ui.RGBA(0, 0, 0, sa)).
 				Opacity(op).
 				Children(func() {
 					ui.Text(c, ts.Title).FontSize(12.5).FontWeight(500).TextColor(t.Text)
@@ -556,10 +550,7 @@ func (a *clipApp) renderScrollTopButton(c *ui.Context, t *ui.Theme) {
 	if !a.settings.ScrollTopButton || a.listScroll.Y <= 120 {
 		return
 	}
-	shadowAlpha := float32(0.12)
-	if t.Dark {
-		shadowAlpha = 0.32
-	}
+	sa := shadowAlpha(t, 0.12, 0.32)
 	scrollTopLabel := locales.In(c.Locale()).ScrollTop()
 	btn := ui.ButtonBase(c.Key("scroll-top-btn")).
 		Absolute().Right(16).Bottom(16).ZIndex(20).
@@ -571,7 +562,7 @@ func (a *clipApp) renderScrollTopButton(c *ui.Context, t *ui.Theme) {
 		fg = t.AccentText
 	}
 	btn.Background(bg).Border(1, t.Border).
-		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, sa)).
 		Transition(colorTransition).
 		OnClick(func() {
 			a.listScroll.Y = 0
@@ -708,17 +699,8 @@ func (a *clipApp) renderSensitiveImageMask(c *ui.Context, t *ui.Theme, msgs loca
 }
 
 func (a *clipApp) cardContentWidth() float32 {
-	winW := float32(a.settings.WindowWidth)
-	if a.panel != nil {
-		if w, _ := a.panel.Size(); w > 0 {
-			winW = float32(w)
-		}
-	}
-	if winW <= 0 {
-		winW = panelWidth
-	}
 	// 扣除列表左右 padding(32) + 卡片左右 padding(24) + 卡片与图片边框(4)
-	return max(120, winW-60)
+	return max(120, a.panelWidth()-60)
 }
 
 func (a *clipApp) renderImagePreview(c *ui.Context, item store.ClipItem) {

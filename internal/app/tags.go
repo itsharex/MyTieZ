@@ -218,16 +218,7 @@ func (a *clipApp) fitOverlayTags(c *ui.Context, t *ui.Theme, tags []string) (vis
 		gapW         = float32(4)
 		moreReserveW = float32(34)
 	)
-	winW := float32(a.settings.WindowWidth)
-	if a.panel != nil {
-		if w, _ := a.panel.Size(); w > 0 {
-			winW = float32(w)
-		}
-	}
-	if winW <= 0 {
-		winW = panelWidth
-	}
-	budget := max(140, (winW-58)*0.55)
+	budget := max(140, (a.panelWidth()-58)*0.55)
 
 	used := float32(0)
 	for i, tag := range tags {

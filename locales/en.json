@@ -203,5 +203,6 @@
   "settingsMaskEmailDomainDesc": "Mask the domain part after @ in email addresses",
   "settingsPrivacyCustomRules": "Custom Rules",
   "settingsPrivacyCustomRulesDesc": "One regex per line; matches are tagged as sensitive",
-  "settingsPrivacyCustomRulesPlaceholder": "e.g. AKIA[0-9A-Z]+"
+  "settingsPrivacyCustomRulesPlaceholder": "e.g. AKIA[0-9A-Z]+",
+  "settingsPrivacyCustomRulesInvalid": "Invalid regex on line(s) {lines} (ignored)"
 }

@@ -4,6 +4,7 @@ import (
 	"log"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"mytiez/internal/store"
@@ -55,7 +56,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 		ui.Scroll(c.Key("settings-scroll")).Grow(1).Children(func() {
 			ui.Column(c).FillWidth().Padding(22, 14, 18, 14).Gap(10).Children(func() {
 				// 1. 常规设置
-				a.renderSettingsGroup(c, msgs.SettingsGroupGeneral(), &a.expanded.general, func() {
+				a.renderSettingsGroup(c, "general", msgs.SettingsGroupGeneral(), &a.expanded.general, func() {
 					a.renderSwitchRow(c, msgs.SettingsAutostart(), "", &a.settings.AutoStart, func(on bool) {
 						if err := mygo.App.SetOpenAtLogin(on); err != nil {
 							log.Printf("set open at login: %v", err)
@@ -112,7 +113,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 				})
 
 				// 2. 剪贴板设置
-				a.renderSettingsGroup(c, msgs.SettingsGroupClipboard(), &a.expanded.clipboard, func() {
+				a.renderSettingsGroup(c, "clipboard", msgs.SettingsGroupClipboard(), &a.expanded.clipboard, func() {
 					a.renderHotkeyRecorder(c)
 					a.renderSwitchRow(c, msgs.SettingsDeduplicate(), "", &a.settings.Deduplicate, func(bool) {
 						a.persistSettings()
@@ -148,7 +149,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 				})
 
 				// 3. 界面设置
-				a.renderSettingsGroup(c, msgs.SettingsGroupAppearance(), &a.expanded.appearance, func() {
+				a.renderSettingsGroup(c, "appearance", msgs.SettingsGroupAppearance(), &a.expanded.appearance, func() {
 					curLocale := c.Locale()
 					a.renderChoiceGroup(c, msgs.SettingsLanguage(), []choiceOption{
 						{label: msgs.SettingsLangZh(), a11y: msgs.SettingsLangZh(), active: curLocale != "zh-Hant" && curLocale != "en", onClick: func() { a.setLanguage("zh-Hans") }},
@@ -173,14 +174,14 @@ func (a *clipApp) settingsView(c *ui.Context) {
 				})
 
 				// 4. 默认打开程序
-				a.renderSettingsGroup(c, msgs.SettingsGroupOpenApps(), &a.expanded.openApps, func() {
+				a.renderSettingsGroup(c, "open-apps", msgs.SettingsGroupOpenApps(), &a.expanded.openApps, func() {
 					a.renderOpenAppRow(c, msgs.TabText(), &a.settings.OpenAppText)
 					a.renderOpenAppRow(c, msgs.TabRichText(), &a.settings.OpenAppRichText)
 					a.renderOpenAppRow(c, msgs.TabImage(), &a.settings.OpenAppImage)
 				})
 
 				// 5. 数据管理
-				a.renderSettingsGroup(c, msgs.SettingsGroupData(), &a.expanded.data, func() {
+				a.renderSettingsGroup(c, "data", msgs.SettingsGroupData(), &a.expanded.data, func() {
 					dataDir := ""
 					if a.store != nil {
 						dataDir = a.store.BaseDir()
@@ -361,14 +362,11 @@ func (a *clipApp) renderBackdropSelectRow(c *ui.Context, msgs locales.Messages) 
 			a.applyBackdrop()
 			a.persistSettings()
 		}
-		shadowAlpha := float32(0.12)
-		if t.Dark {
-			shadowAlpha = 0.34
-		}
+		sa := shadowAlpha(t, 0.12, 0.34)
 		sel.Popup(func(panel ui.Element) {
 			panel.Margin(4, 0, 0, 0).Padding(4).Radius(radiusGroup).
 				Background(a.floatingSurface(c, t)).Border(1, t.Border).
-				Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, shadowAlpha))
+				Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, sa))
 			for _, opt := range opts {
 				item := sel.Item(opt.mode).Padding(6, 10).Radius(radiusMicro).Label(opt.a11y)
 				fg := t.Text
@@ -416,7 +414,7 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 	}
 
 	ui.Column(c).FillWidth().Padding(0, 14, 6, 18).Children(func() {
-		a.renderPrivacySubgroup(c, msgs.SettingsPrivacyKinds(), "", &a.expanded.privacyKinds, func() {
+		a.renderPrivacySubgroup(c, "kinds", msgs.SettingsPrivacyKinds(), "", &a.expanded.privacyKinds, func() {
 			ui.Row(c).FillWidth().Padding(2, 8, 8, 28).Gap(12).Wrap().Children(func() {
 				for _, k := range store.AllPrivacyKinds {
 					kind := k
@@ -444,7 +442,7 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 			})
 		})
 
-		a.renderPrivacySubgroup(c, msgs.SettingsPrivacyCustomRules(), msgs.SettingsPrivacyCustomRulesDesc(), &a.expanded.privacyRules, func() {
+		a.renderPrivacySubgroup(c, "rules", msgs.SettingsPrivacyCustomRules(), msgs.SettingsPrivacyCustomRulesDesc(), &a.expanded.privacyRules, func() {
 			ui.Column(c).FillWidth().Padding(2, 8, 8, 28).Gap(6).Children(func() {
 				rulesBox := ui.TextArea(c, &a.settings.PrivacyCustomRules).
 					FillWidth().Height(72).Padding(8, 10).Radius(radiusControl).
@@ -456,12 +454,20 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 						}
 					})
 				if rulesBox.Changed() {
-					a.persistSettings()
+					a.schedulePersistSettings()
+				}
+				if invalid := store.InvalidCustomRuleLines(a.settings.PrivacyCustomRules); len(invalid) > 0 {
+					lineStrs := make([]string, len(invalid))
+					for i, ln := range invalid {
+						lineStrs[i] = strconv.Itoa(ln)
+					}
+					ui.Text(c, msgs.SettingsPrivacyCustomRulesInvalid(strings.Join(lineStrs, ", "))).
+						FontSize(11.5).TextColor(t.Danger).Wrap()
 				}
 			})
 		})
 
-		a.renderPrivacySubgroup(c, msgs.SettingsMaskPreview(), "", &a.expanded.privacyMasking, func() {
+		a.renderPrivacySubgroup(c, "masking", msgs.SettingsMaskPreview(), "", &a.expanded.privacyMasking, func() {
 			ui.Column(c).FillWidth().Padding(2, 8, 6, 28).Gap(6).Children(func() {
 				a.renderNumberStepperRow(c, msgs.SettingsMaskPrefix(), &a.settings.SensitiveMaskPrefix, 0, 12, func() {
 					a.persistSettings()
@@ -480,9 +486,9 @@ func (a *clipApp) renderPrivacySettings(c *ui.Context, msgs locales.Messages) {
 	})
 }
 
-func (a *clipApp) renderPrivacySubgroup(c *ui.Context, title, desc string, expanded *bool, body func()) {
+func (a *clipApp) renderPrivacySubgroup(c *ui.Context, key, title, desc string, expanded *bool, body func()) {
 	t := c.Theme()
-	ui.Column(c.Key("privacy-sub-"+title)).FillWidth().Children(func() {
+	ui.Column(c.Key("privacy-sub-"+key)).FillWidth().Children(func() {
 		ui.Box(c).FillWidth().Height(1).Background(t.Border.Alpha(0.28))
 		p := ui.CollapsibleBase(c, expanded)
 		p.Trigger.FillWidth().MinHeight(38).Padding(0, 4).Gap(8).AlignItems(ui.Center).Label(title).
@@ -584,15 +590,12 @@ type choiceOption struct {
 	onClick func()
 }
 
-func (a *clipApp) renderSettingsGroup(c *ui.Context, title string, expanded *bool, body func()) {
+func (a *clipApp) renderSettingsGroup(c *ui.Context, key, title string, expanded *bool, body func()) {
 	t := c.Theme()
-	shadowAlpha := float32(0.05)
-	if t.Dark {
-		shadowAlpha = 0.22
-	}
-	ui.Column(c.Key("group-"+title)).FillWidth().Radius(radiusCard).
+	sa := shadowAlpha(t, 0.05, 0.22)
+	ui.Column(c.Key("group-"+key)).FillWidth().Radius(radiusCard).
 		Background(t.Surface).Border(1, t.Border.Alpha(0.38)).
-		Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
+		Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, sa)).
 		Children(func() {
 			p := ui.CollapsibleBase(c, expanded)
 			tr := p.Trigger.FillWidth().MinHeight(50).Padding(0, 16).Radius(radiusCard).
@@ -827,11 +830,7 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 			if a.recordingHotkey {
 				cancelBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsHotkeyCancelA11y())
-				cBg := t.Surface
-				if cancelBtn.Hovered() {
-					cBg = t.SurfaceHover
-				}
-				cancelBtn.Background(cBg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+				cancelBtn.Background(surfaceBg(t, cancelBtn.Hovered())).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 					OnClick(func() {
 						a.cancelHotkeyRecording()
 					}).
@@ -840,11 +839,7 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 					})
 			} else if a.settings.Hotkey != defaultHotkey {
 				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsHotkeyResetA11y())
-				rBg := t.Surface
-				if resetBtn.Hovered() {
-					rBg = t.SurfaceHover
-				}
-				resetBtn.Background(rBg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+				resetBtn.Background(surfaceBg(t, resetBtn.Hovered())).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 					OnClick(func() {
 						a.applyHotkey(defaultHotkey)
 					}).

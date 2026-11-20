@@ -203,5 +203,6 @@
   "settingsMaskEmailDomainDesc": "開啟後，電子郵件 @ 後的網域也會被遮罩",
   "settingsPrivacyCustomRules": "自訂規則",
   "settingsPrivacyCustomRulesDesc": "每行一條正則表達式，符合即自動標記為敏感內容",
-  "settingsPrivacyCustomRulesPlaceholder": "例如：AKIA[0-9A-Z]+"
+  "settingsPrivacyCustomRulesPlaceholder": "例如：AKIA[0-9A-Z]+",
+  "settingsPrivacyCustomRulesInvalid": "第 {lines} 行正則表達式無效，已自動忽略"
 }

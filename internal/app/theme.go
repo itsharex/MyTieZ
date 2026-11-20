@@ -25,8 +25,21 @@ const (
 	filterPillHeight float32 = 28
 	pillHeight       float32 = 30
 	cardActionSize   float32 = 22
-	settingGroupMinH float32 = 52
 )
+
+func shadowAlpha(t *ui.Theme, light, dark float32) float32 {
+	if t.Dark {
+		return dark
+	}
+	return light
+}
+
+func surfaceBg(t *ui.Theme, hovered bool) ui.Color {
+	if hovered {
+		return t.SurfaceHover
+	}
+	return t.Surface
+}
 
 var (
 	myTiezLightTheme = buildMyTiezTheme(false)

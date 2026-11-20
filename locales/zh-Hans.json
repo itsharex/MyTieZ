@@ -223,5 +223,13 @@
   "settingsMaskEmailDomainDesc": "开启后，邮箱地址 @ 后的域名也会被脱敏",
   "settingsPrivacyCustomRules": "自定义规则",
   "settingsPrivacyCustomRulesDesc": "每行一条正则表达式，匹配则自动标记为敏感内容",
-  "settingsPrivacyCustomRulesPlaceholder": "例如：AKIA[0-9A-Z]+"
+  "settingsPrivacyCustomRulesPlaceholder": "例如：AKIA[0-9A-Z]+",
+  "settingsPrivacyCustomRulesInvalid": "第 {lines} 行正则表达式无效，已自动忽略",
+  "@settingsPrivacyCustomRulesInvalid": {
+    "placeholders": {
+      "lines": {
+        "type": "String"
+      }
+    }
+  }
 }

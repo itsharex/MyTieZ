@@ -1989,3 +1989,15 @@ func SettingsPrivacyCustomRulesPlaceholder() string {
 func (msgs Messages) SettingsPrivacyCustomRulesPlaceholder() string {
 	return Catalog.Format(msgs.locale, "settingsPrivacyCustomRulesPlaceholder", nil)
 }
+
+// SettingsPrivacyCustomRulesInvalid says "第 {lines} 行正则表达式无效，已自动忽略"
+// in the language the app shows.
+func SettingsPrivacyCustomRulesInvalid(lines string) string {
+	return In(i18n.Locale()).SettingsPrivacyCustomRulesInvalid(lines)
+}
+
+// SettingsPrivacyCustomRulesInvalid says "第 {lines} 行正则表达式无效，已自动忽略"
+// in the language of msgs.
+func (msgs Messages) SettingsPrivacyCustomRulesInvalid(lines string) string {
+	return Catalog.Format(msgs.locale, "settingsPrivacyCustomRulesInvalid", map[string]any{"lines": lines})
+}

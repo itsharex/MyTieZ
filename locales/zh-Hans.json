@@ -246,5 +246,15 @@
         "type": "String"
       }
     }
-  }
+  },
+  "richMenuPastePlain": "粘贴为纯文本",
+  "richMenuPasteFormatted": "带格式粘贴",
+  "richMenuCopyPlain": "复制为纯文本",
+  "richMenuCopyFormatted": "带格式复制",
+  "settingsPlainPasteShortcut": "纯文本粘贴快捷键",
+  "settingsPlainPasteDesc": "在面板中按下此快捷键以纯文本粘贴选中项",
+  "settingsPlainPasteDescRecording": "请按下新的快捷键，按 Backspace 关闭，Esc 取消",
+  "settingsPlainPasteRecA11y": "录制纯文本粘贴快捷键",
+  "settingsPlainPasteResetA11y": "恢复默认纯文本粘贴快捷键",
+  "settingsPlainPasteNeedMod": "请使用 Ctrl/Alt 组合、Shift+Enter 或 F1~F12"
 }

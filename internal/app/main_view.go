@@ -93,7 +93,7 @@ func (a *clipApp) view(c *ui.Context) {
 
 func (a *clipApp) mainView(c *ui.Context) {
 	t := c.Theme()
-	var enterPressed bool
+	var enterPressed, plainPastePressed bool
 	if !a.confirmClearOpen && !a.hasOpenFileMenu() {
 		if a.editingTagsID != 0 && c.Shortcut(0, ui.KeyEscape) {
 			a.editingTagsID = 0
@@ -112,7 +112,14 @@ func (a *clipApp) mainView(c *ui.Context) {
 			a.moveSelection(-1)
 		}
 		a.handleQuickPasteShortcut(c)
-		enterPressed = c.Shortcut(0, ui.KeyEnter)
+		if a.editingTagsID == 0 {
+			if mods, key, _, ok := parsePanelShortcut(a.settings.PlainPasteShortcut); ok && c.Shortcut(mods, key) {
+				plainPastePressed = true
+			}
+		}
+		if !plainPastePressed {
+			enterPressed = c.Shortcut(0, ui.KeyEnter)
+		}
 	}
 
 	msgs := locales.In(c.Locale())
@@ -264,7 +271,9 @@ func (a *clipApp) mainView(c *ui.Context) {
 					}
 				})
 
-			if enterPressed || list.Submitted() {
+			if plainPastePressed {
+				a.pasteSelectedPlainText()
+			} else if enterPressed || list.Submitted() {
 				a.pasteSelected()
 			}
 			a.renderScrollTopButton(c, t)
@@ -456,6 +465,7 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 		})
 
 	a.attachFileCardContextMenu(c, card, item)
+	a.attachRichTextCardContextMenu(c, card, item)
 
 	if card.RowClicked() {
 		a.selected = row.Index

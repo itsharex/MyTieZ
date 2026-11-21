@@ -312,6 +312,7 @@ func (a *clipApp) resetSettings() {
 	if a.panel != nil {
 		a.panel.SetSize(a.settings.WindowWidth, a.settings.WindowHeight)
 	}
+	a.syncPlainPasteShortcut()
 }
 
 func (a *clipApp) hydrateItem(item store.ClipItem) store.ClipItem {
@@ -328,7 +329,17 @@ func (a *clipApp) hydrateItem(item store.ClipItem) store.ClipItem {
 	return item
 }
 
+var writeClipItemFn = writeClipItem
+
 func (a *clipApp) pasteSelected() {
+	a.pasteSelectedWith(false)
+}
+
+func (a *clipApp) pasteSelectedPlainText() {
+	a.pasteSelectedWith(true)
+}
+
+func (a *clipApp) pasteSelectedWith(plainText bool) {
 	if len(a.items) == 0 {
 		return
 	}
@@ -336,12 +347,20 @@ func (a *clipApp) pasteSelected() {
 	if idx < 0 || idx >= len(a.items) {
 		idx = 0
 	}
-	item := a.hydrateItem(a.items[idx])
-	a.ignoreHash = item.Hash
+	a.pasteItem(a.items[idx], plainText)
+}
+
+func (a *clipApp) pasteItem(raw store.ClipItem, plainText bool) {
+	item := a.hydrateItem(raw)
+	if plainText && item.HTML != "" {
+		a.ignoreHash = store.TextContentHash(item.Text, "")
+	} else {
+		a.ignoreHash = item.Hash
+	}
 	a.ignoreUntil = time.Now().Add(1500 * time.Millisecond)
 
-	if mygo.App.IsReady() {
-		if err := writeClipItem(item); err != nil {
+	if mygo.App.IsReady() || writeClipItemFn != nil {
+		if err := writeClipItemFn(item, plainText); err != nil {
 			log.Printf("write clipboard: %v", err)
 			return
 		}
@@ -399,10 +418,13 @@ func (a *clipApp) pasteSelected() {
 	}
 }
 
-func writeClipItem(item store.ClipItem) error {
+func writeClipItem(item store.ClipItem, plainText bool) error {
+	if !mygo.App.IsReady() {
+		return nil
+	}
 	switch item.Kind {
 	case store.KindText, store.KindRichText, store.KindURL, store.KindCode:
-		if item.HTML != "" {
+		if item.HTML != "" && !plainText {
 			return mygo.Clipboard.Write(transfer.New(transfer.NewItem(
 				transfer.Bytes(transfer.Text, []byte(item.Text)),
 				transfer.Bytes(transfer.HTML, []byte(item.HTML)),

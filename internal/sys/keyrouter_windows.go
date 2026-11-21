@@ -27,10 +27,40 @@ var (
 	procGetKeyboardLayout = user32.NewProc("GetKeyboardLayout")
 	procToUnicodeEx       = user32.NewProc("ToUnicodeEx")
 
-	keyHookOnce    sync.Once
-	keyHookCB      uintptr
-	activeKeyWatch atomic.Pointer[keyRouterState]
+	keyHookOnce        sync.Once
+	keyHookCB          uintptr
+	activeKeyWatch     atomic.Pointer[keyRouterState]
+	extraRoutedShortct atomic.Uint64
 )
+
+func packRoutedShortcut(vk uint32, ctrl, shift, alt bool) uint64 {
+	if vk == 0 || vk >= 256 {
+		return 0
+	}
+	v := uint64(vk)
+	if ctrl {
+		v |= 1 << 8
+	}
+	if shift {
+		v |= 1 << 9
+	}
+	if alt {
+		v |= 1 << 10
+	}
+	return v
+}
+
+// SetExtraRoutedShortcut registers an additional panel-only shortcut (vk + modifiers)
+// to be intercepted by the low-level keyboard hook while the panel is in no-activate mode.
+// Pass vk == 0 to clear it.
+func SetExtraRoutedShortcut(vk uint32, ctrl, shift, alt bool) {
+	extraRoutedShortct.Store(packRoutedShortcut(vk, ctrl, shift, alt))
+}
+
+func matchesExtraRoutedShortcut(vk uint32, ctrl, shift, alt bool) bool {
+	packed := extraRoutedShortct.Load()
+	return packed != 0 && packed == packRoutedShortcut(vk, ctrl, shift, alt)
+}
 
 const (
 	whKeyboardLL uintptr = 13
@@ -254,9 +284,9 @@ func lowLevelKeyboardProc(nCode int32, wp, lp uintptr) uintptr {
 						ctrl := keyDownAsync(vkControl) || keyDownAsync(vkLControl) || keyDownAsync(vkRControl)
 						shift := keyDownAsync(vkShift) || keyDownAsync(vkLShift) || keyDownAsync(vkRShift)
 						alt := keyDownAsync(vkMenu) || keyDownAsync(vkLMenu) || keyDownAsync(vkRMenu)
-						if shouldRouteKey(vk, ctrl, alt) {
+						if shouldRouteKey(vk, ctrl, alt) || matchesExtraRoutedShortcut(vk, ctrl, shift, alt) {
 							var text string
-							if !ctrl && isPrintableVK(vk) {
+							if !ctrl && !alt && isPrintableVK(vk) {
 								text = translateVKToText(vk, info.scanCode, shift)
 							}
 							st.pressed[vk] = true

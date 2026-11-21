@@ -146,6 +146,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						{label: "Alt+1~9", a11y: msgs.SettingsQuickPasteAltA11y(), active: a.settings.QuickPasteModifier == "alt", onClick: func() { a.setQuickPasteModifier("alt") }},
 						{label: "Ctrl+1~9", a11y: msgs.SettingsQuickPasteCtrlA11y(), active: a.settings.QuickPasteModifier == "ctrl", onClick: func() { a.setQuickPasteModifier("ctrl") }},
 					})
+					a.renderPlainPasteShortcutRecorder(c)
 				})
 
 				// 3. 界面设置
@@ -813,22 +814,24 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 	t := c.Theme()
 	msgs := locales.In(c.Locale())
 	defaultHotkey := store.DefaultSettings().Hotkey
+	recording := a.recordingHotkey && a.recordingTarget == recordTargetGlobal
 
-	if a.hotkeyFocusPending {
+	if recording && a.hotkeyFocusPending {
 		a.hotkeyFocusPending = false
 		a.hotkeyHandle.Focus(c)
-	} else if a.recordingHotkey && !a.hotkeyHandle.Focused(c) {
+	} else if recording && !a.hotkeyHandle.Focused(c) {
 		a.cancelHotkeyRecording()
+		recording = false
 	}
 
 	desc := msgs.SettingsHotkeyDesc()
-	if a.recordingHotkey {
+	if recording {
 		desc = msgs.SettingsHotkeyDescRecording()
 	}
 
 	a.renderSettingRow(c, msgs.SettingsHotkey(), desc, func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-			if a.recordingHotkey {
+			if recording {
 				cancelBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsHotkeyCancelA11y())
 				cancelBtn.Background(surfaceBg(t, cancelBtn.Hovered())).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 					OnClick(func() {
@@ -852,7 +855,7 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 			if labelText == "" {
 				labelText = defaultHotkey
 			}
-			if a.recordingHotkey {
+			if recording {
 				labelText = recordingHotkeyLabel(msgs, a.hotkeyMods)
 			}
 
@@ -862,7 +865,7 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 				HandleInput(a.handleHotkeyInput)
 
 			bg, border, borderW, fg := t.Surface, t.Border.Alpha(0.7), float32(1), t.Text
-			if a.recordingHotkey {
+			if recording {
 				bg = t.Surface.Mix(t.Accent, 0.12)
 				border = t.Accent
 				borderW = 1.5
@@ -875,6 +878,82 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 			recBtn.Background(bg).Border(borderW, border).Transition(colorTransition).
 				OnClick(func() {
 					a.startHotkeyRecording()
+				}).
+				Children(func() {
+					ui.Text(c, labelText).FontSize(13).FontWeight(600).TextColor(fg)
+				})
+		})
+	})
+}
+
+func (a *clipApp) renderPlainPasteShortcutRecorder(c *ui.Context) {
+	t := c.Theme()
+	msgs := locales.In(c.Locale())
+	defaultShortcut := store.DefaultSettings().PlainPasteShortcut
+	recording := a.recordingHotkey && a.recordingTarget == recordTargetPlainPaste
+
+	if recording && a.hotkeyFocusPending {
+		a.hotkeyFocusPending = false
+		a.plainShortcutHandle.Focus(c)
+	} else if recording && !a.plainShortcutHandle.Focused(c) {
+		a.cancelHotkeyRecording()
+		recording = false
+	}
+
+	desc := msgs.SettingsPlainPasteDesc()
+	if recording {
+		desc = msgs.SettingsPlainPasteDescRecording()
+	}
+
+	a.renderSettingRow(c, msgs.SettingsPlainPasteShortcut(), desc, func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+			if recording {
+				cancelBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsHotkeyCancelA11y())
+				cancelBtn.Background(surfaceBg(t, cancelBtn.Hovered())).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+					OnClick(func() {
+						a.cancelHotkeyRecording()
+					}).
+					Children(func() {
+						ui.Text(c, msgs.SettingsHotkeyCancel()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+					})
+			} else if a.settings.PlainPasteShortcut != defaultShortcut {
+				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsPlainPasteResetA11y())
+				resetBtn.Background(surfaceBg(t, resetBtn.Hovered())).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
+					OnClick(func() {
+						a.applyPlainPasteShortcut(defaultShortcut)
+					}).
+					Children(func() {
+						ui.Text(c, msgs.SettingsHotkeyReset()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+					})
+			}
+
+			labelText := a.settings.PlainPasteShortcut
+			if labelText == "" {
+				labelText = msgs.SettingsQuickPasteOff()
+			}
+			if recording {
+				labelText = recordingHotkeyLabel(msgs, a.hotkeyMods)
+			}
+
+			recBtn := ui.ButtonBase(c.Key("plain-paste-shortcut-recorder")).Bind(&a.plainShortcutHandle).
+				Height(pillHeight).MinWidth(132).Padding(0, 12).Radius(radiusGroup).
+				Center().Label(msgs.SettingsPlainPasteRecA11y()).
+				HandleInput(a.handleHotkeyInput)
+
+			bg, border, borderW, fg := t.Surface, t.Border.Alpha(0.7), float32(1), t.Text
+			if recording {
+				bg = t.Surface.Mix(t.Accent, 0.12)
+				border = t.Accent
+				borderW = 1.5
+				fg = t.Accent
+			} else if recBtn.Hovered() {
+				bg = t.SurfaceHover
+				border = t.Border
+			}
+
+			recBtn.Background(bg).Border(borderW, border).Transition(colorTransition).
+				OnClick(func() {
+					a.startPlainShortcutRecording()
 				}).
 				Children(func() {
 					ui.Text(c, labelText).FontSize(13).FontWeight(600).TextColor(fg)

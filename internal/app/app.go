@@ -100,10 +100,12 @@ type clipApp struct {
 	upScrollAccum      float32
 	expanded           settingsGroupExpanded
 	confirmAction      string
-	recordingHotkey    bool
-	hotkeyFocusPending bool
-	hotkeyMods         ui.Modifiers
-	hotkeyHandle       ui.Handle
+	recordingHotkey        bool
+	recordingTarget        string // "" | "global" | "plain_paste"
+	hotkeyFocusPending     bool
+	hotkeyMods             ui.Modifiers
+	hotkeyHandle           ui.Handle
+	plainShortcutHandle    ui.Handle
 	pendingToast       string
 	memTrimming        atomic.Bool
 	saveMu             sync.Mutex
@@ -118,7 +120,7 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 			cfg = loaded
 		}
 	}
-	return &clipApp{
+	a := &clipApp{
 		iconPNG:         iconPNG,
 		store:           st,
 		settings:        cfg,
@@ -129,6 +131,8 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 		thumbs:          newBitmapCache(),
 		appIcons:        newBitmapCache(),
 	}
+	a.syncPlainPasteShortcut()
+	return a
 }
 
 // Run starts the clipboard manager application.

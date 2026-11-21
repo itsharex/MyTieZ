@@ -27,3 +27,20 @@ func TestKeyRouterPredicate(t *testing.T) {
 		t.Fatal("unexpected isPrintableVK classification")
 	}
 }
+
+func TestExtraRoutedShortcut(t *testing.T) {
+	t.Cleanup(func() { SetExtraRoutedShortcut(0, false, false, false) })
+
+	SetExtraRoutedShortcut('P', false, false, true)
+	if !matchesExtraRoutedShortcut('P', false, false, true) {
+		t.Fatal("expected Alt+P to match extra routed shortcut")
+	}
+	if matchesExtraRoutedShortcut('P', true, false, false) {
+		t.Fatal("expected Ctrl+P not to match Alt+P")
+	}
+
+	SetExtraRoutedShortcut(0, false, false, false)
+	if matchesExtraRoutedShortcut('P', false, false, true) {
+		t.Fatal("expected cleared extra routed shortcut not to match")
+	}
+}

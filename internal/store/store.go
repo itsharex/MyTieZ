@@ -70,6 +70,7 @@ type Settings struct {
 	DeleteAfterPaste   bool   `json:"delete_after_paste"`
 	PasteMethod              string   `json:"paste_method"`         // "shift_insert" | "ctrl_v" | "game_mode"
 	QuickPasteModifier       string   `json:"quick_paste_modifier"` // "none" | "alt" | "ctrl"
+	PlainPasteShortcut       string   `json:"plain_paste_shortcut"` // e.g. "Shift+Enter" (panel-only)
 	PrivacyProtection        bool     `json:"privacy_protection"`
 	PrivacyKinds             []string `json:"privacy_kinds"`
 	PrivacyCustomRules       string   `json:"privacy_custom_rules"`
@@ -109,6 +110,7 @@ func DefaultSettings() Settings {
 		DeleteAfterPaste:   false,
 		PasteMethod:         "shift_insert",
 		QuickPasteModifier:  "none",
+		PlainPasteShortcut:  "Shift+Enter",
 		PrivacyProtection:   true,
 		PrivacyKinds:        DefaultPrivacyKinds(),
 		SensitiveMaskPrefix: 3,

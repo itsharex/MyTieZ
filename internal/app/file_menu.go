@@ -356,3 +356,40 @@ func (a *clipApp) attachFileCardContextMenu(c *ui.Context, card ui.Element, item
 		Item:  filePopoverItemStyle,
 	})
 }
+
+func (a *clipApp) buildRichTextMenu(c *ui.Context, item store.ClipItem, m *ui.Menu) {
+	msgs := locales.In(c.Locale())
+	plainLabel := msgs.RichMenuPastePlain()
+	richLabel := msgs.RichMenuPasteFormatted()
+	if a.settings.ClickCopyOnly {
+		plainLabel = msgs.RichMenuCopyPlain()
+		richLabel = msgs.RichMenuCopyFormatted()
+	}
+
+	plainIt := m.Item(plainLabel).ID("rich-menu:plain")
+	if sc := strings.TrimSpace(a.settings.PlainPasteShortcut); sc != "" {
+		plainIt.Trailing(sc)
+	}
+	if styleFileMenuItem(plainIt, plainLabel, "").Chosen() {
+		a.pasteItem(item, true)
+	}
+
+	richIt := m.Item(richLabel).ID("rich-menu:formatted")
+	if styleFileMenuItem(richIt, richLabel, "").Chosen() {
+		a.pasteItem(item, false)
+	}
+}
+
+func (a *clipApp) attachRichTextCardContextMenu(c *ui.Context, card ui.Element, item store.ClipItem) {
+	if item.Kind != store.KindRichText {
+		return
+	}
+	t := c.Theme()
+	maxW := min(fileMenuMultiMaxWidth, a.panelWidth()-64)
+	card.PopoverMenu(func(m *ui.Menu) {
+		a.buildRichTextMenu(c, item, m)
+	}, ui.PopoverMenuOptions{
+		Panel: a.filePopoverPanelStyle(c, t, maxW),
+		Item:  filePopoverItemStyle,
+	})
+}

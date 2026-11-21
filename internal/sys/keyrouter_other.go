@@ -21,3 +21,6 @@ func CanRouteForeground() bool {
 func StartKeyRouter(func(RoutedKey)) (func(), bool) {
 	return func() {}, false
 }
+
+// SetExtraRoutedShortcut is a no-op on non-Windows platforms.
+func SetExtraRoutedShortcut(vk uint32, ctrl, shift, alt bool) {}

@@ -209,5 +209,15 @@
   "settingsPrivacyCustomRules": "自訂規則",
   "settingsPrivacyCustomRulesDesc": "每行一條正則表達式，符合即自動標記為敏感內容",
   "settingsPrivacyCustomRulesPlaceholder": "例如：AKIA[0-9A-Z]+",
-  "settingsPrivacyCustomRulesInvalid": "第 {lines} 行正則表達式無效，已自動忽略"
+  "settingsPrivacyCustomRulesInvalid": "第 {lines} 行正則表達式無效，已自動忽略",
+  "richMenuPastePlain": "貼上為純文字",
+  "richMenuPasteFormatted": "保留格式貼上",
+  "richMenuCopyPlain": "複製為純文字",
+  "richMenuCopyFormatted": "保留格式複製",
+  "settingsPlainPasteShortcut": "純文字貼上快捷鍵",
+  "settingsPlainPasteDesc": "在面板中按下此快捷鍵以純文字貼上選取項目",
+  "settingsPlainPasteDescRecording": "請按下新的快捷鍵，按 Backspace 關閉，Esc 取消",
+  "settingsPlainPasteRecA11y": "錄製純文字貼上快捷鍵",
+  "settingsPlainPasteResetA11y": "恢復預設純文字貼上快捷鍵",
+  "settingsPlainPasteNeedMod": "請使用 Ctrl/Alt 組合、Shift+Enter 或 F1~F12"
 }

@@ -2053,3 +2053,105 @@ func SettingsPrivacyCustomRulesInvalid(lines string) string {
 func (msgs Messages) SettingsPrivacyCustomRulesInvalid(lines string) string {
 	return Catalog.Format(msgs.locale, "settingsPrivacyCustomRulesInvalid", map[string]any{"lines": lines})
 }
+
+// RichMenuPastePlain says "粘贴为纯文本"
+// in the language the app shows.
+func RichMenuPastePlain() string { return In(i18n.Locale()).RichMenuPastePlain() }
+
+// RichMenuPastePlain says "粘贴为纯文本"
+// in the language of msgs.
+func (msgs Messages) RichMenuPastePlain() string {
+	return Catalog.Format(msgs.locale, "richMenuPastePlain", nil)
+}
+
+// RichMenuPasteFormatted says "带格式粘贴"
+// in the language the app shows.
+func RichMenuPasteFormatted() string { return In(i18n.Locale()).RichMenuPasteFormatted() }
+
+// RichMenuPasteFormatted says "带格式粘贴"
+// in the language of msgs.
+func (msgs Messages) RichMenuPasteFormatted() string {
+	return Catalog.Format(msgs.locale, "richMenuPasteFormatted", nil)
+}
+
+// RichMenuCopyPlain says "复制为纯文本"
+// in the language the app shows.
+func RichMenuCopyPlain() string { return In(i18n.Locale()).RichMenuCopyPlain() }
+
+// RichMenuCopyPlain says "复制为纯文本"
+// in the language of msgs.
+func (msgs Messages) RichMenuCopyPlain() string {
+	return Catalog.Format(msgs.locale, "richMenuCopyPlain", nil)
+}
+
+// RichMenuCopyFormatted says "带格式复制"
+// in the language the app shows.
+func RichMenuCopyFormatted() string { return In(i18n.Locale()).RichMenuCopyFormatted() }
+
+// RichMenuCopyFormatted says "带格式复制"
+// in the language of msgs.
+func (msgs Messages) RichMenuCopyFormatted() string {
+	return Catalog.Format(msgs.locale, "richMenuCopyFormatted", nil)
+}
+
+// SettingsPlainPasteShortcut says "纯文本粘贴快捷键"
+// in the language the app shows.
+func SettingsPlainPasteShortcut() string { return In(i18n.Locale()).SettingsPlainPasteShortcut() }
+
+// SettingsPlainPasteShortcut says "纯文本粘贴快捷键"
+// in the language of msgs.
+func (msgs Messages) SettingsPlainPasteShortcut() string {
+	return Catalog.Format(msgs.locale, "settingsPlainPasteShortcut", nil)
+}
+
+// SettingsPlainPasteDesc says "在面板中按下此快捷键以纯文本粘贴选中项"
+// in the language the app shows.
+func SettingsPlainPasteDesc() string { return In(i18n.Locale()).SettingsPlainPasteDesc() }
+
+// SettingsPlainPasteDesc says "在面板中按下此快捷键以纯文本粘贴选中项"
+// in the language of msgs.
+func (msgs Messages) SettingsPlainPasteDesc() string {
+	return Catalog.Format(msgs.locale, "settingsPlainPasteDesc", nil)
+}
+
+// SettingsPlainPasteDescRecording says "请按下新的快捷键，按 Backspace 关闭，Esc 取消"
+// in the language the app shows.
+func SettingsPlainPasteDescRecording() string {
+	return In(i18n.Locale()).SettingsPlainPasteDescRecording()
+}
+
+// SettingsPlainPasteDescRecording says "请按下新的快捷键，按 Backspace 关闭，Esc 取消"
+// in the language of msgs.
+func (msgs Messages) SettingsPlainPasteDescRecording() string {
+	return Catalog.Format(msgs.locale, "settingsPlainPasteDescRecording", nil)
+}
+
+// SettingsPlainPasteRecA11y says "录制纯文本粘贴快捷键"
+// in the language the app shows.
+func SettingsPlainPasteRecA11y() string { return In(i18n.Locale()).SettingsPlainPasteRecA11y() }
+
+// SettingsPlainPasteRecA11y says "录制纯文本粘贴快捷键"
+// in the language of msgs.
+func (msgs Messages) SettingsPlainPasteRecA11y() string {
+	return Catalog.Format(msgs.locale, "settingsPlainPasteRecA11y", nil)
+}
+
+// SettingsPlainPasteResetA11y says "恢复默认纯文本粘贴快捷键"
+// in the language the app shows.
+func SettingsPlainPasteResetA11y() string { return In(i18n.Locale()).SettingsPlainPasteResetA11y() }
+
+// SettingsPlainPasteResetA11y says "恢复默认纯文本粘贴快捷键"
+// in the language of msgs.
+func (msgs Messages) SettingsPlainPasteResetA11y() string {
+	return Catalog.Format(msgs.locale, "settingsPlainPasteResetA11y", nil)
+}
+
+// SettingsPlainPasteNeedMod says "请使用 Ctrl/Alt 组合、Shift+Enter 或 F1~F12"
+// in the language the app shows.
+func SettingsPlainPasteNeedMod() string { return In(i18n.Locale()).SettingsPlainPasteNeedMod() }
+
+// SettingsPlainPasteNeedMod says "请使用 Ctrl/Alt 组合、Shift+Enter 或 F1~F12"
+// in the language of msgs.
+func (msgs Messages) SettingsPlainPasteNeedMod() string {
+	return Catalog.Format(msgs.locale, "settingsPlainPasteNeedMod", nil)
+}

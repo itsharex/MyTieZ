@@ -89,6 +89,12 @@ func (a *clipApp) applyRoutedKey(ev sys.RoutedKey) {
 		}
 		return
 	}
+	if a.matchesPlainPasteRoutedKey(ev) {
+		if len(a.items) > 0 {
+			a.pasteSelectedPlainText()
+		}
+		return
+	}
 	if ev.Alt {
 		return
 	}

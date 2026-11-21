@@ -209,5 +209,15 @@
   "settingsPrivacyCustomRules": "Custom Rules",
   "settingsPrivacyCustomRulesDesc": "One regex per line; matches are tagged as sensitive",
   "settingsPrivacyCustomRulesPlaceholder": "e.g. AKIA[0-9A-Z]+",
-  "settingsPrivacyCustomRulesInvalid": "Invalid regex on line(s) {lines} (ignored)"
+  "settingsPrivacyCustomRulesInvalid": "Invalid regex on line(s) {lines} (ignored)",
+  "richMenuPastePlain": "Paste as Plain Text",
+  "richMenuPasteFormatted": "Paste Formatted",
+  "richMenuCopyPlain": "Copy as Plain Text",
+  "richMenuCopyFormatted": "Copy Formatted",
+  "settingsPlainPasteShortcut": "Plain Text Paste Shortcut",
+  "settingsPlainPasteDesc": "Press in the panel to paste the selected item without formatting",
+  "settingsPlainPasteDescRecording": "Press a new shortcut, Backspace to disable, Esc to cancel",
+  "settingsPlainPasteRecA11y": "Record plain text paste shortcut",
+  "settingsPlainPasteResetA11y": "Reset plain text paste shortcut to default",
+  "settingsPlainPasteNeedMod": "Use Ctrl/Alt combo, Shift+Enter, or F1–F12"
 }

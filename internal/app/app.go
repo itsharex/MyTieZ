@@ -311,7 +311,7 @@ func (a *clipApp) ready() {
 		}
 	})
 
-	if !mygo.App.WasOpenedAtLogin() && !a.settings.SilentStart {
+	if !mygo.App.WasOpenedAtLogin() {
 		a.showPanel()
 	}
 }

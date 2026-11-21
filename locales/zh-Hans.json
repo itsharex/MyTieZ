@@ -114,7 +114,6 @@
 
   "settingsAutostart": "开机自启动",
   "settingsAutostartErr": "设置开机自启动失败: {err}",
-  "settingsSilentStart": "静默启动",
   "settingsFollowMouse": "跟随鼠标位置呼出",
   "settingsNoFocusMode": "不抢焦点 (实验性)",
   "settingsNoFocusModeDesc": "呼出、搜索、点选与拖拽均不抢占焦点（无输入法，中文可用拼音搜索；标签编辑时聚焦）",

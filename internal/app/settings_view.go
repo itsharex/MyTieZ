@@ -65,9 +65,6 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						}
 						a.persistSettings()
 					})
-					a.renderSwitchRow(c, msgs.SettingsSilentStart(), "", &a.settings.SilentStart, func(bool) {
-						a.persistSettings()
-					})
 					a.renderSwitchRow(c, msgs.SettingsFollowMouse(), "", &a.settings.FollowMouse, func(bool) {
 						a.persistSettings()
 					})

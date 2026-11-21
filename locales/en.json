@@ -84,7 +84,6 @@
 
   "settingsAutostart": "Launch at Login",
   "settingsAutostartErr": "Failed to set launch at login: {err}",
-  "settingsSilentStart": "Silent Start",
   "settingsFollowMouse": "Follow Cursor",
   "settingsNoFocusMode": "No Focus Mode (Experimental)",
   "settingsNoFocusModeDesc": "Show, search, click, and drag without stealing focus (no IME in search; focuses on tag edit)",

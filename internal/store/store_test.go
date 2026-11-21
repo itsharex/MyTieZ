@@ -122,7 +122,7 @@ func TestStoreSettingsAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Deduplicate || cfg.MaxHistory != 500 || cfg.Hotkey != "Alt+V" || cfg.NoFocusMode {
+	if !cfg.Deduplicate || cfg.MaxHistory != 500 || cfg.Hotkey != "Alt+V" || cfg.NoFocusMode || !cfg.FollowMouse {
 		t.Fatalf("unexpected default settings: %+v", cfg)
 	}
 

@@ -53,7 +53,6 @@ type ClipItem struct {
 // Settings holds persisted user preferences for the clipboard manager.
 type Settings struct {
 	AutoStart          bool   `json:"auto_start"`
-	SilentStart        bool   `json:"silent_start"`
 	FollowMouse        bool   `json:"follow_mouse"`
 	NoFocusMode        bool   `json:"no_focus_mode"`
 	AutoHideOnBlur     bool   `json:"auto_hide_on_blur"`
@@ -93,8 +92,7 @@ type Settings struct {
 func DefaultSettings() Settings {
 	return Settings{
 		AutoStart:          false,
-		SilentStart:        false,
-		FollowMouse:        false,
+		FollowMouse:        true,
 		NoFocusMode:        false,
 		AutoHideOnBlur:     true,
 		EdgeDocking:        false,

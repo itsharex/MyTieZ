@@ -800,16 +800,6 @@ func (msgs Messages) SettingsAutostartErr(err string) string {
 	return Catalog.Format(msgs.locale, "settingsAutostartErr", map[string]any{"err": err})
 }
 
-// SettingsSilentStart says "静默启动"
-// in the language the app shows.
-func SettingsSilentStart() string { return In(i18n.Locale()).SettingsSilentStart() }
-
-// SettingsSilentStart says "静默启动"
-// in the language of msgs.
-func (msgs Messages) SettingsSilentStart() string {
-	return Catalog.Format(msgs.locale, "settingsSilentStart", nil)
-}
-
 // SettingsFollowMouse says "跟随鼠标位置呼出"
 // in the language the app shows.
 func SettingsFollowMouse() string { return In(i18n.Locale()).SettingsFollowMouse() }

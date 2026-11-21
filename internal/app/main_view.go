@@ -94,7 +94,7 @@ func (a *clipApp) view(c *ui.Context) {
 func (a *clipApp) mainView(c *ui.Context) {
 	t := c.Theme()
 	var enterPressed bool
-	if !a.confirmClearOpen {
+	if !a.confirmClearOpen && !a.hasOpenFileMenu() {
 		if a.editingTagsID != 0 && c.Shortcut(0, ui.KeyEscape) {
 			a.editingTagsID = 0
 			a.tagInput = ""
@@ -134,10 +134,12 @@ func (a *clipApp) mainView(c *ui.Context) {
 					a.toggleWindowPin()
 				})
 				a.renderHeaderIconBtn(c, iconTrash, msgs.HeaderClearUnpinned(), false, false, func() {
+					a.closeFileMenus()
 					a.confirmClearOpen = true
 					a.stopKeyRouting()
 				})
 				a.renderHeaderIconBtn(c, iconSettings, msgs.HeaderSettings(), false, false, func() {
+					a.closeFileMenus()
 					a.showSettings = true
 					a.confirmAction = ""
 					a.stopKeyRouting()
@@ -381,6 +383,8 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 
 				isSensitive := store.HasSensitiveTag(item.Tags)
 				isRevealed := isSensitive && a.revealedSensitive[item.ID]
+				isMultiFile := item.Kind == store.KindFile && len(nonEmptyPaths(item.Files)) > 1
+				fileMenuOpen := isMultiFile && a.isFileMenuOpen(item.ID)
 				if isSensitive && (!a.settings.HideCardActions || hovered || isRevealed) {
 					eyeIcon := iconEye
 					eyeLabel := msgs.CardSensitiveShow()
@@ -393,10 +397,14 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 					})
 				}
 
-				if !a.settings.HideCardActions || hovered {
-					a.renderCardActionBtn(c, iconOpen, msgs.CardActionOpen(), false, func() {
-						a.openItem(item)
-					})
+				if !a.settings.HideCardActions || hovered || fileMenuOpen {
+					if isMultiFile {
+						a.renderFileOpenMenuBtn(c, item, fileMenuOpen)
+					} else {
+						a.renderCardActionBtn(c, iconOpen, msgs.CardActionOpen(), false, func() {
+							a.openItem(item)
+						})
+					}
 					a.renderCardActionBtn(c, iconTag, msgs.CardActionTag(), len(item.Tags) > 0 || a.editingTagsID == item.ID, func() {
 						a.toggleTagEditor(item.ID)
 					})
@@ -446,6 +454,8 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 
 			a.renderCardTags(c, t, item)
 		})
+
+	a.attachFileCardContextMenu(c, card, item)
 
 	if card.RowClicked() {
 		a.selected = row.Index

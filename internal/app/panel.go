@@ -42,6 +42,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 		a.panel.SetPosition(x, y)
 	}
 	a.stopSearchTimer()
+	a.closeFileMenus()
 	a.selected = -1
 	a.confirmClearOpen = false
 	a.resetScrollToTop()
@@ -63,6 +64,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 
 func (a *clipApp) hidePanel() {
 	a.flushPendingSettingsPersist()
+	a.closeFileMenus()
 	a.stopOutsideClickWatch()
 	a.stopKeyRouting()
 	a.edgeDock = dockNone

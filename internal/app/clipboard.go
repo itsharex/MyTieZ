@@ -82,6 +82,7 @@ func (a *clipApp) applyActiveTabFilter() {
 }
 
 func (a *clipApp) onTabChanged() {
+	a.closeFileMenus()
 	a.selected = -1
 	a.resetScrollToTop()
 	if strings.TrimSpace(a.query) != "" && a.searchTimer == nil && a.searchHits != nil {
@@ -214,6 +215,7 @@ func (a *clipApp) deleteItem(id int64) {
 	if a.store == nil {
 		return
 	}
+	a.closeFileMenus()
 	if err := a.store.Delete(id); err != nil {
 		log.Printf("delete item: %v", err)
 		return
@@ -226,6 +228,7 @@ func (a *clipApp) clearUnpinned() {
 	if a.store == nil {
 		return
 	}
+	a.closeFileMenus()
 	if err := a.store.ClearUnpinned(); err != nil {
 		log.Printf("clear unpinned: %v", err)
 		return
@@ -237,6 +240,7 @@ func (a *clipApp) clearAll() {
 	if a.store == nil {
 		return
 	}
+	a.closeFileMenus()
 	if err := a.store.ClearAll(); err != nil {
 		log.Printf("clear all: %v", err)
 		return

@@ -17,6 +17,11 @@ import (
 	"golang.org/x/net/html"
 )
 
+var (
+	shellOpenPath         = mygo.Shell.OpenPath
+	shellShowItemInFolder = mygo.Shell.ShowItemInFolder
+)
+
 func (a *clipApp) setStatus(msg string) {
 	a.pendingToast = msg
 }
@@ -92,24 +97,73 @@ func (a *clipApp) openItem(item store.ClipItem) {
 		}
 
 	case store.KindFile:
-		opened := false
-		for _, p := range item.Files {
-			if p == "" {
-				continue
-			}
-			if _, err := os.Stat(p); err != nil {
-				continue
-			}
-			if err := mygo.Shell.OpenPath(p); err != nil {
-				a.setStatus(locales.StatusOpenFileErr(err.Error()))
-				return
-			}
-			opened = true
-		}
-		if !opened {
+		files := nonEmptyPaths(item.Files)
+		switch len(files) {
+		case 0:
 			a.setStatus(locales.StatusFileMissing())
+		case 1:
+			a.openFilePath(files[0])
+		default:
+			a.showFilesInFolder(files)
 		}
 	}
+}
+
+func nonEmptyPaths(files []string) []string {
+	out := make([]string, 0, len(files))
+	for _, p := range files {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func firstExistingFile(files []string) string {
+	for _, p := range files {
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func (a *clipApp) openFilePath(p string) {
+	if p == "" {
+		a.setStatus(locales.StatusFileMissing())
+		return
+	}
+	if _, err := os.Stat(p); err != nil {
+		a.setStatus(locales.StatusFileMissing())
+		return
+	}
+	if err := shellOpenPath(p); err != nil {
+		a.setStatus(locales.StatusOpenFileErr(err.Error()))
+	}
+}
+
+func (a *clipApp) showFileInFolder(p string) {
+	if p == "" {
+		a.setStatus(locales.StatusFileMissing())
+		return
+	}
+	if _, err := os.Stat(p); err != nil {
+		a.setStatus(locales.StatusFileMissing())
+		return
+	}
+	shellShowItemInFolder(p)
+}
+
+func (a *clipApp) showFilesInFolder(files []string) {
+	p := firstExistingFile(files)
+	if p == "" {
+		a.setStatus(locales.StatusFileMissing())
+		return
+	}
+	shellShowItemInFolder(p)
 }
 
 func isBareWWWURL(raw string) bool {
@@ -236,7 +290,7 @@ func launchTarget(appPath, target string) error {
 	if appPath != "" {
 		return launchWithApp(appPath, target)
 	}
-	return mygo.Shell.OpenPath(target)
+	return shellOpenPath(target)
 }
 
 func launchWithApp(appPath, target string) error {

@@ -276,6 +276,16 @@ func (msgs Messages) CardActionOpen() string {
 	return Catalog.Format(msgs.locale, "cardActionOpen", nil)
 }
 
+// CardActionOpenFiles says "选择文件打开"
+// in the language the app shows.
+func CardActionOpenFiles() string { return In(i18n.Locale()).CardActionOpenFiles() }
+
+// CardActionOpenFiles says "选择文件打开"
+// in the language of msgs.
+func (msgs Messages) CardActionOpenFiles() string {
+	return Catalog.Format(msgs.locale, "cardActionOpenFiles", nil)
+}
+
 // CardActionTag says "标签"
 // in the language the app shows.
 func CardActionTag() string { return In(i18n.Locale()).CardActionTag() }
@@ -314,6 +324,48 @@ func CardFilesMore(count int) string { return In(i18n.Locale()).CardFilesMore(co
 // in the language of msgs.
 func (msgs Messages) CardFilesMore(count int) string {
 	return Catalog.Format(msgs.locale, "cardFilesMore", map[string]any{"count": count})
+}
+
+// FileMenuShowInFolder says "在文件夹中显示"
+// in the language the app shows.
+func FileMenuShowInFolder() string { return In(i18n.Locale()).FileMenuShowInFolder() }
+
+// FileMenuShowInFolder says "在文件夹中显示"
+// in the language of msgs.
+func (msgs Messages) FileMenuShowInFolder() string {
+	return Catalog.Format(msgs.locale, "fileMenuShowInFolder", nil)
+}
+
+// FileMenuShowNamedFolder says "在文件夹中显示：{name}"
+// in the language the app shows.
+func FileMenuShowNamedFolder(name string) string {
+	return In(i18n.Locale()).FileMenuShowNamedFolder(name)
+}
+
+// FileMenuShowNamedFolder says "在文件夹中显示：{name}"
+// in the language of msgs.
+func (msgs Messages) FileMenuShowNamedFolder(name string) string {
+	return Catalog.Format(msgs.locale, "fileMenuShowNamedFolder", map[string]any{"name": name})
+}
+
+// FileMenuMissing says "文件不存在或已移动"
+// in the language the app shows.
+func FileMenuMissing() string { return In(i18n.Locale()).FileMenuMissing() }
+
+// FileMenuMissing says "文件不存在或已移动"
+// in the language of msgs.
+func (msgs Messages) FileMenuMissing() string {
+	return Catalog.Format(msgs.locale, "fileMenuMissing", nil)
+}
+
+// FileMenuMoreOmitted says "其余 {count} 个文件未显示，请在文件夹中查看"
+// in the language the app shows.
+func FileMenuMoreOmitted(count int) string { return In(i18n.Locale()).FileMenuMoreOmitted(count) }
+
+// FileMenuMoreOmitted says "其余 {count} 个文件未显示，请在文件夹中查看"
+// in the language of msgs.
+func (msgs Messages) FileMenuMoreOmitted(count int) string {
+	return Catalog.Format(msgs.locale, "fileMenuMoreOmitted", map[string]any{"count": count})
 }
 
 // TimeJustNow says "< 1分钟"

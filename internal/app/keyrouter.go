@@ -83,6 +83,12 @@ func (a *clipApp) handleRoutedKey(ev sys.RoutedKey) {
 }
 
 func (a *clipApp) applyRoutedKey(ev sys.RoutedKey) {
+	if a.hasOpenFileMenu() {
+		if ev.VK == vkEscape {
+			a.closeFileMenus()
+		}
+		return
+	}
 	if ev.Alt {
 		return
 	}

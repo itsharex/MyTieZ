@@ -60,6 +60,11 @@ type clipApp struct {
 	richSpansDark     bool
 	revealedSensitive map[int64]bool
 	tempFiles         map[string]struct{}
+	fileMenuOpen      map[int64]*bool
+	fileMenuStatID    int64
+	fileMenuStatAt    time.Time
+	fileMenuStatPaths []string
+	fileMenuExists    map[string]bool
 
 	ignoreHash       string
 	ignoreUntil      time.Time

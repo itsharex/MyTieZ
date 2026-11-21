@@ -27,6 +27,7 @@
   "emptySubtitle": "复制文本、图片或文件后将自动出现在这里",
   "cardPinned": "置顶",
   "cardActionOpen": "打开",
+  "cardActionOpenFiles": "选择文件打开",
   "cardActionTag": "标签",
   "cardActionPin": "置顶",
   "cardActionDelete": "删除",
@@ -34,6 +35,20 @@
   "@cardFilesMore": {
     "placeholders": {
       "count": { "type": "int", "example": "3" }
+    }
+  },
+  "fileMenuShowInFolder": "在文件夹中显示",
+  "fileMenuShowNamedFolder": "在文件夹中显示：{name}",
+  "@fileMenuShowNamedFolder": {
+    "placeholders": {
+      "name": { "type": "String", "example": "docs" }
+    }
+  },
+  "fileMenuMissing": "文件不存在或已移动",
+  "fileMenuMoreOmitted": "其余 {count} 个文件未显示，请在文件夹中查看",
+  "@fileMenuMoreOmitted": {
+    "placeholders": {
+      "count": { "type": "int", "example": "10" }
     }
   },
   "timeJustNow": "< 1分钟",

@@ -165,7 +165,7 @@ func hasDuplicateBaseNames(files []string) bool {
 	return false
 }
 
-func (a *clipApp) filePopoverPanelStyle(c *ui.Context, t *ui.Theme, maxW float32) func(panel ui.Element) {
+func (a *clipApp) cardPopoverPanelStyle(c *ui.Context, t *ui.Theme, maxW float32) func(panel ui.Element) {
 	bg := a.floatingSurface(c, t)
 	sa := shadowAlpha(t, 0.14, 0.36)
 	return func(panel ui.Element) {
@@ -176,11 +176,11 @@ func (a *clipApp) filePopoverPanelStyle(c *ui.Context, t *ui.Theme, maxW float32
 	}
 }
 
-func filePopoverItemStyle(item ui.Element) {
+func cardPopoverItemStyle(item ui.Element) {
 	item.Padding(4, 8).Radius(radiusMicro)
 }
 
-func styleFileMenuItem(it *ui.MenuItem, title, subtitle string) *ui.MenuItem {
+func styleCardMenuItem(it *ui.MenuItem, title, subtitle string) *ui.MenuItem {
 	if subtitle != "" {
 		it.Subtitle(subtitle)
 	}
@@ -217,11 +217,11 @@ func (a *clipApp) buildMultiFileMenu(c *ui.Context, item store.ClipItem, m *ui.M
 	switch {
 	case firstExist == "":
 		title := msgs.FileMenuShowInFolder()
-		styleFileMenuItem(m.Item(title).ID("file-menu:show-folder").Disabled(true), title, "")
+		styleCardMenuItem(m.Item(title).ID("file-menu:show-folder").Disabled(true), title, "")
 	case len(distinctDirFiles) <= 1:
 		dir := filepath.Dir(firstExist)
 		title := msgs.FileMenuShowInFolder()
-		if styleFileMenuItem(m.Item(title).ID("file-menu:show-folder").Tooltip(dir), title, "").Chosen() {
+		if styleCardMenuItem(m.Item(title).ID("file-menu:show-folder").Tooltip(dir), title, "").Chosen() {
 			a.showFileInFolder(firstExist)
 		}
 	default:
@@ -230,7 +230,7 @@ func (a *clipApp) buildMultiFileMenu(c *ui.Context, item store.ClipItem, m *ui.M
 			rep := distinctDirFiles[idx]
 			dir := filepath.Dir(rep)
 			title := msgs.FileMenuShowNamedFolder(fileDisplayName(dir))
-			if styleFileMenuItem(
+			if styleCardMenuItem(
 				m.Item(title).ID(fmt.Sprintf("file-menu:dir:%d:%s", idx, rep)).Tooltip(dir),
 				title, dir,
 			).Chosen() {
@@ -254,7 +254,7 @@ func (a *clipApp) buildMultiFileMenu(c *ui.Context, item store.ClipItem, m *ui.M
 		} else if showDirSubtitle {
 			sub = filepath.Dir(p)
 		}
-		if styleFileMenuItem(it, name, sub).Chosen() {
+		if styleCardMenuItem(it, name, sub).Chosen() {
 			a.openFilePath(p)
 		}
 	}
@@ -262,7 +262,7 @@ func (a *clipApp) buildMultiFileMenu(c *ui.Context, item store.ClipItem, m *ui.M
 	if len(files) > limit {
 		m.Separator()
 		more := msgs.FileMenuMoreOmitted(len(files) - limit)
-		styleFileMenuItem(m.Item(more).ID("file-menu:more").Disabled(true), more, "")
+		styleCardMenuItem(m.Item(more).ID("file-menu:more").Disabled(true), more, "")
 	}
 }
 
@@ -283,13 +283,13 @@ func (a *clipApp) buildSingleFileMenu(c *ui.Context, item store.ClipItem, m *ui.
 	if !exists {
 		openSub = msgs.FileMenuMissing()
 	}
-	if styleFileMenuItem(openIt, openTitle, openSub).Chosen() {
+	if styleCardMenuItem(openIt, openTitle, openSub).Chosen() {
 		a.openFilePath(p)
 	}
 
 	dir := filepath.Dir(p)
 	showTitle := msgs.FileMenuShowInFolder()
-	showIt := styleFileMenuItem(
+	showIt := styleCardMenuItem(
 		m.Item(showTitle).ID("file-menu:single-folder").Tooltip(dir).Disabled(!exists),
 		showTitle, "",
 	)
@@ -327,8 +327,8 @@ func (a *clipApp) renderFileOpenMenuBtn(c *ui.Context, item store.ClipItem, acti
 			At:    ui.AnchorBottomEnd,
 			Self:  ui.AnchorTopEnd,
 			Open:  a.fileMenuOpenPtr(item.ID),
-			Panel: a.filePopoverPanelStyle(c, t, min(fileMenuMultiMaxWidth, a.panelWidth()-64)),
-			Item:  filePopoverItemStyle,
+			Panel: a.cardPopoverPanelStyle(c, t, min(fileMenuMultiMaxWidth, a.panelWidth()-64)),
+			Item:  cardPopoverItemStyle,
 		})
 }
 
@@ -352,8 +352,8 @@ func (a *clipApp) attachFileCardContextMenu(c *ui.Context, card ui.Element, item
 		}
 		a.buildMultiFileMenu(c, item, m)
 	}, ui.PopoverMenuOptions{
-		Panel: a.filePopoverPanelStyle(c, t, maxW),
-		Item:  filePopoverItemStyle,
+		Panel: a.cardPopoverPanelStyle(c, t, maxW),
+		Item:  cardPopoverItemStyle,
 	})
 }
 
@@ -370,12 +370,12 @@ func (a *clipApp) buildRichTextMenu(c *ui.Context, item store.ClipItem, m *ui.Me
 	if sc := strings.TrimSpace(a.settings.PlainPasteShortcut); sc != "" {
 		plainIt.Trailing(sc)
 	}
-	if styleFileMenuItem(plainIt, plainLabel, "").Chosen() {
+	if styleCardMenuItem(plainIt, plainLabel, "").Chosen() {
 		a.pasteItem(item, true)
 	}
 
 	richIt := m.Item(richLabel).ID("rich-menu:formatted")
-	if styleFileMenuItem(richIt, richLabel, "").Chosen() {
+	if styleCardMenuItem(richIt, richLabel, "").Chosen() {
 		a.pasteItem(item, false)
 	}
 }
@@ -389,7 +389,7 @@ func (a *clipApp) attachRichTextCardContextMenu(c *ui.Context, card ui.Element, 
 	card.PopoverMenu(func(m *ui.Menu) {
 		a.buildRichTextMenu(c, item, m)
 	}, ui.PopoverMenuOptions{
-		Panel: a.filePopoverPanelStyle(c, t, maxW),
-		Item:  filePopoverItemStyle,
+		Panel: a.cardPopoverPanelStyle(c, t, maxW),
+		Item:  cardPopoverItemStyle,
 	})
 }

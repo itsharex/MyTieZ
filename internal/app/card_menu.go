@@ -110,9 +110,13 @@ var cardContextMenuActions = []cardMenuAction{
 					it := sub.Item(tagName).
 						ID(fmt.Sprintf("card-menu:quick-tag:%d:%s", i, tagName)).
 						Tooltip(tagName).
-						Disabled(applied)
+						Checked(applied)
 					if styleCardMenuItem(it, tagName, "").Chosen() {
-						a.addTagToItem(item, tagName)
+						if applied {
+							a.removeTagFromItem(item, tagName)
+						} else {
+							a.addTagToItem(item, tagName)
+						}
 					}
 				}
 			}).ID("card-menu:quick-tag")

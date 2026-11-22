@@ -277,13 +277,13 @@ func TestQuickTagSubmenuAndBoundaryFlip(t *testing.T) {
 	}
 	tt.Move(quickInfo.Bounds.X+quickInfo.Bounds.W/2, quickInfo.Bounds.Y+quickInfo.Bounds.H/2)
 
-	workItem, ok := tt.AccessByRole(ui.RoleMenuItem, "work")
-	if !ok || !workItem.Disabled {
-		t.Fatalf("expected applied tag 'work' disabled, got ok=%v info=%+v", ok, workItem)
+	workItem, ok := tt.AccessByRole(ui.RoleMenuItemCheckBox, "work")
+	if !ok || workItem.Disabled || !workItem.Checked {
+		t.Fatalf("expected applied tag 'work' enabled and checked, got ok=%v info=%+v", ok, workItem)
 	}
-	longItem, ok := tt.AccessByRole(ui.RoleMenuItem, longTag)
-	if !ok || longItem.Disabled || longItem.Bounds.X >= quickInfo.Bounds.X {
-		t.Fatalf("expected unapplied tag flipped left, got ok=%v sub=%+v trigger=%+v", ok, longItem, quickInfo)
+	longItem, ok := tt.AccessByRole(ui.RoleMenuItemCheckBox, longTag)
+	if !ok || longItem.Disabled || longItem.Checked || longItem.Bounds.X >= quickInfo.Bounds.X {
+		t.Fatalf("expected unapplied tag unchecked and flipped left, got ok=%v sub=%+v trigger=%+v", ok, longItem, quickInfo)
 	}
 	for _, info := range []ui.AccessInfo{workItem, longItem} {
 		if info.Bounds.X < 0 || info.Bounds.X+info.Bounds.W > panelWidth || info.Bounds.W > cardMenuMaxWidth {
@@ -297,12 +297,25 @@ func TestQuickTagSubmenuAndBoundaryFlip(t *testing.T) {
 		t.Fatalf("expected tag %q applied and menu closed, tags=%q menu=%q", longTag, a.items[0].Tags, tt.Menu())
 	}
 
+	// Re-open Quick Tag and click already-applied 'work' tag -> removes 'work' and closes menu.
+	tt.RightClickAt(panelWidth-40, rect.Y+rect.H/2)
+	quickAgain, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuQuickTag())
+	tt.Move(quickAgain.Bounds.X+quickAgain.Bounds.W/2, quickAgain.Bounds.Y+quickAgain.Bounds.H/2)
+	workAgain, ok := tt.AccessByRole(ui.RoleMenuItemCheckBox, "work")
+	if !ok || !workAgain.Checked {
+		t.Fatalf("expected 'work' checked before toggle-off, got ok=%v info=%+v", ok, workAgain)
+	}
+	clickCenter(tt, workAgain.Bounds)
+	if len(tt.Menu()) != 0 || slices.Contains(a.items[0].Tags, "work") {
+		t.Fatalf("expected tag 'work' removed and menu closed, tags=%q menu=%q", a.items[0].Tags, tt.Menu())
+	}
+
 	// Left & middle clicks must also keep submenu within [0, 400].
 	for _, clickX := range []float32{24, 140, 200, 260} {
 		tt.RightClickAt(clickX, rect.Y+rect.H/2)
 		qItem, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuQuickTag())
 		tt.Move(qItem.Bounds.X+qItem.Bounds.W/2, qItem.Bounds.Y+qItem.Bounds.H/2)
-		subItem, ok := tt.AccessByRole(ui.RoleMenuItem, "work")
+		subItem, ok := tt.AccessByRole(ui.RoleMenuItemCheckBox, longTag)
 		if !ok || subItem.Bounds.X < 0 || subItem.Bounds.X+subItem.Bounds.W > panelWidth {
 			t.Fatalf("clickX=%.0f: submenu out of 400px panel: ok=%v sub=%+v", clickX, ok, subItem)
 		}

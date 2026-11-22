@@ -257,13 +257,7 @@ func (a *clipApp) mainView(c *ui.Context) {
 		a.list.Selected = nil
 		a.list.KeepOffset = true
 		a.list.MoveAnimation = &ui.Snappy
-		if pinnedCount >= 2 {
-			a.list.Reorder = func(rows []int, to int) {
-				a.reorderPinnedRows(items, pinnedCount, rows, to)
-			}
-		} else {
-			a.list.Reorder = nil
-		}
+		a.list.Reorder = nil
 		a.list.Key = func(i int) any { return items[i].ID }
 		a.list.Label = func(i int) string {
 			it := items[i]
@@ -284,7 +278,7 @@ func (a *clipApp) mainView(c *ui.Context) {
 					if row.Index > lastVisible {
 						lastVisible = row.Index
 					}
-					a.renderCard(row, items[row.Index])
+					a.renderCard(row, items[row.Index], items, pinnedCount)
 				}).
 				Children(func() {
 					if len(items) == 0 {
@@ -377,7 +371,11 @@ func (a *clipApp) reorderPinnedRows(items []store.ClipItem, pinnedCount int, row
 	a.reload()
 }
 
-func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem) {
+type pinnedCardDrag struct {
+	index int
+}
+
+func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem, items []store.ClipItem, pinnedCount int) {
 	c := row.Context
 	t := c.Theme()
 	msgs := locales.In(c.Locale())
@@ -422,14 +420,20 @@ func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem) {
 		bodySize = 13
 	}
 
+	canDragPinned := item.Pinned && pinnedCount >= 2
 	card := ui.Column(c).Padding(padTop, padX, padBottom, padX).Gap(gap).Radius(radiusCard).
 		Background(bg).Border(1, borderColor).
 		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
 		AnimatePose(ui.Pose{Y: translateY}, ui.Animation{Duration: 240 * time.Millisecond, Ease: ui.EaseOut}).
 		Transition(cardTransition)
-	if !item.Pinned {
-		// Prevent non-pinned cards from initiating row drag when ListState.Reorder is active.
-		card.Drag(nil)
+	if canDragPinned {
+		card.Drag(pinnedCardDrag{index: row.Index})
+		if card.Dragging() {
+			card.Opacity(0.4)
+		}
+		if over, ok := ui.DragOver[pinnedCardDrag](card); ok && over.index != row.Index {
+			card.Border(1.5, t.Accent)
+		}
 	}
 	card.
 		Children(func() {
@@ -540,7 +544,20 @@ func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem) {
 
 	a.attachCardContextMenu(c, card, item)
 
-	if card.RowClicked() {
+	clicked := false
+	if canDragPinned {
+		if dragged, ok := ui.Drop[pinnedCardDrag](card); ok && dragged.index != row.Index {
+			to := row.Index
+			if dragged.index < row.Index {
+				to = row.Index + 1
+			}
+			a.reorderPinnedRows(items, pinnedCount, []int{dragged.index}, to)
+		}
+		clicked = card.Clicked()
+	} else {
+		clicked = card.RowClicked()
+	}
+	if clicked {
 		a.selected = row.Index
 		a.pasteSelected()
 		a.selected = -1

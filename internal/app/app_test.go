@@ -1067,8 +1067,8 @@ func TestPinnedBadgeRemovedAndDragReorder(t *testing.T) {
 			t.Fatalf("expected %q text badge removed from pinned cards, found %+v", msgs.CardPinned(), info)
 		}
 	}
-	if a.list.Reorder == nil {
-		t.Fatalf("expected Reorder enabled when >=2 pinned cards exist")
+	if a.list.Reorder != nil {
+		t.Fatalf("expected list.Reorder nil so unpinned cards are never draggable")
 	}
 
 	if !a.list.KeepOffset {
@@ -1091,14 +1091,14 @@ func TestPinnedBadgeRemovedAndDragReorder(t *testing.T) {
 		t.Fatalf("expected dragging unpinned card ignored, got [%d,%d,%d]", a.items[0].ID, a.items[1].ID, a.items[2].ID)
 	}
 
-	// Pointer-drag pinned row 0 (pinned two) down past pinned row 1 (pinned one) -> [i1, i2, i3] and keeps scroll at top.
+	// Pointer-drag pinned row 0 (pinned two) onto pinned row 1 (pinned one) -> [i1, i2, i3] and keeps scroll at top.
 	pinnedOneRect, ok := tt.Find("pinned one")
 	if !ok {
 		t.Fatalf("expected pinned one in view")
 	}
 	tt.Press(pinnedTwoRect.X+20, pinnedTwoRect.Y+pinnedTwoRect.H/2)
-	tt.Move(pinnedOneRect.X+20, pinnedOneRect.Y+pinnedOneRect.H-2)
-	tt.Release(pinnedOneRect.X+20, pinnedOneRect.Y+pinnedOneRect.H-2)
+	tt.Move(pinnedOneRect.X+20, pinnedOneRect.Y+pinnedOneRect.H/2)
+	tt.Release(pinnedOneRect.X+20, pinnedOneRect.Y+pinnedOneRect.H/2)
 	tt.Frame()
 	if len(a.items) != 3 || a.items[0].ID != i1.ID || a.items[1].ID != i2.ID || a.items[2].ID != i3.ID {
 		t.Fatalf("expected pinned reorder via drag -> [%d,%d,%d], got [%d,%d,%d]", i1.ID, i2.ID, i3.ID, a.items[0].ID, a.items[1].ID, a.items[2].ID)
@@ -1107,10 +1107,28 @@ func TestPinnedBadgeRemovedAndDragReorder(t *testing.T) {
 		t.Fatalf("expected scroll Y to stay at 0 after reordering top pinned item, got %.1f", a.listScroll.Y)
 	}
 
-	// Dragging unpinned row 2 directly must also be ignored.
-	a.list.Reorder([]int{2}, 0)
-	if a.items[0].ID != i1.ID || a.items[1].ID != i2.ID || a.items[2].ID != i3.ID {
-		t.Fatalf("expected dragging unpinned row ignored, got [%d,%d,%d]", a.items[0].ID, a.items[1].ID, a.items[2].ID)
+	// Left-clicking both unpinned and pinned cards must trigger paste.
+	prevUnpinnedUpdated := a.items[2].UpdatedAt
+	time.Sleep(5 * time.Millisecond)
+	a.settings.MoveToTopOnPaste = true
+	tt.Press(unpinnedRect.X+20, unpinnedRect.Y+unpinnedRect.H/2)
+	tt.Release(unpinnedRect.X+20, unpinnedRect.Y+unpinnedRect.H/2)
+	tt.Frame()
+	if !a.items[2].UpdatedAt.After(prevUnpinnedUpdated) {
+		t.Fatalf("expected left-clicking unpinned card to trigger paste (%v <= %v)", a.items[2].UpdatedAt, prevUnpinnedUpdated)
+	}
+
+	pinnedRectNow, ok := tt.Find("pinned one")
+	if !ok {
+		t.Fatalf("expected pinned one in view after reorder")
+	}
+	prevPinnedUpdated := a.items[0].UpdatedAt
+	time.Sleep(5 * time.Millisecond)
+	tt.Press(pinnedRectNow.X+20, pinnedRectNow.Y+pinnedRectNow.H/2)
+	tt.Release(pinnedRectNow.X+20, pinnedRectNow.Y+pinnedRectNow.H/2)
+	tt.Frame()
+	if !a.items[0].UpdatedAt.After(prevPinnedUpdated) {
+		t.Fatalf("expected left-clicking pinned card to trigger paste (%v <= %v)", a.items[0].UpdatedAt, prevPinnedUpdated)
 	}
 }
 

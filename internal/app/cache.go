@@ -8,6 +8,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -40,23 +41,31 @@ type bitmapCache struct {
 	order   []string
 	failed  map[string]bool
 	loading map[string]bool
-	allowed map[string]struct{}
-	gen     uint64
+	sem     chan struct{}
+	gen     atomic.Uint64
 }
 
 func newBitmapCache() *bitmapCache {
+	return newBitmapCacheWithConcurrency(0)
+}
+
+func newBitmapCacheWithConcurrency(maxConc int) *bitmapCache {
+	var sem chan struct{}
+	if maxConc > 0 {
+		sem = make(chan struct{}, maxConc)
+	}
 	return &bitmapCache{
 		items:   make(map[string]*ui.Bitmap),
 		failed:  make(map[string]bool),
 		loading: make(map[string]bool),
+		sem:     sem,
 	}
 }
 
 func (bc *bitmapCache) clear() {
-	bc.gen++
+	bc.gen.Add(1)
 	bc.items = make(map[string]*ui.Bitmap)
 	bc.order = nil
-	bc.allowed = nil
 	if len(bc.failed) > 128 {
 		bc.failed = make(map[string]bool)
 	}
@@ -82,6 +91,24 @@ func (bc *bitmapCache) touch(key string) {
 		}
 	}
 	bc.order = append(bc.order, key)
+}
+
+func (bc *bitmapCache) evict(key string) bool {
+	if bc == nil || key == "" {
+		return false
+	}
+	if _, ok := bc.items[key]; !ok {
+		return false
+	}
+	delete(bc.items, key)
+	for i, k := range bc.order {
+		if k == key {
+			copy(bc.order[i:], bc.order[i+1:])
+			bc.order = bc.order[:len(bc.order)-1]
+			break
+		}
+	}
+	return true
 }
 
 // pruneTo keeps up to the keep most recently accessed entries and drops older ones.
@@ -111,44 +138,6 @@ func (bc *bitmapCache) pruneTo(keep int) bool {
 	return true
 }
 
-// retainOnly updates the active key window and evicts any cached bitmaps
-// outside allowed so scrolled-away thumbnails do not stay resident in memory.
-func (bc *bitmapCache) retainOnly(allowed map[string]struct{}) int {
-	if bc == nil {
-		return 0
-	}
-	bc.allowed = allowed
-	if len(bc.items) == 0 {
-		bc.order = nil
-		return 0
-	}
-	if len(allowed) == 0 {
-		evicted := len(bc.items)
-		bc.items = make(map[string]*ui.Bitmap)
-		bc.order = nil
-		return evicted
-	}
-	evicted := 0
-	for k := range bc.items {
-		if _, ok := allowed[k]; !ok {
-			delete(bc.items, k)
-			evicted++
-		}
-	}
-	if len(bc.order) > 0 {
-		kept := bc.order[:0]
-		for _, k := range bc.order {
-			if _, ok := allowed[k]; ok {
-				if _, exists := bc.items[k]; exists {
-					kept = append(kept, k)
-				}
-			}
-		}
-		bc.order = kept
-	}
-	return evicted
-}
-
 func (bc *bitmapCache) get(win *mygo.Window, key string, maxCount int, fetch func() ([]byte, error)) *ui.Bitmap {
 	return bc.getBitmap(win, key, maxCount, func() (*ui.Bitmap, error) {
 		data, err := fetch()
@@ -171,8 +160,18 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 		return nil
 	}
 	bc.loading[key] = true
-	gen := bc.gen
+	gen := bc.gen.Load()
 	go func() {
+		if bc.sem != nil {
+			bc.sem <- struct{}{}
+			defer func() { <-bc.sem }()
+		}
+		if bc.gen.Load() != gen {
+			win.Update(func() {
+				delete(bc.loading, key)
+			})
+			return
+		}
 		var bmp *ui.Bitmap
 		err := runWithTimeout(bitmapFetchTimeout, func() error {
 			var loadErr error
@@ -181,13 +180,8 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 		})
 		win.Update(func() {
 			delete(bc.loading, key)
-			if gen != bc.gen {
+			if gen != bc.gen.Load() {
 				return
-			}
-			if bc.allowed != nil {
-				if _, ok := bc.allowed[key]; !ok {
-					return
-				}
 			}
 			if err != nil || bmp == nil {
 				if len(bc.failed) >= 128 {
@@ -247,6 +241,15 @@ func downscaleBilinear(src image.Image, dstW, dstH int) *image.RGBA {
 	xRatio := float64(sw) / float64(dstW)
 	yRatio := float64(sh) / float64(dstH)
 
+	switch m := src.(type) {
+	case *image.NRGBA:
+		downscalePixBilinear(m.Pix, m.Stride, sb.Min.X-m.Rect.Min.X, sb.Min.Y-m.Rect.Min.Y, sw, sh, dst, dstW, dstH, xRatio, yRatio, true)
+		return dst
+	case *image.RGBA:
+		downscalePixBilinear(m.Pix, m.Stride, sb.Min.X-m.Rect.Min.X, sb.Min.Y-m.Rect.Min.Y, sw, sh, dst, dstW, dstH, xRatio, yRatio, false)
+		return dst
+	}
+
 	for y := 0; y < dstH; y++ {
 		sy := (float64(y)+0.5)*yRatio - 0.5
 		if sy < 0 {
@@ -283,4 +286,54 @@ func downscaleBilinear(src image.Image, dstW, dstH int) *image.RGBA {
 		}
 	}
 	return dst
+}
+
+func downscalePixBilinear(pix []byte, stride, offX, offY, sw, sh int, dst *image.RGBA, dstW, dstH int, xRatio, yRatio float64, premultiply bool) {
+	for y := 0; y < dstH; y++ {
+		sy := (float64(y)+0.5)*yRatio - 0.5
+		if sy < 0 {
+			sy = 0
+		}
+		y0 := int(sy)
+		y1 := min(y0+1, sh-1)
+		wy := sy - float64(y0)
+		wy0 := 1 - wy
+		row0 := (offY+y0)*stride + offX*4
+		row1 := (offY+y1)*stride + offX*4
+		drow := y * dst.Stride
+		for x := 0; x < dstW; x++ {
+			sx := (float64(x)+0.5)*xRatio - 0.5
+			if sx < 0 {
+				sx = 0
+			}
+			x0 := int(sx)
+			x1 := min(x0+1, sw-1)
+			wx := sx - float64(x0)
+			wx0 := 1 - wx
+
+			i00 := row0 + x0*4
+			i10 := row0 + x1*4
+			i01 := row1 + x0*4
+			i11 := row1 + x1*4
+
+			r := (float64(pix[i00])*wx0+float64(pix[i10])*wx)*wy0 + (float64(pix[i01])*wx0+float64(pix[i11])*wx)*wy
+			g := (float64(pix[i00+1])*wx0+float64(pix[i10+1])*wx)*wy0 + (float64(pix[i01+1])*wx0+float64(pix[i11+1])*wx)*wy
+			b := (float64(pix[i00+2])*wx0+float64(pix[i10+2])*wx)*wy0 + (float64(pix[i01+2])*wx0+float64(pix[i11+2])*wx)*wy
+			a := (float64(pix[i00+3])*wx0+float64(pix[i10+3])*wx)*wy0 + (float64(pix[i01+3])*wx0+float64(pix[i11+3])*wx)*wy
+
+			di := drow + x*4
+			if premultiply {
+				af := a / 255.0
+				dst.Pix[di] = uint8(r*af + 0.5)
+				dst.Pix[di+1] = uint8(g*af + 0.5)
+				dst.Pix[di+2] = uint8(b*af + 0.5)
+				dst.Pix[di+3] = uint8(a + 0.5)
+			} else {
+				dst.Pix[di] = uint8(r + 0.5)
+				dst.Pix[di+1] = uint8(g + 0.5)
+				dst.Pix[di+2] = uint8(b + 0.5)
+				dst.Pix[di+3] = uint8(a + 0.5)
+			}
+		}
+	}
 }

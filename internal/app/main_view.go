@@ -893,6 +893,12 @@ func (a *clipApp) getRichPreviewSpans(item store.ClipItem, t *ui.Theme) []ui.Spa
 	return spans
 }
 
+const (
+	maxThumbCacheCount    = 24
+	minThumbPreloadMargin = 3
+	maxThumbPreloadMargin = 6
+)
+
 func loadThumbFile(path string) (*ui.Bitmap, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -902,41 +908,31 @@ func loadThumbFile(path string) (*ui.Bitmap, error) {
 }
 
 func (a *clipApp) getOrLoadThumb(path string) *ui.Bitmap {
-	return a.thumbs.getBitmap(a.panel, path, 0, func() (*ui.Bitmap, error) {
+	return a.thumbs.getBitmap(a.panel, path, maxThumbCacheCount, func() (*ui.Bitmap, error) {
 		return loadThumbFile(path)
 	})
 }
 
 func (a *clipApp) preloadThumb(path string) {
-	a.thumbs.preloadBitmap(a.panel, path, 0, func() (*ui.Bitmap, error) {
+	a.thumbs.preloadBitmap(a.panel, path, maxThumbCacheCount, func() (*ui.Bitmap, error) {
 		return loadThumbFile(path)
 	})
 }
 
-const (
-	minThumbPreloadMargin = 6
-	maxThumbPreloadMargin = 12
-)
-
-// syncThumbWindow keeps thumbnails within [firstVisible - margin, lastVisible + margin]
-// where margin is pageSize clamped to [minThumbPreloadMargin, maxThumbPreloadMargin],
-// preloads adjacent pages before/after the viewport, and evicts everything further away.
+// syncThumbWindow preloads thumbnails within [firstVisible - margin, lastVisible + margin],
+// evicts hidden sensitive entries immediately, and caps total retained thumbnails by LRU
+// so scrolling down does not discard recently viewed top thumbnails.
 func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisible int) {
-	if a.thumbs == nil {
-		return
-	}
-	if len(items) == 0 || firstVisible > lastVisible || lastVisible < 0 || firstVisible >= len(items) {
-		a.thumbs.retainOnly(make(map[string]struct{}))
+	if a.thumbs == nil || len(items) == 0 || firstVisible > lastVisible || lastVisible < 0 || firstVisible >= len(items) {
 		return
 	}
 	firstVisible = max(0, firstVisible)
 	lastVisible = min(len(items)-1, lastVisible)
 	pageSize := max(1, lastVisible-firstVisible+1)
-	margin := min(maxThumbPreloadMargin, max(minThumbPreloadMargin, pageSize))
+	margin := min(maxThumbPreloadMargin, max(minThumbPreloadMargin, pageSize/2))
 	windowStart := max(0, firstVisible-margin)
 	windowEnd := min(len(items)-1, lastVisible+margin)
 
-	keep := make(map[string]struct{})
 	var preloadPaths []string
 	for i := windowStart; i <= windowEnd; i++ {
 		item := items[i]
@@ -944,14 +940,20 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 			continue
 		}
 		if store.HasSensitiveTag(item.Tags) && !a.revealedSensitive[item.ID] {
+			a.thumbs.evict(item.ImagePath)
 			continue
 		}
-		keep[item.ImagePath] = struct{}{}
-		if i < firstVisible || i > lastVisible {
+		if i >= firstVisible && i <= lastVisible {
+			if _, ok := a.thumbs.items[item.ImagePath]; ok {
+				a.thumbs.touch(item.ImagePath)
+			}
+		} else {
 			preloadPaths = append(preloadPaths, item.ImagePath)
 		}
 	}
-	a.thumbs.retainOnly(keep)
+	if a.thumbs.len() > maxThumbCacheCount {
+		a.thumbs.pruneTo(maxThumbCacheCount)
+	}
 	for _, path := range preloadPaths {
 		a.preloadThumb(path)
 	}

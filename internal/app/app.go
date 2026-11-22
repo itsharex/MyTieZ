@@ -130,8 +130,8 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 		atTop:           true,
 		winPinned:       !cfg.AutoHideOnBlur,
 		panelNoActivate: cfg.NoFocusMode,
-		thumbs:          newBitmapCache(),
-		appIcons:        newBitmapCache(),
+		thumbs:          newBitmapCacheWithConcurrency(2),
+		appIcons:        newBitmapCacheWithConcurrency(2),
 	}
 	a.syncPlainPasteShortcut()
 	return a

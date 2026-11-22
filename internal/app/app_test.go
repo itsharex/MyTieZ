@@ -843,6 +843,7 @@ func TestHiddenMemoryAndCacheRetention(t *testing.T) {
 	}
 
 	a.thumbs.items["overflow"] = &ui.Bitmap{}
+	a.thumbs.touch("overflow")
 	a.hidePanel()
 	if a.thumbs.len() != warmThumbCacheLimit || len(a.richSpans) != 1 {
 		t.Fatalf("expected oversized thumb cache pruned to %d, got %d", warmThumbCacheLimit, a.thumbs.len())
@@ -1149,39 +1150,40 @@ func TestThumbWindowRetentionAndEviction(t *testing.T) {
 			ImagePath: path,
 		}
 		a.thumbs.items[path] = &ui.Bitmap{}
+		a.thumbs.touch(path)
 	}
-	// Mark index 10 as sensitive and unrevealed; it should not be retained/preloaded.
+	// Mark index 10 as sensitive and unrevealed; syncThumbWindow should evict it immediately.
 	items[10].Tags = []string{store.SensitiveTag}
 
-	// Lower bound clamp: viewport [8, 10] (pageSize=3) clamps margin to minThumbPreloadMargin (6) -> [2, 16].
-	a.syncThumbWindow(items, 8, 10)
-	for i := range items {
-		path := items[i].ImagePath
-		_, exists := a.thumbs.items[path]
-		want := i >= 2 && i <= 16 && i != 10
-		if exists != want {
-			t.Fatalf("lower-bound item %d (%s): exists=%v, want=%v", i, path, exists, want)
+	// Viewport [8, 12] touches [8..12], evicts sensitive index 10, and prunes total cache to maxThumbCacheCount.
+	a.syncThumbWindow(items, 8, 12)
+	if a.thumbs.len() != maxThumbCacheCount {
+		t.Fatalf("expected cache pruned to %d, got %d", maxThumbCacheCount, a.thumbs.len())
+	}
+	if _, exists := a.thumbs.items[items[10].ImagePath]; exists {
+		t.Fatalf("expected sensitive unrevealed thumb %s evicted", items[10].ImagePath)
+	}
+	for i := 8; i <= 12; i++ {
+		if i == 10 {
+			continue
+		}
+		if _, exists := a.thumbs.items[items[i].ImagePath]; !exists {
+			t.Fatalf("expected visible thumb %d (%s) retained", i, items[i].ImagePath)
 		}
 	}
-
-	// Upper bound clamp: repopulate and test viewport [15, 34] (pageSize=20) clamps margin to maxThumbPreloadMargin (12) -> [3, 46].
-	for _, it := range items {
-		a.thumbs.items[it.ImagePath] = &ui.Bitmap{}
+	// Recently used top entry (when total <= maxThumbCacheCount) stays cached on scroll down.
+	if _, exists := a.thumbs.items[items[49].ImagePath]; !exists {
+		t.Fatalf("expected recent entry %s retained within LRU capacity", items[49].ImagePath)
 	}
-	a.syncThumbWindow(items, 15, 34)
-	for i := range items {
-		path := items[i].ImagePath
-		_, exists := a.thumbs.items[path]
-		want := i >= 3 && i <= 46 && i != 10
-		if exists != want {
-			t.Fatalf("upper-bound item %d (%s): exists=%v, want=%v", i, path, exists, want)
-		}
+	if _, exists := a.thumbs.items[items[0].ImagePath]; exists {
+		t.Fatalf("expected oldest LRU entry %s evicted", items[0].ImagePath)
 	}
 
-	// Empty / invalid range clears all retained thumbnails.
+	// Empty / invalid range does not drop existing warm cache.
+	before := a.thumbs.len()
 	a.syncThumbWindow(items, 0, -1)
-	if a.thumbs.len() != 0 {
-		t.Fatalf("expected 0 thumbs retained for empty range, got %d", a.thumbs.len())
+	if a.thumbs.len() != before {
+		t.Fatalf("expected warm cache preserved (%d) on invalid range, got %d", before, a.thumbs.len())
 	}
 }
 
@@ -1193,7 +1195,7 @@ func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 	defer st.Close()
 
 	a := newClipApp(st, nil)
-	const total = 18
+	const total = 32
 	items := make([]store.ClipItem, total)
 	for i := range items {
 		path := fmt.Sprintf("scroll-img-%02d.png", i)
@@ -1203,7 +1205,11 @@ func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 			ImagePath: path,
 			Preview:   fmt.Sprintf("100 × 100 · #%02d", i),
 		}
-		a.thumbs.items[path] = &ui.Bitmap{}
+	}
+	// Seed cache in ascending order so [0..7] are oldest, then render top viewport so [0..firstLast] become MRU.
+	for _, it := range items {
+		a.thumbs.items[it.ImagePath] = &ui.Bitmap{}
+		a.thumbs.touch(it.ImagePath)
 	}
 	a.items = items
 
@@ -1214,17 +1220,15 @@ func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 	if last0 < first0 {
 		t.Fatalf("expected visible rows after initial frame, got (%d, %d)", first0, last0)
 	}
+	if a.thumbs.len() > maxThumbCacheCount {
+		t.Fatalf("expected cache bounded to %d, got %d", maxThumbCacheCount, a.thumbs.len())
+	}
 	if _, ok := a.thumbs.items[items[0].ImagePath]; !ok {
 		t.Fatalf("expected top visible image retained at top")
 	}
-	if _, ok := a.thumbs.items[items[total-1].ImagePath]; ok {
-		t.Fatalf("expected far-away bottom image evicted when at top (visible=%d..%d)", first0, last0)
-	}
 
-	// Re-populate all thumbs to simulate decoded state, then scroll to bottom.
-	for _, it := range items {
-		a.thumbs.items[it.ImagePath] = &ui.Bitmap{}
-	}
+	// Scroll to bottom: visible bottom rows are touched, and because top rows were recently viewed,
+	// top row 0 remains cached within the 24-item LRU budget (avoiding decode spikes on next open).
 	a.list.ScrollToEnd()
 	tt.Frame()
 	tt.Frame()
@@ -1233,10 +1237,13 @@ func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 	if last1 < first1 || last1 < total-2 {
 		t.Fatalf("expected list scrolled near bottom, got visible (%d, %d)", first1, last1)
 	}
-	if _, ok := a.thumbs.items[items[0].ImagePath]; ok {
-		t.Fatalf("expected far-away top image evicted after scrolling to bottom (visible=%d..%d)", first1, last1)
+	if a.thumbs.len() > maxThumbCacheCount {
+		t.Fatalf("expected cache bounded to %d after scroll, got %d", maxThumbCacheCount, a.thumbs.len())
 	}
 	if _, ok := a.thumbs.items[items[total-1].ImagePath]; !ok {
 		t.Fatalf("expected bottom visible image retained after scrolling to bottom")
+	}
+	if _, ok := a.thumbs.items[items[0].ImagePath]; !ok {
+		t.Fatalf("expected recently viewed top image retained in LRU after scrolling to bottom")
 	}
 }

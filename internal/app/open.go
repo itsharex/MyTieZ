@@ -53,7 +53,9 @@ func (a *clipApp) openItem(item store.ClipItem) {
 			}
 			if err := launchURLTarget(appPath, targetURL); err != nil {
 				a.setStatus(locales.StatusOpenUrlErr(err.Error()))
+				return
 			}
+			a.hidePanel()
 			return
 		}
 		tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("MyTieZ_entry_%d.txt", item.ID))
@@ -64,7 +66,9 @@ func (a *clipApp) openItem(item store.ClipItem) {
 		a.trackTempFile(tmpPath)
 		if err := launchTarget(appPath, tmpPath); err != nil {
 			a.setStatus(locales.StatusOpenErr(err.Error()))
+			return
 		}
+		a.hidePanel()
 
 	case store.KindRichText:
 		content := item.HTML
@@ -81,7 +85,9 @@ func (a *clipApp) openItem(item store.ClipItem) {
 		a.trackTempFile(tmpPath)
 		if err := launchTarget(appPath, tmpPath); err != nil {
 			a.setStatus(locales.StatusOpenErr(err.Error()))
+			return
 		}
+		a.hidePanel()
 
 	case store.KindImage:
 		if item.ImagePath == "" {
@@ -94,7 +100,9 @@ func (a *clipApp) openItem(item store.ClipItem) {
 		}
 		if err := launchTarget(appPath, item.ImagePath); err != nil {
 			a.setStatus(locales.StatusOpenImgErr(err.Error()))
+			return
 		}
+		a.hidePanel()
 
 	case store.KindFile:
 		files := nonEmptyPaths(item.Files)
@@ -142,7 +150,9 @@ func (a *clipApp) openFilePath(p string) {
 	}
 	if err := shellOpenPath(p); err != nil {
 		a.setStatus(locales.StatusOpenFileErr(err.Error()))
+		return
 	}
+	a.hidePanel()
 }
 
 func (a *clipApp) showFileInFolder(p string) {
@@ -155,6 +165,7 @@ func (a *clipApp) showFileInFolder(p string) {
 		return
 	}
 	shellShowItemInFolder(p)
+	a.hidePanel()
 }
 
 func (a *clipApp) showFilesInFolder(files []string) {
@@ -164,6 +175,7 @@ func (a *clipApp) showFilesInFolder(files []string) {
 		return
 	}
 	shellShowItemInFolder(p)
+	a.hidePanel()
 }
 
 func isBareWWWURL(raw string) bool {

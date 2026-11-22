@@ -79,6 +79,7 @@ func TestOpenSingleFileDirectly(t *testing.T) {
 	missing := filepath.Join(dir, "gone.pdf")
 
 	a := newTestAppWithFiles(t, []string{existing})
+	a.routedSearchActive = true
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
 
 	if err := tt.Click(locales.In("zh-Hans").CardActionOpen()); err != nil {
@@ -90,14 +91,21 @@ func TestOpenSingleFileDirectly(t *testing.T) {
 	if len(*shown) != 0 {
 		t.Fatalf("expected no folder reveal on single open click, got %q", *shown)
 	}
+	if a.routedSearchActive {
+		t.Fatalf("expected hidePanel called after opening existing file")
+	}
 
 	a2 := newTestAppWithFiles(t, []string{missing})
+	a2.routedSearchActive = true
 	a2.openItem(a2.items[0])
 	if len(*opened) != 1 {
 		t.Fatalf("expected missing file not opened, opened=%q", *opened)
 	}
 	if a2.pendingToast != locales.StatusFileMissing() {
 		t.Fatalf("expected missing file toast %q, got %q", locales.StatusFileMissing(), a2.pendingToast)
+	}
+	if !a2.routedSearchActive {
+		t.Fatalf("expected hidePanel not called when file is missing")
 	}
 }
 
@@ -114,6 +122,7 @@ func TestOpenItemMultiFileFallbackDoesNotOpenAll(t *testing.T) {
 	}
 
 	a := newTestAppWithFiles(t, []string{missing, first, second})
+	a.routedSearchActive = true
 	a.openItem(a.items[0])
 
 	if len(*opened) != 0 {
@@ -121,6 +130,9 @@ func TestOpenItemMultiFileFallbackDoesNotOpenAll(t *testing.T) {
 	}
 	if !slices.Equal(*shown, []string{first}) {
 		t.Fatalf("expected multi-file openItem fallback to reveal %q, got %q", first, *shown)
+	}
+	if a.routedSearchActive {
+		t.Fatalf("expected hidePanel called after revealing multi-file item in folder")
 	}
 }
 

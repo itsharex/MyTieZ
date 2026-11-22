@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"mytiez/internal/store"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -138,5 +140,95 @@ func TestBitmapCacheByteBudgetEviction(t *testing.T) {
 	bc.clear()
 	if bc.bytes() != 0 {
 		t.Fatalf("expected 0 bytes after clear, got %d", bc.bytes())
+	}
+}
+
+func TestBitmapCacheActiveWindowFilter(t *testing.T) {
+	bc := newBitmapCacheWithBudget(1, 0)
+	// Unset active window allows all keys.
+	if !bc.isActive("any") {
+		t.Fatalf("expected nil activeKeys to allow all keys")
+	}
+
+	bc.setActiveKeys(map[string]struct{}{"in-window": {}})
+	if !bc.isActive("in-window") {
+		t.Fatalf("expected in-window key to be active")
+	}
+	if bc.isActive("scrolled-past") {
+		t.Fatalf("expected scrolled-past key to be inactive")
+	}
+
+	// Visible rows calling markActive before syncThumbWindow stay active.
+	bc.markActive("newly-visible")
+	if !bc.isActive("newly-visible") {
+		t.Fatalf("expected newly-visible key marked active")
+	}
+
+	// Clear resets active window restriction.
+	bc.clear()
+	if !bc.isActive("scrolled-past") {
+		t.Fatalf("expected clear to reset activeKeys filter")
+	}
+}
+
+func TestLoadOrCreateThumbBitmapDiskCacheAndCleanup(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	src := image.NewNRGBA(image.Rect(0, 0, 1600, 900))
+	for y := 0; y < 900; y++ {
+		for x := 0; x < 1600; x++ {
+			src.SetNRGBA(x, y, color.NRGBA{R: 80, G: 140, B: 220, A: 200})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, src); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := st.SaveImage(buf.Bytes(), store.SaveOptions{Deduplicate: true, MaxHistory: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	thumbPath := store.ThumbPath(saved.ImagePath)
+	if thumbPath == "" {
+		t.Fatalf("expected non-empty thumb path for %s", saved.ImagePath)
+	}
+	if _, err := os.Stat(thumbPath); !os.IsNotExist(err) {
+		t.Fatalf("expected thumb cache absent before first load")
+	}
+
+	// First load decodes original, downscales to <= 680x200, and writes on-disk thumbnail.
+	bmp, err := loadOrCreateThumbBitmap(saved.ImagePath, thumbPath, thumbMaxWidth, thumbMaxHeight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, h := bmp.Size()
+	if w > thumbMaxWidth || h > thumbMaxHeight || w <= 0 || h <= 0 {
+		t.Fatalf("expected downscaled size <= %dx%d, got %dx%d", thumbMaxWidth, thumbMaxHeight, w, h)
+	}
+	if _, err := os.Stat(thumbPath); err != nil {
+		t.Fatalf("expected on-disk thumb created at %s: %v", thumbPath, err)
+	}
+
+	// Second load hits on-disk thumbnail without touching the original image.
+	bmp2, err := loadOrCreateThumbBitmap(filepath.Join(t.TempDir(), "missing.png"), thumbPath, thumbMaxWidth, thumbMaxHeight)
+	if err != nil {
+		t.Fatalf("expected second load to use cached thumb: %v", err)
+	}
+	w2, h2 := bmp2.Size()
+	if w2 != w || h2 != h {
+		t.Fatalf("expected cached thumb size %dx%d, got %dx%d", w, h, w2, h2)
+	}
+
+	// Deleting the item removes both the original image and its cached thumbnail.
+	if err := st.Delete(saved.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(thumbPath); !os.IsNotExist(err) {
+		t.Fatalf("expected on-disk thumb removed after item deletion")
 	}
 }

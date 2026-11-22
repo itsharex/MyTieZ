@@ -1097,6 +1097,19 @@ func (s *Store) removeOrphanImages(paths []string) {
 	}
 }
 
+// ThumbPath returns the on-disk thumbnail cache path corresponding to imagePath.
+func ThumbPath(imagePath string) string {
+	if imagePath == "" {
+		return ""
+	}
+	base := filepath.Base(imagePath)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	if stem == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(imagePath), "thumbs", stem+".png")
+}
+
 func (s *Store) removeOrphanImage(imgPath string) {
 	if imgPath == "" {
 		return
@@ -1104,6 +1117,9 @@ func (s *Store) removeOrphanImage(imgPath string) {
 	var cnt int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM clip_items WHERE image_path = ?`, imgPath).Scan(&cnt); err == nil && cnt == 0 {
 		_ = os.Remove(imgPath)
+		if tp := ThumbPath(imgPath); tp != "" {
+			_ = os.Remove(tp)
+		}
 	}
 }
 

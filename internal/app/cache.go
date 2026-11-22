@@ -8,9 +8,11 @@ import (
 	"image/color"
 	_ "image/gif"
 	_ "image/jpeg"
-	_ "image/png"
+	"image/png"
 	"io"
 	"os"
+	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -47,6 +49,8 @@ type bitmapCache struct {
 	sem        chan struct{}
 	maxBytes   int64
 	totalBytes int64
+	activeMu   sync.RWMutex
+	activeKeys map[string]struct{}
 	gen        atomic.Uint64
 }
 
@@ -88,9 +92,43 @@ func (bc *bitmapCache) clear() {
 	bc.items = make(map[string]*ui.Bitmap)
 	bc.order = nil
 	bc.totalBytes = 0
+	bc.setActiveKeys(nil)
 	if len(bc.failed) > 128 {
 		bc.failed = make(map[string]bool)
 	}
+}
+
+func (bc *bitmapCache) setActiveKeys(keys map[string]struct{}) {
+	if bc == nil {
+		return
+	}
+	bc.activeMu.Lock()
+	bc.activeKeys = keys
+	bc.activeMu.Unlock()
+}
+
+func (bc *bitmapCache) markActive(key string) {
+	if bc == nil || key == "" {
+		return
+	}
+	bc.activeMu.Lock()
+	if bc.activeKeys != nil {
+		bc.activeKeys[key] = struct{}{}
+	}
+	bc.activeMu.Unlock()
+}
+
+func (bc *bitmapCache) isActive(key string) bool {
+	if bc == nil {
+		return false
+	}
+	bc.activeMu.RLock()
+	defer bc.activeMu.RUnlock()
+	if bc.activeKeys == nil {
+		return true
+	}
+	_, ok := bc.activeKeys[key]
+	return ok
 }
 
 func (bc *bitmapCache) len() int {
@@ -265,7 +303,7 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 			bc.sem <- struct{}{}
 			defer func() { <-bc.sem }()
 		}
-		if bc.gen.Load() != gen {
+		if bc.gen.Load() != gen || !bc.isActive(key) {
 			win.Update(func() {
 				delete(bc.loading, key)
 			})
@@ -323,31 +361,93 @@ func decodeThumbBitmap(data []byte, maxW, maxH int) (*ui.Bitmap, error) {
 // decodeThumbBitmapFile streams and decodes an image file directly without
 // allocating a full-file byte slice in heap memory.
 func decodeThumbBitmapFile(path string, maxW, maxH int) (*ui.Bitmap, error) {
-	f, err := os.Open(path)
+	img, _, err := decodeThumbImageFile(path, maxW, maxH)
 	if err != nil {
 		return nil, err
 	}
+	return ui.NewBitmap(img), nil
+}
+
+// loadOrCreateThumbBitmap loads a pre-scaled on-disk thumbnail when available,
+// avoiding full-resolution PNG decoding on subsequent scrolls. On cache miss it
+// streams and downscales imagePath, then persists the scaled thumbnail atomically.
+func loadOrCreateThumbBitmap(imagePath, thumbPath string, maxW, maxH int) (*ui.Bitmap, error) {
+	if thumbPath != "" {
+		if img, _, err := decodeThumbImageFile(thumbPath, maxW, maxH); err == nil {
+			return ui.NewBitmap(img), nil
+		}
+	}
+	img, scaled, err := decodeThumbImageFile(imagePath, maxW, maxH)
+	if err != nil {
+		return nil, err
+	}
+	if thumbPath != "" && scaled {
+		saveThumbCacheFile(thumbPath, img)
+	}
+	return ui.NewBitmap(img), nil
+}
+
+func saveThumbCacheFile(thumbPath string, img image.Image) {
+	dir := filepath.Dir(thumbPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, ".thumb-*.tmp")
+	if err != nil {
+		return
+	}
+	tmpPath := tmp.Name()
+	enc := png.Encoder{CompressionLevel: png.BestSpeed}
+	if err := enc.Encode(tmp, img); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return
+	}
+	if err := os.Rename(tmpPath, thumbPath); err != nil {
+		_ = os.Remove(tmpPath)
+	}
+}
+
+func decodeThumbImageFile(path string, maxW, maxH int) (image.Image, bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
 	defer f.Close()
-	return decodeThumbBitmapReader(bufio.NewReaderSize(f, 32*1024), maxW, maxH)
+	return decodeThumbImageReader(bufio.NewReaderSize(f, 32*1024), maxW, maxH)
 }
 
 func decodeThumbBitmapReader(r io.Reader, maxW, maxH int) (*ui.Bitmap, error) {
-	img, _, err := image.Decode(r)
+	img, _, err := decodeThumbImageReader(r, maxW, maxH)
 	if err != nil {
 		return nil, err
+	}
+	return ui.NewBitmap(img), nil
+}
+
+func decodeThumbImageReader(r io.Reader, maxW, maxH int) (image.Image, bool, error) {
+	img, _, err := image.Decode(r)
+	if err != nil {
+		return nil, false, err
 	}
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
 	if w <= 0 || h <= 0 {
-		return nil, fmt.Errorf("empty image")
+		return nil, false, fmt.Errorf("empty image")
 	}
+	scaled := false
 	if w > maxW || h > maxH {
 		scale := min(float64(maxW)/float64(w), float64(maxH)/float64(h))
 		dstW := max(1, int(float64(w)*scale+0.5))
 		dstH := max(1, int(float64(h)*scale+0.5))
 		img = downscaleBilinear(img, dstW, dstH)
+		scaled = true
 	}
-	return ui.NewBitmap(img), nil
+	return img, scaled, nil
 }
 
 func downscaleBilinear(src image.Image, dstW, dstH int) *image.RGBA {

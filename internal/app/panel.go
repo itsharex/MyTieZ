@@ -16,6 +16,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 	if a.panel == nil {
 		return
 	}
+	a.stopHeapReleaseTimer()
 	a.stopIdleUnloadTimer()
 	sys.TrackForegroundWindow()
 	wasDocked := a.edgeDock != dockNone
@@ -79,6 +80,7 @@ func (a *clipApp) hidePanel() {
 		a.setPanelNoActivate(true)
 	}
 	a.releaseHiddenMemory()
+	a.scheduleHeapRelease()
 	a.scheduleIdleUnload()
 }
 

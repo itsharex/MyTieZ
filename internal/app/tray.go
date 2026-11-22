@@ -73,6 +73,7 @@ func (a *clipApp) setupTray() {
 			a.resizeTimer.Stop()
 		}
 		a.stopSearchTimer()
+		a.stopHeapReleaseTimer()
 		a.stopIdleUnloadTimer()
 		a.flushPendingSettingsPersist()
 		if a.updateTimer != nil {

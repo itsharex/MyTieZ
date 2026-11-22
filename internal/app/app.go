@@ -19,9 +19,13 @@ import (
 var globalShortcuts = []string{"Alt+V", "Ctrl+Shift+V", "Alt+Shift+V"}
 
 const (
-	// warmThumbCacheLimit keeps up to 8 recently viewed thumbnails (~1 MB) intact
-	// on panel hide when process memory is healthy.
-	warmThumbCacheLimit = 8
+	// warmThumbCacheLimit keeps up to 16 recently viewed thumbnails (~3-4 MB at
+	// 680x2000) intact on panel hide when process memory is healthy so MyGo's D3D11
+	// renderer reuses existing textures instead of creating new IDs on every show.
+	warmThumbCacheLimit = 16
+	// heapReleaseDelay returns idle Go heap spans to the OS shortly after hiding
+	// without evicting warm bitmaps, preventing working set from creeping up.
+	heapReleaseDelay = 5 * time.Second
 	// idleUnloadDelay unloads hidden UI caches and item slices after the panel
 	// stays hidden for 3 minutes (inspired by CopyQ's tab expiration), allowing
 	// long-running background instances to settle at minimal RAM usage.
@@ -29,28 +33,28 @@ const (
 )
 
 type clipApp struct {
-	iconPNG         []byte
-	store           *store.Store
-	settings        store.Settings
-	panel           *mygo.Window
-	tray            *mygo.Tray
-	trayOpenItem    *mygo.MenuItem
-	shortcut        string
-	stopWatch       func()
-	stopTrack       chan struct{}
-	items           []store.ClipItem
-	searchHits      []store.ClipItem
-	query           string
-	filterIdx       int // 0: 全部, 1: 文本, 2: 图片, 3: 文件, 4: 链接, 5: 代码, 6: 富文本
-	selected        int
-	list            ui.ListState
-	listHandle      ui.Handle
-	listScroll      ui.ScrollState
-	searchHandle    ui.Handle
-	editingTagsID   int64
-	tagInput        string
-	tagInputHandle  ui.Handle
-	tagFocusPending bool
+	iconPNG           []byte
+	store             *store.Store
+	settings          store.Settings
+	panel             *mygo.Window
+	tray              *mygo.Tray
+	trayOpenItem      *mygo.MenuItem
+	shortcut          string
+	stopWatch         func()
+	stopTrack         chan struct{}
+	items             []store.ClipItem
+	searchHits        []store.ClipItem
+	query             string
+	filterIdx         int // 0: 全部, 1: 文本, 2: 图片, 3: 文件, 4: 链接, 5: 代码, 6: 富文本
+	selected          int
+	list              ui.ListState
+	listHandle        ui.Handle
+	listScroll        ui.ScrollState
+	searchHandle      ui.Handle
+	editingTagsID     int64
+	tagInput          string
+	tagInputHandle    ui.Handle
+	tagFocusPending   bool
 	allTags           []string
 	editingTagOrder   []string
 	loadedRevision    uint64
@@ -59,22 +63,22 @@ type clipApp struct {
 	loadedKind        store.ClipKind
 	loadedLimit       int
 
-	thumbs            *bitmapCache
-	appIcons          *bitmapCache
-	richSpans         map[int64][]ui.Span
-	richSpansDark     bool
-	revealedSensitive map[int64]bool
-	tempFiles         map[string]struct{}
-	fileMenuOpen       map[int64]*bool
-	fileMenuStatID     int64
-	fileMenuStatAt     time.Time
-	fileMenuStatPaths  []string
-	fileMenuExists     map[string]bool
+	thumbs               *bitmapCache
+	appIcons             *bitmapCache
+	richSpans            map[int64][]ui.Span
+	richSpansDark        bool
+	revealedSensitive    map[int64]bool
+	tempFiles            map[string]struct{}
+	fileMenuOpen         map[int64]*bool
+	fileMenuStatID       int64
+	fileMenuStatAt       time.Time
+	fileMenuStatPaths    []string
+	fileMenuExists       map[string]bool
 	cardMenuRootHandle   ui.Handle
 	closeCardContextMenu bool
 
-	ignoreHash       string
-	ignoreUntil      time.Time
+	ignoreHash         string
+	ignoreUntil        time.Time
 	winPinned          bool
 	panelNoActivate    bool
 	routedSearchActive bool
@@ -85,40 +89,41 @@ type clipApp struct {
 	edgeDockStop       chan struct{}
 	lastShowAt         time.Time
 	lastOutsideHide    time.Time
-	pickingApp       bool
-	quitting         bool
-	resizeTimer      *time.Timer
-	searchTimer      *time.Timer
-	persistTimer     *time.Timer
-	persistPending   bool
-	updateTimer      *time.Timer
-	idleUnloadTimer  *time.Timer
-	updateChecking   bool
-	updateInstalling bool
-	updateProgress   int
-	updateReady      bool
-	availableUpdate  *mygo.Update
-	updateStatus     string
+	pickingApp         bool
+	quitting           bool
+	resizeTimer        *time.Timer
+	searchTimer        *time.Timer
+	persistTimer       *time.Timer
+	persistPending     bool
+	updateTimer        *time.Timer
+	heapReleaseTimer   *time.Timer
+	idleUnloadTimer    *time.Timer
+	updateChecking     bool
+	updateInstalling   bool
+	updateProgress     int
+	updateReady        bool
+	availableUpdate    *mygo.Update
+	updateStatus       string
 
-	showSettings       bool
-	confirmClearOpen   bool
-	controlsCollapsed  bool
-	atTop              bool
-	topReachedAt       time.Time
-	upScrollAccum      float32
-	expanded           settingsGroupExpanded
-	confirmAction      string
-	recordingHotkey        bool
-	recordingTarget        string // "" | "global" | "plain_paste"
-	hotkeyFocusPending     bool
-	hotkeyMods             ui.Modifiers
-	hotkeyHandle           ui.Handle
-	plainShortcutHandle    ui.Handle
-	pendingToast       string
-	memTrimming        atomic.Bool
-	saveMu             sync.Mutex
-	saveQueue          []func() (string, error)
-	saveRunning        bool
+	showSettings        bool
+	confirmClearOpen    bool
+	controlsCollapsed   bool
+	atTop               bool
+	topReachedAt        time.Time
+	upScrollAccum       float32
+	expanded            settingsGroupExpanded
+	confirmAction       string
+	recordingHotkey     bool
+	recordingTarget     string // "" | "global" | "plain_paste"
+	hotkeyFocusPending  bool
+	hotkeyMods          ui.Modifiers
+	hotkeyHandle        ui.Handle
+	plainShortcutHandle ui.Handle
+	pendingToast        string
+	memTrimming         atomic.Bool
+	saveMu              sync.Mutex
+	saveQueue           []func() (string, error)
+	saveRunning         bool
 }
 
 func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
@@ -136,7 +141,7 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 		atTop:           true,
 		winPinned:       !cfg.AutoHideOnBlur,
 		panelNoActivate: cfg.NoFocusMode,
-		thumbs:          newBitmapCacheWithBudget(2, maxThumbCacheBytes),
+		thumbs:          newBitmapCacheWithBudget(1, maxThumbCacheBytes),
 		appIcons:        newBitmapCacheWithBudget(2, maxAppIconCacheBytes),
 	}
 	a.syncPlainPasteShortcut()
@@ -147,6 +152,9 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 func Run(iconPNG []byte) {
 	if os.Getenv("GOGC") == "" {
 		debug.SetGCPercent(50)
+	}
+	if os.Getenv("GOMEMLIMIT") == "" {
+		debug.SetMemoryLimit(96 << 20)
 	}
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
@@ -181,6 +189,40 @@ func (a *clipApp) applyAutoHide(autoHide bool) {
 		a.panel.SetAlwaysOnTop(a.winPinned || a.panelNoActivate)
 	}
 	a.syncOutsideClickWatch()
+}
+
+func (a *clipApp) stopHeapReleaseTimer() {
+	if a.heapReleaseTimer != nil {
+		a.heapReleaseTimer.Stop()
+		a.heapReleaseTimer = nil
+	}
+}
+
+func (a *clipApp) scheduleHeapRelease() {
+	a.stopHeapReleaseTimer()
+	if a.panel == nil || a.quitting {
+		return
+	}
+	a.heapReleaseTimer = time.AfterFunc(heapReleaseDelay, func() {
+		if a.panel != nil {
+			a.panel.Update(a.releaseHiddenHeap)
+		}
+	})
+}
+
+// releaseHiddenHeap returns idle Go heap spans to the OS after the panel stays
+// hidden briefly, without clearing warm bitmaps so D3D11 textures stay reusable.
+func (a *clipApp) releaseHiddenHeap() {
+	a.stopHeapReleaseTimer()
+	if a.quitting || (a.panel != nil && a.panel.IsVisible()) {
+		return
+	}
+	if a.memTrimming.CompareAndSwap(false, true) {
+		go func() {
+			defer a.memTrimming.Store(false)
+			debug.FreeOSMemory()
+		}()
+	}
 }
 
 func (a *clipApp) stopIdleUnloadTimer() {

@@ -896,15 +896,18 @@ const (
 	maxThumbCacheCount    = 24
 	maxThumbCacheBytes    = 8 << 20
 	maxAppIconCacheBytes  = 2 << 20
-	minThumbPreloadMargin = 3
-	maxThumbPreloadMargin = 6
+	thumbMaxWidth         = 680
+	thumbMaxHeight        = 200
+	minThumbPreloadMargin = 2
+	maxThumbPreloadMargin = 3
 )
 
 func loadThumbFile(path string) (*ui.Bitmap, error) {
-	return decodeThumbBitmapFile(path, 720, 200)
+	return loadOrCreateThumbBitmap(path, store.ThumbPath(path), thumbMaxWidth, thumbMaxHeight)
 }
 
 func (a *clipApp) getOrLoadThumb(path string) *ui.Bitmap {
+	a.thumbs.markActive(path)
 	return a.thumbs.getBitmap(a.panel, path, maxThumbCacheCount, func() (*ui.Bitmap, error) {
 		return loadThumbFile(path)
 	})
@@ -917,8 +920,8 @@ func (a *clipApp) preloadThumb(path string) {
 }
 
 // syncThumbWindow preloads thumbnails within [firstVisible - margin, lastVisible + margin],
-// evicts hidden sensitive entries immediately, and caps total retained thumbnails by LRU
-// so scrolling down does not discard recently viewed top thumbnails.
+// evicts hidden sensitive entries immediately, cancels queued decodes outside the window,
+// and caps total retained thumbnails by LRU and byte budget.
 func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisible int) {
 	if a.thumbs == nil || len(items) == 0 || firstVisible > lastVisible || lastVisible < 0 || firstVisible >= len(items) {
 		return
@@ -930,6 +933,7 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 	windowStart := max(0, firstVisible-margin)
 	windowEnd := min(len(items)-1, lastVisible+margin)
 
+	activeKeys := make(map[string]struct{}, windowEnd-windowStart+1)
 	var preloadPaths []string
 	for i := windowStart; i <= windowEnd; i++ {
 		item := items[i]
@@ -940,6 +944,7 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 			a.thumbs.evict(item.ImagePath)
 			continue
 		}
+		activeKeys[item.ImagePath] = struct{}{}
 		if i >= firstVisible && i <= lastVisible {
 			if _, ok := a.thumbs.items[item.ImagePath]; ok {
 				a.thumbs.touch(item.ImagePath)
@@ -948,6 +953,7 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 			preloadPaths = append(preloadPaths, item.ImagePath)
 		}
 	}
+	a.thumbs.setActiveKeys(activeKeys)
 	if a.thumbs.len() > maxThumbCacheCount {
 		a.thumbs.pruneTo(maxThumbCacheCount)
 	}

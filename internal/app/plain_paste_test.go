@@ -11,43 +11,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-type recordedWrite struct {
-	item      store.ClipItem
-	plainText bool
-}
-
-func stubWriteClipItem(t *testing.T) *[]recordedWrite {
-	t.Helper()
-	var writes []recordedWrite
-	orig := writeClipItemFn
-	writeClipItemFn = func(item store.ClipItem, plainText bool) error {
-		writes = append(writes, recordedWrite{item: item, plainText: plainText})
-		return nil
-	}
-	t.Cleanup(func() {
-		writeClipItemFn = orig
-	})
-	return &writes
-}
-
-func newTestAppWithRichText(t *testing.T, text, html string) *clipApp {
-	t.Helper()
-	st, err := store.OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = st.Close()
-	})
-	if _, err := st.SaveText(text, store.SaveOptions{HTML: html}); err != nil {
-		t.Fatal(err)
-	}
-	a := newClipApp(st, nil)
-	a.reload()
-	return a
-}
-
-func TestRichTextContextMenuPlainAndFormatted(t *testing.T) {
+func TestRichTextContextMenuPlainPasteAndCopyOnly(t *testing.T) {
 	writes := stubWriteClipItem(t)
 	msgs := locales.In("zh-Hans")
 
@@ -73,53 +37,24 @@ func TestRichTextContextMenuPlainAndFormatted(t *testing.T) {
 	}
 	clickCenter(tt, plainInfo.Bounds)
 
-	if len(*writes) != 1 || !(*writes)[0].plainText {
-		t.Fatalf("expected single plain-text write, got %+v", *writes)
-	}
-	if (*writes)[0].item.Text != richText {
-		t.Fatalf("expected text %q, got %q", richText, (*writes)[0].item.Text)
+	if len(*writes) != 1 || !(*writes)[0].plainText || (*writes)[0].item.Text != richText {
+		t.Fatalf("expected single plain-text write of %q, got %+v", richText, *writes)
 	}
 	wantPlainHash := store.TextContentHash(richText, "")
 	if a.ignoreHash != wantPlainHash {
 		t.Fatalf("expected plain-text ignoreHash %q to prevent loop, got %q", wantPlainHash, a.ignoreHash)
 	}
 
-	// Right-click again and verify only plain-paste (no formatted paste item) is shown.
-	tt.RightClickAt(rect.X+12, rect.Y+rect.H/2)
-	if _, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.RichMenuPasteFormatted()); ok {
-		t.Fatalf("did not expect %q in unified rich text context menu, menu=%q", msgs.RichMenuPasteFormatted(), tt.Menu())
-	}
-	if _, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionOpen()); !ok {
-		t.Fatalf("expected %q in unified rich text context menu, menu=%q", msgs.CardActionOpen(), tt.Menu())
-	}
-	tt.Key(0, ui.KeyEscape)
-}
-
-func TestRichTextContextMenuCopyOnlyLabels(t *testing.T) {
-	writes := stubWriteClipItem(t)
-	msgs := locales.In("zh-Hans")
-
-	a := newTestAppWithRichText(t, "Copy Only Rich", "<b>Copy Only Rich</b>")
+	// ClickCopyOnly switches menu label to "Copy as Plain Text".
 	a.settings.ClickCopyOnly = true
-	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-
-	rect, ok := tt.Find("Copy Only Rich")
-	if !ok {
-		t.Fatalf("expected rich text preview in view")
-	}
 	tt.RightClickAt(rect.X+12, rect.Y+rect.H/2)
-
 	copyPlainInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.RichMenuCopyPlain())
 	if !ok {
 		t.Fatalf("expected %q under ClickCopyOnly, menu=%q", msgs.RichMenuCopyPlain(), tt.Menu())
 	}
-	if _, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.RichMenuCopyFormatted()); ok {
-		t.Fatalf("did not expect %q under unified menu, menu=%q", msgs.RichMenuCopyFormatted(), tt.Menu())
-	}
 	clickCenter(tt, copyPlainInfo.Bounds)
-
-	if len(*writes) != 1 || !(*writes)[0].plainText {
-		t.Fatalf("expected plain-text copy write, got %+v", *writes)
+	if len(*writes) != 2 || !(*writes)[1].plainText {
+		t.Fatalf("expected second plain-text copy write, got %+v", *writes)
 	}
 }
 

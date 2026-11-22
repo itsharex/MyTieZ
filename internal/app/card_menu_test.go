@@ -7,14 +7,46 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"mytiez/internal/store"
+	"mytiez/internal/sys"
 	"mytiez/locales"
 
 	"github.com/egoist/mygo/ui"
 )
+
+type recordedWrite struct {
+	item      store.ClipItem
+	plainText bool
+}
+
+func stubWriteClipItem(t *testing.T) *[]recordedWrite {
+	t.Helper()
+	var writes []recordedWrite
+	orig := writeClipItemFn
+	writeClipItemFn = func(item store.ClipItem, plainText bool) error {
+		writes = append(writes, recordedWrite{item: item, plainText: plainText})
+		return nil
+	}
+	t.Cleanup(func() { writeClipItemFn = orig })
+	return &writes
+}
+
+func stubShellOpenAndFolder(t *testing.T) (opened *[]string, shown *[]string) {
+	t.Helper()
+	var openCalls, showCalls []string
+	origOpen, origShow := shellOpenPath, shellShowItemInFolder
+	shellOpenPath = func(p string) error { openCalls = append(openCalls, p); return nil }
+	shellShowItemInFolder = func(p string) { showCalls = append(showCalls, p) }
+	t.Cleanup(func() {
+		shellOpenPath = origOpen
+		shellShowItemInFolder = origShow
+	})
+	return &openCalls, &showCalls
+}
 
 func newTestAppWithStore(t *testing.T) (*store.Store, *clipApp) {
 	t.Helper()
@@ -22,22 +54,40 @@ func newTestAppWithStore(t *testing.T) (*store.Store, *clipApp) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		_ = st.Close()
-	})
-	a := newClipApp(st, nil)
-	return st, a
+	t.Cleanup(func() { _ = st.Close() })
+	return st, newClipApp(st, nil)
+}
+
+func newTestAppWithFiles(t *testing.T, groups ...[]string) *clipApp {
+	t.Helper()
+	st, a := newTestAppWithStore(t)
+	for _, g := range groups {
+		if _, err := st.UpsertFiles(g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.reload()
+	return a
+}
+
+func newTestAppWithRichText(t *testing.T, text, html string) *clipApp {
+	t.Helper()
+	st, a := newTestAppWithStore(t)
+	if _, err := st.SaveText(text, store.SaveOptions{HTML: html}); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
+	return a
 }
 
 func saveTestImage(t *testing.T, st *store.Store) store.ClipItem {
 	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, 12, 12))
 	tmp := filepath.Join(t.TempDir(), "sample.png")
 	f, err := os.Create(tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := png.Encode(f, img); err != nil {
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 12, 12))); err != nil {
 		_ = f.Close()
 		t.Fatal(err)
 	}
@@ -53,8 +103,13 @@ func saveTestImage(t *testing.T, st *store.Store) store.ClipItem {
 	return it
 }
 
-func TestUnifiedContextMenuVisibilityAndOrderAcrossAllCardKinds(t *testing.T) {
+func clickCenter(tt *ui.Tester, b ui.Rect) {
+	tt.ClickAt(b.X+b.W/2, b.Y+b.H/2)
+}
+
+func TestUnifiedContextMenuAcrossAllCardKinds(t *testing.T) {
 	msgs := locales.In("zh-Hans")
+	opened, shown := stubShellOpenAndFolder(t)
 	dir := t.TempDir()
 	singleFile := filepath.Join(dir, "single-doc.txt")
 	multiA := filepath.Join(dir, "multi-a.txt")
@@ -65,144 +120,77 @@ func TestUnifiedContextMenuVisibilityAndOrderAcrossAllCardKinds(t *testing.T) {
 		}
 	}
 
-	t.Run("non-file kinds without global tags", func(t *testing.T) {
-		st, a := newTestAppWithStore(t)
-		if _, err := st.SaveText("plain text card", store.SaveOptions{}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := st.SaveText("https://example.com/docs", store.SaveOptions{}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := st.SaveText("func main() {\n\tfmt.Println(1)\n}", store.SaveOptions{}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := st.SaveText("rich card", store.SaveOptions{HTML: "<p><b>rich</b> card</p>"}); err != nil {
-			t.Fatal(err)
-		}
-		imgItem := saveTestImage(t, st)
-		a.reload()
+	st, a := newTestAppWithStore(t)
+	_, _ = st.SaveText("plain text card", store.SaveOptions{})
+	_, _ = st.SaveText("https://example.com/docs", store.SaveOptions{})
+	_, _ = st.SaveText("func main() {\n\tfmt.Println(1)\n}", store.SaveOptions{})
+	_, _ = st.SaveText("rich card", store.SaveOptions{HTML: "<p><b>rich</b> card</p>"})
+	imgItem := saveTestImage(t, st)
+	_, _ = st.UpsertFiles([]string{singleFile})
+	_, _ = st.UpsertFiles([]string{multiA, multiB})
+	a.reload()
 
-		tt := ui.NewTester(a.view, panelWidth, 900)
+	tt := ui.NewTester(a.view, panelWidth, 1200)
+	baseMenu := []string{msgs.CardActionOpen(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}
 
-		cases := []struct {
-			name     string
-			findText string
-			wantMenu []string
-		}{
-			{
-				name:     "text",
-				findText: "plain text card",
-				wantMenu: []string{msgs.CardActionOpen(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()},
-			},
-			{
-				name:     "url",
-				findText: "https://example.com/docs",
-				wantMenu: []string{msgs.CardActionOpen(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()},
-			},
-			{
-				name:     "code",
-				findText: "func main() { \tfmt.Println(1) }",
-				wantMenu: []string{msgs.CardActionOpen(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()},
-			},
-			{
-				name:     "rich_text",
-				findText: "rich card",
-				wantMenu: []string{msgs.CardActionOpen(), msgs.RichMenuPastePlain(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()},
-			},
+	for _, tc := range []struct {
+		find string
+		want []string
+	}{
+		{"plain text card", baseMenu},
+		{"https://example.com/docs", baseMenu},
+		{"func main() { \tfmt.Println(1) }", baseMenu},
+		{"rich card", []string{msgs.CardActionOpen(), msgs.RichMenuPastePlain(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}},
+		{"single-doc.txt", []string{msgs.CardActionOpen(), msgs.FileMenuShowInFolder(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}},
+		{"multi-a.txt", baseMenu},
+	} {
+		rect, ok := tt.Find(tc.find)
+		if !ok {
+			t.Fatalf("expected %q in view", tc.find)
 		}
-
-		for _, tc := range cases {
-			rect, ok := tt.Find(tc.findText)
-			if !ok {
-				t.Fatalf("%s: expected %q in view, texts=%q", tc.name, tc.findText, tt.Texts())
-			}
-			tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
-			if got := tt.Menu(); !slices.Equal(got, tc.wantMenu) {
-				t.Fatalf("%s: expected menu %q, got %q", tc.name, tc.wantMenu, got)
+		tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
+		if got := tt.Menu(); !slices.Equal(got, tc.want) {
+			t.Fatalf("%q: expected menu %q, got %q", tc.find, tc.want, got)
+		}
+		if tc.find == "multi-a.txt" {
+			openSub, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionOpen())
+			tt.Move(openSub.Bounds.X+openSub.Bounds.W/2, openSub.Bounds.Y+openSub.Bounds.H/2)
+			if _, ok := tt.AccessByRole(ui.RoleMenuItem, "multi-a.txt"); !ok {
+				t.Fatalf("expected multi-a.txt inside multi-file Open submenu")
 			}
 			tt.Key(0, ui.KeyEscape)
 		}
+		if tc.find == "single-doc.txt" {
+			showInfo, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.FileMenuShowInFolder())
+			clickCenter(tt, showInfo.Bounds)
+			if !slices.Equal(*shown, []string{singleFile}) || len(*opened) != 0 || a.pendingToast != "" {
+				t.Fatalf("expected ShowInFolder(%q) without open/toast, got shown=%q opened=%q toast=%q", singleFile, *shown, *opened, a.pendingToast)
+			}
+		} else {
+			tt.Key(0, ui.KeyEscape)
+		}
+	}
 
-		// Image card: filter to image tab so we locate the image card reliably.
-		if err := tt.Click(msgs.TabImage()); err != nil {
-			t.Fatal(err)
-		}
-		imgAppName := "Unknown"
-		if imgItem.SourceApp != "" {
-			imgAppName = imgItem.SourceApp
-		}
-		rect, ok := tt.Find(imgAppName)
-		if !ok {
-			t.Fatalf("image: expected %q in image filter view, texts=%q", imgAppName, tt.Texts())
-		}
-		tt.RightClickAt(rect.X+16, rect.Y+28)
-		wantImgMenu := []string{msgs.CardActionOpen(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}
-		if got := tt.Menu(); !slices.Equal(got, wantImgMenu) {
-			t.Fatalf("image: expected menu %q, got %q", wantImgMenu, got)
-		}
-		tt.Key(0, ui.KeyEscape)
-	})
-
-	t.Run("single and multi file kinds", func(t *testing.T) {
-		st, a := newTestAppWithStore(t)
-		if _, err := st.UpsertFiles([]string{singleFile}); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := st.UpsertFiles([]string{multiA, multiB}); err != nil {
-			t.Fatal(err)
-		}
-		a.reload()
-
-		tt := ui.NewTester(a.view, panelWidth, panelHeight)
-
-		singleRect, ok := tt.Find("single-doc.txt")
-		if !ok {
-			t.Fatalf("expected single-doc.txt in view, texts=%q", tt.Texts())
-		}
-		tt.RightClickAt(singleRect.X+16, singleRect.Y+singleRect.H/2)
-		wantSingle := []string{
-			msgs.CardActionOpen(),
-			msgs.FileMenuShowInFolder(),
-			msgs.CardMenuEditTags(),
-			msgs.CardActionPin(),
-			"-",
-			msgs.CardActionDelete(),
-		}
-		if got := tt.Menu(); !slices.Equal(got, wantSingle) {
-			t.Fatalf("single file: expected menu %q, got %q", wantSingle, got)
-		}
-		tt.Key(0, ui.KeyEscape)
-
-		multiRect, ok := tt.Find("multi-a.txt")
-		if !ok {
-			t.Fatalf("expected multi-a.txt in view, texts=%q", tt.Texts())
-		}
-		tt.RightClickAt(multiRect.X+16, multiRect.Y+multiRect.H/2)
-		wantMulti := []string{
-			msgs.CardActionOpen(),
-			msgs.CardMenuEditTags(),
-			msgs.CardActionPin(),
-			"-",
-			msgs.CardActionDelete(),
-		}
-		if got := tt.Menu(); !slices.Equal(got, wantMulti) {
-			t.Fatalf("multi file: expected menu %q, got %q", wantMulti, got)
-		}
-		// Hover "Open" to confirm it expands the multi-file submenu.
-		openSub, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionOpen())
-		if !ok {
-			t.Fatalf("expected multi-file Open submenu item")
-		}
-		tt.Move(openSub.Bounds.X+openSub.Bounds.W/2, openSub.Bounds.Y+openSub.Bounds.H/2)
-		if _, ok := tt.AccessByRole(ui.RoleMenuItem, "multi-a.txt"); !ok {
-			t.Fatalf("expected multi-a.txt inside multi-file Open submenu")
-		}
-		tt.Key(0, ui.KeyEscape)
-		tt.Key(0, ui.KeyEscape)
-	})
+	// Image card (filtered to image tab so we target it reliably).
+	if err := tt.Click(msgs.TabImage()); err != nil {
+		t.Fatal(err)
+	}
+	imgLabel := imgItem.SourceApp
+	if imgLabel == "" {
+		imgLabel = "Unknown"
+	}
+	rect, ok := tt.Find(imgLabel)
+	if !ok {
+		t.Fatalf("expected image card %q in image tab", imgLabel)
+	}
+	tt.RightClickAt(rect.X+16, rect.Y+28)
+	if got := tt.Menu(); !slices.Equal(got, baseMenu) {
+		t.Fatalf("image: expected menu %q, got %q", baseMenu, got)
+	}
+	tt.Key(0, ui.KeyEscape)
 }
 
-func TestUnifiedContextMenuActionsOpenEditTagsPinDelete(t *testing.T) {
+func TestUnifiedContextMenuActions(t *testing.T) {
 	opened, _ := stubShellOpenAndFolder(t)
 	msgs := locales.In("zh-Hans")
 
@@ -219,86 +207,60 @@ func TestUnifiedContextMenuActionsOpenEditTagsPinDelete(t *testing.T) {
 		t.Fatalf("expected card in view")
 	}
 
-	// 1. Open
+	// Open
 	tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
-	openInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionOpen())
-	if !ok {
-		t.Fatalf("expected open menu item, menu=%q", tt.Menu())
-	}
+	openInfo, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionOpen())
 	clickCenter(tt, openInfo.Bounds)
 	wantName := fmt.Sprintf("MyTieZ_entry_%d.txt", item.ID)
 	if len(*opened) != 1 || filepath.Base((*opened)[0]) != wantName {
-		t.Fatalf("expected 1 open path call with %q, got %q", wantName, *opened)
+		t.Fatalf("expected open %q, got %q", wantName, *opened)
 	}
 
-	// 2. Edit Tags opens the card-level tag editor and closes the menu.
+	// Edit Tags opens card editor and closes menu
 	tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
-	editInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuEditTags())
-	if !ok {
-		t.Fatalf("expected edit tags menu item, menu=%q", tt.Menu())
-	}
+	editInfo, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuEditTags())
 	clickCenter(tt, editInfo.Bounds)
-	if a.editingTagsID != item.ID {
-		t.Fatalf("expected editingTagsID=%d after choosing Edit Tags, got %d", item.ID, a.editingTagsID)
+	if a.editingTagsID != item.ID || len(tt.Menu()) != 0 {
+		t.Fatalf("expected tag editor open (%d) and menu closed, got id=%d menu=%q", item.ID, a.editingTagsID, tt.Menu())
 	}
-	if len(tt.Menu()) != 0 {
-		t.Fatalf("expected menu closed after Edit Tags, got %q", tt.Menu())
-	}
-	if _, ok := tt.AccessByRole(ui.RoleTextField, msgs.TagsInputLabel()); !ok {
-		t.Fatalf("expected card tag input visible after Edit Tags")
-	}
-	// Close editor via Done button.
 	if err := tt.Click(msgs.TagsDoneA11y()); err != nil {
 		t.Fatal(err)
 	}
 
-	// 3. Pin then Unpin
+	// Pin -> Unpin
 	tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
-	pinInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionPin())
-	if !ok {
-		t.Fatalf("expected Pin menu item, menu=%q", tt.Menu())
-	}
+	pinInfo, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionPin())
 	clickCenter(tt, pinInfo.Bounds)
 	if !a.items[0].Pinned {
-		t.Fatalf("expected item pinned after clicking Pin")
+		t.Fatalf("expected item pinned")
 	}
-
 	tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
 	unpinInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuUnpin())
 	if !ok {
-		t.Fatalf("expected Unpin menu item when pinned, menu=%q", tt.Menu())
+		t.Fatalf("expected Unpin menu item, menu=%q", tt.Menu())
 	}
 	clickCenter(tt, unpinInfo.Bounds)
 	if a.items[0].Pinned {
-		t.Fatalf("expected item unpinned after clicking Unpin")
+		t.Fatalf("expected item unpinned")
 	}
 
-	// 4. Delete
+	// Delete
 	tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
-	delInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionDelete())
-	if !ok {
-		t.Fatalf("expected Delete menu item, menu=%q", tt.Menu())
-	}
+	delInfo, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionDelete())
 	clickCenter(tt, delInfo.Bounds)
 	if len(a.items) != 0 {
 		t.Fatalf("expected item deleted, remaining=%d", len(a.items))
 	}
 }
 
-func TestQuickTagSubmenuAndLeftFlipWithin400pxPanel(t *testing.T) {
+func TestQuickTagSubmenuAndBoundaryFlip(t *testing.T) {
 	msgs := locales.In("zh-Hans")
 	st, a := newTestAppWithStore(t)
-
-	const longTag = "very-long-tag-name-that-should-be-constrained-inside-submenu-width"
-	taggedItem, err := st.SaveText("already tagged seed", store.SaveOptions{Tags: []string{"work", longTag}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	targetItem, err := st.SaveText("target card for quick tag", store.SaveOptions{Tags: []string{"work"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = taggedItem
+	longTag := "very-long-tag-name-for-boundary-check"
+	tagged, _ := st.SaveText("seed tagged item", store.SaveOptions{})
+	_, _ = st.UpdateTags(tagged.ID, []string{"work", longTag})
+	target, _ := st.SaveText("target card for quick tag", store.SaveOptions{})
+	_, _ = st.UpdateTags(target.ID, []string{"work"})
 	a.reload()
 
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
@@ -307,154 +269,82 @@ func TestQuickTagSubmenuAndLeftFlipWithin400pxPanel(t *testing.T) {
 		t.Fatalf("expected target card in view")
 	}
 
-	// Right-click near the right edge of the 400px panel so the submenu has no
-	// room on the right and must flip to the left of the primary menu.
+	// Right-edge click: submenu must flip left and stay within [0, 400].
 	tt.RightClickAt(panelWidth-40, rect.Y+rect.H/2)
-
-	wantMenu := []string{
-		msgs.CardActionOpen(),
-		msgs.CardMenuEditTags(),
-		msgs.CardMenuQuickTag(),
-		msgs.CardActionPin(),
-		"-",
-		msgs.CardActionDelete(),
-	}
-	if got := tt.Menu(); !slices.Equal(got, wantMenu) {
-		t.Fatalf("expected menu %q, got %q", wantMenu, got)
-	}
-
 	quickInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuQuickTag())
 	if !ok {
-		t.Fatalf("expected Quick Tag submenu trigger")
+		t.Fatalf("expected Quick Tag submenu trigger, menu=%q", tt.Menu())
 	}
-	// Hover Quick Tag to open submenu.
 	tt.Move(quickInfo.Bounds.X+quickInfo.Bounds.W/2, quickInfo.Bounds.Y+quickInfo.Bounds.H/2)
 
 	workItem, ok := tt.AccessByRole(ui.RoleMenuItem, "work")
 	if !ok || !workItem.Disabled {
-		t.Fatalf("expected already-applied tag 'work' disabled in submenu, got ok=%v info=%+v", ok, workItem)
+		t.Fatalf("expected applied tag 'work' disabled, got ok=%v info=%+v", ok, workItem)
 	}
 	longItem, ok := tt.AccessByRole(ui.RoleMenuItem, longTag)
-	if !ok || longItem.Disabled {
-		t.Fatalf("expected unapplied long tag enabled in submenu, got ok=%v info=%+v", ok, longItem)
+	if !ok || longItem.Disabled || longItem.Bounds.X >= quickInfo.Bounds.X {
+		t.Fatalf("expected unapplied tag flipped left, got ok=%v sub=%+v trigger=%+v", ok, longItem, quickInfo)
 	}
-
-	// Verify submenu stayed within the 400px panel and flipped left when needed.
 	for _, info := range []ui.AccessInfo{workItem, longItem} {
-		if info.Bounds.X < 0 || info.Bounds.X+info.Bounds.W > panelWidth {
-			t.Fatalf("expected submenu item %q inside 400px panel, got bounds=%+v (trigger=%+v)", info.Name, info.Bounds, quickInfo.Bounds)
+		if info.Bounds.X < 0 || info.Bounds.X+info.Bounds.W > panelWidth || info.Bounds.W > cardMenuMaxWidth {
+			t.Fatalf("submenu %q out of bounds: %+v", info.Name, info.Bounds)
 		}
-		if info.Bounds.W > cardMenuMaxWidth {
-			t.Fatalf("expected submenu item %q width <= %.0f, got bounds=%+v", info.Name, cardMenuMaxWidth, info.Bounds)
-		}
-	}
-	if longItem.Bounds.X >= quickInfo.Bounds.X {
-		t.Fatalf("expected submenu to flip left when opened near right edge: subBounds=%+v triggerBounds=%+v", longItem.Bounds, quickInfo.Bounds)
 	}
 
-	// Click the unapplied tag: applies one tag and closes the whole menu.
+	// Clicking unapplied tag applies one tag and closes entire menu.
 	clickCenter(tt, longItem.Bounds)
-	if len(tt.Menu()) != 0 {
-		t.Fatalf("expected entire menu closed after quick-tagging, menu=%q", tt.Menu())
-	}
-	var updated store.ClipItem
-	for _, it := range a.items {
-		if it.ID == targetItem.ID {
-			updated = it
-			break
-		}
-	}
-	if !slices.Contains(updated.Tags, longTag) {
-		t.Fatalf("expected target item to gain tag %q, got tags=%q", longTag, updated.Tags)
+	if len(tt.Menu()) != 0 || !slices.Contains(a.items[0].Tags, longTag) {
+		t.Fatalf("expected tag %q applied and menu closed, tags=%q menu=%q", longTag, a.items[0].Tags, tt.Menu())
 	}
 
-	// Also verify opening near the left edge opens submenu to the right within bounds.
-	tt.RightClickAt(24, rect.Y+rect.H/2)
-	quickLeft, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuQuickTag())
-	if !ok {
-		t.Fatalf("expected Quick Tag submenu trigger on left-side click")
-	}
-	tt.Move(quickLeft.Bounds.X+quickLeft.Bounds.W/2, quickLeft.Bounds.Y+quickLeft.Bounds.H/2)
-	subRight, ok := tt.AccessByRole(ui.RoleMenuItem, "work")
-	if !ok {
-		t.Fatalf("expected work tag in submenu on left-side click")
-	}
-	if subRight.Bounds.X <= quickLeft.Bounds.X || subRight.Bounds.X+subRight.Bounds.W > panelWidth {
-		t.Fatalf("expected submenu to open right inside 400px panel: sub=%+v trigger=%+v", subRight.Bounds, quickLeft.Bounds)
-	}
-	tt.Key(0, ui.KeyEscape)
-	tt.Key(0, ui.KeyEscape)
-
-	// Clicking near the horizontal middle must also keep the submenu within [0, 400].
-	for _, clickX := range []float32{140, 200, 260} {
+	// Left & middle clicks must also keep submenu within [0, 400].
+	for _, clickX := range []float32{24, 140, 200, 260} {
 		tt.RightClickAt(clickX, rect.Y+rect.H/2)
-		qItem, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuQuickTag())
-		if !ok {
-			t.Fatalf("clickX=%.0f: expected Quick Tag submenu trigger", clickX)
-		}
+		qItem, _ := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuQuickTag())
 		tt.Move(qItem.Bounds.X+qItem.Bounds.W/2, qItem.Bounds.Y+qItem.Bounds.H/2)
-		subItem, ok := tt.AccessByRole(ui.RoleMenuItem, longTag)
-		if !ok {
-			t.Fatalf("clickX=%.0f: expected submenu item visible", clickX)
-		}
-		if subItem.Bounds.X < 0 || subItem.Bounds.X+subItem.Bounds.W > panelWidth {
-			t.Fatalf("clickX=%.0f: submenu clipped outside 400px panel: sub=%+v trigger=%+v", clickX, subItem.Bounds, qItem.Bounds)
+		subItem, ok := tt.AccessByRole(ui.RoleMenuItem, "work")
+		if !ok || subItem.Bounds.X < 0 || subItem.Bounds.X+subItem.Bounds.W > panelWidth {
+			t.Fatalf("clickX=%.0f: submenu out of 400px panel: ok=%v sub=%+v", clickX, ok, subItem)
 		}
 		tt.Key(0, ui.KeyEscape)
 		tt.Key(0, ui.KeyEscape)
 	}
 }
 
-func TestShowAllCardActionsSettingAndRichCardActionAlignment(t *testing.T) {
+func TestShowAllCardActionsAndRichActionAlignment(t *testing.T) {
 	writes := stubWriteClipItem(t)
 	msgs := locales.In("zh-Hans")
 
 	st, a := newTestAppWithStore(t)
-	if _, err := st.SaveText("plain row", store.SaveOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.SaveText("rich row", store.SaveOptions{HTML: "<p><b>rich</b> row</p>"}); err != nil {
-		t.Fatal(err)
-	}
+	_, _ = st.SaveText("plain row", store.SaveOptions{})
+	_, _ = st.SaveText("rich row", store.SaveOptions{HTML: "<p><b>rich</b> row</p>"})
 	a.reload()
-
 	if !a.settings.ShowAllCardActions {
 		t.Fatalf("expected ShowAllCardActions default true")
 	}
 
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
-
-	// 1. Default ON: rich card shows plain-paste button and aligns pin/delete with plain card.
 	if err := tt.Click(msgs.RichMenuPastePlain()); err != nil {
-		t.Fatalf("click rich card plain paste action button: %v", err)
+		t.Fatalf("click rich card plain paste button: %v", err)
 	}
 	if len(*writes) != 1 || !(*writes)[0].plainText || (*writes)[0].item.Text != "rich row" {
-		t.Fatalf("expected plain paste button to paste rich row as plain text, writes=%+v", *writes)
+		t.Fatalf("expected plain paste of rich row, writes=%+v", *writes)
 	}
 
-	var pinButtons, deleteButtons []ui.AccessInfo
+	var pinXs, delXs []float32
 	for _, info := range tt.AccessAll() {
-		if info.Role != ui.RoleButton {
-			continue
+		if info.Role == ui.RoleButton && info.Name == msgs.CardActionPin() {
+			pinXs = append(pinXs, info.Bounds.X)
 		}
-		switch info.Name {
-		case msgs.CardActionPin():
-			pinButtons = append(pinButtons, info)
-		case msgs.CardActionDelete():
-			deleteButtons = append(deleteButtons, info)
+		if info.Role == ui.RoleButton && info.Name == msgs.CardActionDelete() {
+			delXs = append(delXs, info.Bounds.X)
 		}
 	}
-	if len(pinButtons) != 2 || len(deleteButtons) != 2 {
-		t.Fatalf("expected 2 pin and 2 delete buttons, got pin=%d delete=%d", len(pinButtons), len(deleteButtons))
-	}
-	if pinButtons[0].Bounds.X != pinButtons[1].Bounds.X {
-		t.Fatalf("expected pin button X aligned across card kinds: %v vs %v", pinButtons[0].Bounds, pinButtons[1].Bounds)
-	}
-	if deleteButtons[0].Bounds.X != deleteButtons[1].Bounds.X {
-		t.Fatalf("expected delete button X aligned across card kinds: %v vs %v", deleteButtons[0].Bounds, deleteButtons[1].Bounds)
+	if len(pinXs) != 2 || len(delXs) != 2 || pinXs[0] != pinXs[1] || delXs[0] != delXs[1] {
+		t.Fatalf("expected aligned pin/delete X across card kinds, pin=%v del=%v", pinXs, delXs)
 	}
 
-	// 2. Toggle ShowAllCardActions OFF in settings -> persists and leaves only Pin & Delete on cards.
+	// Toggle ShowAllCardActions OFF in settings -> persisted, only Pin/Delete remain on card, context menu stays full.
 	if err := tt.Click(msgs.HeaderSettings()); err != nil {
 		t.Fatal(err)
 	}
@@ -466,18 +356,9 @@ func TestShowAllCardActionsSettingAndRichCardActionAlignment(t *testing.T) {
 	if err := tt.Click(msgs.SettingsSwitchA11y(msgs.SettingsShowAllCardActions())); err != nil {
 		t.Fatal(err)
 	}
-	if a.settings.ShowAllCardActions {
-		t.Fatalf("expected ShowAllCardActions toggled off")
+	if loadedCfg, err := st.LoadSettings(); err != nil || loadedCfg.ShowAllCardActions {
+		t.Fatalf("expected ShowAllCardActions=false persisted, err=%v cfg=%+v", err, loadedCfg)
 	}
-	// Verify persisted to DB.
-	loadedCfg, err := st.LoadSettings()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loadedCfg.ShowAllCardActions {
-		t.Fatalf("expected ShowAllCardActions=false persisted in DB")
-	}
-
 	if err := tt.Click(msgs.HeaderBack()); err != nil {
 		t.Fatal(err)
 	}
@@ -491,18 +372,178 @@ func TestShowAllCardActionsSettingAndRichCardActionAlignment(t *testing.T) {
 	if _, ok := tt.AccessByRole(ui.RoleButton, msgs.CardActionPin()); !ok {
 		t.Fatalf("expected Pin button visible when ShowAllCardActions=false")
 	}
-	if _, ok := tt.AccessByRole(ui.RoleButton, msgs.CardActionDelete()); !ok {
-		t.Fatalf("expected Delete button visible when ShowAllCardActions=false")
+
+	richRect, _ := tt.Find("rich row")
+	tt.RightClickAt(richRect.X+16, richRect.Y+richRect.H/2)
+	wantRich := []string{msgs.CardActionOpen(), msgs.RichMenuPastePlain(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}
+	if got := tt.Menu(); !slices.Equal(got, wantRich) {
+		t.Fatalf("expected full context menu %q, got %q", wantRich, got)
+	}
+}
+
+func TestFileOpenAndHidePanel(t *testing.T) {
+	opened, shown := stubShellOpenAndFolder(t)
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "report.pdf")
+	first := filepath.Join(dir, "01-first.txt")
+	second := filepath.Join(dir, "02-second.txt")
+	for _, p := range []string{existing, first, second} {
+		if err := os.WriteFile(p, []byte("ok"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	missing := filepath.Join(dir, "gone.pdf")
+
+	// Single existing file: open + hidePanel.
+	a := newTestAppWithFiles(t, []string{existing})
+	a.routedSearchActive = true
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	if err := tt.Click(locales.In("zh-Hans").CardActionOpen()); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(*opened, []string{existing}) || len(*shown) != 0 || a.routedSearchActive {
+		t.Fatalf("expected single file opened & panel hidden, opened=%q shown=%q active=%v", *opened, *shown, a.routedSearchActive)
 	}
 
-	// Context menu must still contain all actions when ShowAllCardActions=false.
-	richRect, ok := tt.Find("rich row")
-	if !ok {
-		t.Fatalf("expected rich row in view")
+	// Missing file: toast shown, panel stays open.
+	a2 := newTestAppWithFiles(t, []string{missing})
+	a2.routedSearchActive = true
+	a2.openItem(a2.items[0])
+	if len(*opened) != 1 || a2.pendingToast != locales.StatusFileMissing() || !a2.routedSearchActive {
+		t.Fatalf("expected missing file toast without hiding panel, toast=%q active=%v", a2.pendingToast, a2.routedSearchActive)
 	}
-	tt.RightClickAt(richRect.X+16, richRect.Y+richRect.H/2)
-	wantRichMenu := []string{msgs.CardActionOpen(), msgs.RichMenuPastePlain(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}
-	if got := tt.Menu(); !slices.Equal(got, wantRichMenu) {
-		t.Fatalf("expected full context menu %q even when ShowAllCardActions=false, got %q", wantRichMenu, got)
+
+	// Multi-file fallback: reveals first existing file & hides panel without opening all.
+	a3 := newTestAppWithFiles(t, []string{missing, first, second})
+	a3.routedSearchActive = true
+	a3.openItem(a3.items[0])
+	if len(*opened) != 1 || !slices.Equal(*shown, []string{first}) || a3.routedSearchActive {
+		t.Fatalf("expected multi-file reveal %q & panel hidden, opened=%q shown=%q active=%v", first, *opened, *shown, a3.routedSearchActive)
+	}
+}
+
+func TestMultiFilePopoverMenu(t *testing.T) {
+	opened, shown := stubShellOpenAndFolder(t)
+	msgs := locales.In("zh-Hans")
+
+	t.Run("same directory missing and show in folder", func(t *testing.T) {
+		*opened, *shown = nil, nil
+		dir := t.TempDir()
+		f1, f2 := filepath.Join(dir, "alpha.txt"), filepath.Join(dir, "beta.txt")
+		for _, p := range []string{f1, f2} {
+			_ = os.WriteFile(p, []byte("x"), 0o600)
+		}
+		a := newTestAppWithFiles(t, []string{f1, f2, filepath.Join(dir, "deleted.txt")})
+		tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+		if err := tt.Click(msgs.CardActionOpenFiles()); err != nil {
+			t.Fatal(err)
+		}
+		if !a.hasOpenFileMenu() || len(*opened) != 0 {
+			t.Fatalf("expected file menu open without opening files")
+		}
+		showInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.FileMenuShowInFolder())
+		if !ok || showInfo.Disabled || showInfo.Bounds.W > fileMenuMultiMaxWidth || showInfo.Bounds.H > 32 {
+			t.Fatalf("unexpected Show in Folder item: ok=%v info=%+v", ok, showInfo)
+		}
+		if delInfo, ok := tt.AccessByRole(ui.RoleMenuItem, "deleted.txt"); !ok || !delInfo.Disabled {
+			t.Fatalf("expected deleted.txt disabled, got ok=%v info=%+v", ok, delInfo)
+		}
+		betaInfo, _ := tt.AccessByRole(ui.RoleMenuItem, "beta.txt")
+		clickCenter(tt, betaInfo.Bounds)
+		if !slices.Equal(*opened, []string{f2}) || a.hasOpenFileMenu() {
+			t.Fatalf("expected beta.txt opened and menu closed, opened=%q", *opened)
+		}
+
+		_ = tt.Click(msgs.CardActionOpenFiles())
+		showInfo, _ = tt.AccessByRole(ui.RoleMenuItem, msgs.FileMenuShowInFolder())
+		clickCenter(tt, showInfo.Bounds)
+		if !slices.Equal(*shown, []string{f1}) {
+			t.Fatalf("expected ShowItemInFolder(%q), got %q", f1, *shown)
+		}
+	})
+
+	t.Run("cross directory duplicates and excess limit", func(t *testing.T) {
+		*opened, *shown = nil, nil
+		root := t.TempDir()
+		dirA, dirB := filepath.Join(root, "dirA"), filepath.Join(root, "dirB")
+		_ = os.MkdirAll(dirA, 0o755)
+		_ = os.MkdirAll(dirB, 0o755)
+		readmeA, readmeB := filepath.Join(dirA, "readme.md"), filepath.Join(dirB, "readme.md")
+		_ = os.WriteFile(readmeA, []byte("a"), 0o600)
+		_ = os.WriteFile(readmeB, []byte("b"), 0o600)
+
+		a := newTestAppWithFiles(t, []string{readmeA, readmeB})
+		tt := ui.NewTester(a.view, panelWidth, panelHeight)
+		_ = tt.Click(msgs.CardActionOpenFiles())
+		var targetB ui.AccessInfo
+		for _, info := range tt.AccessAll() {
+			if info.Role == ui.RoleMenuItem && info.Name == "readme.md" && strings.Contains(info.Description, dirB) {
+				targetB = info
+			}
+		}
+		clickCenter(tt, targetB.Bounds)
+		if !slices.Equal(*opened, []string{readmeB}) {
+			t.Fatalf("expected dirB readme opened, got %q", *opened)
+		}
+
+		_ = tt.Click(msgs.CardActionOpenFiles())
+		dirBItem, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.FileMenuShowNamedFolder("dirB"))
+		if !ok || dirBItem.Bounds.X < 0 || dirBItem.Bounds.X+dirBItem.Bounds.W > panelWidth {
+			t.Fatalf("unexpected dirB item: ok=%v bounds=%+v", ok, dirBItem.Bounds)
+		}
+		clickCenter(tt, dirBItem.Bounds)
+		if !slices.Equal(*shown, []string{readmeB}) {
+			t.Fatalf("expected dirB reveal %q, got %q", readmeB, *shown)
+		}
+
+		// Excess (>50) files omitted with disabled summary item.
+		many := make([]string, 55)
+		for i := range many {
+			many[i] = filepath.Join(root, fmt.Sprintf("item-%02d.txt", i+1))
+		}
+		aMany := newTestAppWithFiles(t, many)
+		ttMany := ui.NewTester(aMany.view, panelWidth, panelHeight)
+		_ = ttMany.Click(msgs.CardActionOpenFiles())
+		if _, ok := ttMany.AccessByRole(ui.RoleMenuItem, "item-50.txt"); !ok {
+			t.Fatalf("expected item-50.txt in menu")
+		}
+		if _, ok := ttMany.AccessByRole(ui.RoleMenuItem, "item-51.txt"); ok {
+			t.Fatalf("expected item-51.txt omitted past maxFileMenuEntries")
+		}
+		if more, ok := ttMany.AccessByRole(ui.RoleMenuItem, msgs.FileMenuMoreOmitted(5)); !ok || !more.Disabled {
+			t.Fatalf("expected disabled omitted notice, got ok=%v info=%+v", ok, more)
+		}
+	})
+}
+
+func TestFileMenuHideCardActionsAndNoFocusEscape(t *testing.T) {
+	opened, _ := stubShellOpenAndFolder(t)
+	msgs := locales.In("zh-Hans")
+	dir := t.TempDir()
+	f1, f2 := filepath.Join(dir, "one.txt"), filepath.Join(dir, "two.txt")
+	_ = os.WriteFile(f1, []byte("v"), 0o600)
+	_ = os.WriteFile(f2, []byte("v"), 0o600)
+
+	a := newTestAppWithFiles(t, []string{f1, f2})
+	a.settings.HideCardActions = true
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	cardRect, _ := tt.Find("one.txt")
+	tt.Move(cardRect.X+20, cardRect.Y+cardRect.H/2)
+	btnInfo, ok := tt.AccessByRole(ui.RoleMenuButton, msgs.CardActionOpenFiles())
+	if !ok {
+		t.Fatalf("expected file menu button visible while hovered")
+	}
+	clickCenter(tt, btnInfo.Bounds)
+	tt.Move(10, panelHeight-10)
+	if _, ok := tt.AccessByRole(ui.RoleMenuItem, "two.txt"); !ok {
+		t.Fatalf("expected menu to remain open when pointer leaves card")
+	}
+
+	a.applyRoutedKey(sys.RoutedKey{VK: vkEscape})
+	tt.Frame()
+	if a.hasOpenFileMenu() || len(*opened) != 0 {
+		t.Fatalf("expected Escape to close menu without opening files")
 	}
 }

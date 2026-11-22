@@ -45,6 +45,7 @@ type bitmapCache struct {
 	items      map[string]*ui.Bitmap
 	order      []string
 	failed     map[string]bool
+	loadingMu  sync.Mutex
 	loading    map[string]bool
 	sem        chan struct{}
 	maxBytes   int64
@@ -166,6 +167,22 @@ func (bc *bitmapCache) put(key string, bmp *ui.Bitmap) {
 	bc.touch(key)
 }
 
+func (bc *bitmapCache) startLoading(key string) bool {
+	bc.loadingMu.Lock()
+	defer bc.loadingMu.Unlock()
+	if bc.loading[key] {
+		return false
+	}
+	bc.loading[key] = true
+	return true
+}
+
+func (bc *bitmapCache) finishLoading(key string) {
+	bc.loadingMu.Lock()
+	delete(bc.loading, key)
+	bc.loadingMu.Unlock()
+}
+
 func (bc *bitmapCache) touch(key string) {
 	n := len(bc.order)
 	if n > 0 && bc.order[n-1] == key {
@@ -179,6 +196,17 @@ func (bc *bitmapCache) touch(key string) {
 		}
 	}
 	bc.order = append(bc.order, key)
+}
+
+func (bc *bitmapCache) touchIfPresent(key string) bool {
+	if bc == nil || key == "" {
+		return false
+	}
+	if _, ok := bc.items[key]; !ok {
+		return false
+	}
+	bc.touch(key)
+	return true
 }
 
 func (bc *bitmapCache) evict(key string) bool {
@@ -233,6 +261,7 @@ func (bc *bitmapCache) pruneTo(keep int) bool {
 		bc.recomputeBytes()
 	}
 	copy(bc.order, bc.order[evict:])
+	clear(bc.order[keep:])
 	bc.order = bc.order[:keep]
 	return true
 }
@@ -240,14 +269,8 @@ func (bc *bitmapCache) pruneTo(keep int) bool {
 // pruneToBytes evicts the oldest LRU entries until total estimated RGBA bytes
 // fit within maxBytes, always preserving at least the most recently used entry.
 func (bc *bitmapCache) pruneToBytes(maxBytes int64) bool {
-	if bc == nil || maxBytes <= 0 || len(bc.items) <= 1 {
+	if bc == nil || maxBytes <= 0 || len(bc.items) <= 1 || bc.totalBytes <= maxBytes {
 		return false
-	}
-	if bc.totalBytes <= maxBytes {
-		// In case entries were inserted directly into bc.items in tests without put().
-		if bc.recomputeBytes() <= maxBytes {
-			return false
-		}
 	}
 	if len(bc.order) < len(bc.items) {
 		for k := range bc.items {
@@ -271,6 +294,7 @@ func (bc *bitmapCache) pruneToBytes(maxBytes int64) bool {
 	}
 	remain := len(bc.order) - evicted
 	copy(bc.order, bc.order[evicted:])
+	clear(bc.order[remain:])
 	bc.order = bc.order[:remain]
 	return true
 }
@@ -293,10 +317,9 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 		bc.touch(key)
 		return bmp
 	}
-	if bc.failed[key] || bc.loading[key] || win == nil {
+	if bc.failed[key] || win == nil || !bc.startLoading(key) {
 		return nil
 	}
-	bc.loading[key] = true
 	gen := bc.gen.Load()
 	go func() {
 		if bc.sem != nil {
@@ -304,9 +327,7 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 			defer func() { <-bc.sem }()
 		}
 		if bc.gen.Load() != gen || !bc.isActive(key) {
-			win.Update(func() {
-				delete(bc.loading, key)
-			})
+			bc.finishLoading(key)
 			return
 		}
 		var bmp *ui.Bitmap
@@ -316,7 +337,7 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 			return loadErr
 		})
 		win.Update(func() {
-			delete(bc.loading, key)
+			bc.finishLoading(key)
 			if gen != bc.gen.Load() {
 				return
 			}
@@ -382,7 +403,9 @@ func loadOrCreateThumbBitmap(imagePath, thumbPath string, maxW, maxH int) (*ui.B
 		return nil, err
 	}
 	if thumbPath != "" && scaled {
-		saveThumbCacheFile(thumbPath, img)
+		if _, statErr := os.Stat(imagePath); statErr == nil {
+			saveThumbCacheFile(thumbPath, img)
+		}
 	}
 	return ui.NewBitmap(img), nil
 }

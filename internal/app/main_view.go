@@ -923,7 +923,14 @@ func (a *clipApp) preloadThumb(path string) {
 // evicts hidden sensitive entries immediately, cancels queued decodes outside the window,
 // and caps total retained thumbnails by LRU and byte budget.
 func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisible int) {
-	if a.thumbs == nil || len(items) == 0 || firstVisible > lastVisible || lastVisible < 0 || firstVisible >= len(items) {
+	if a.thumbs == nil {
+		return
+	}
+	if len(items) == 0 {
+		a.thumbs.setActiveKeys(map[string]struct{}{})
+		return
+	}
+	if firstVisible > lastVisible || lastVisible < 0 || firstVisible >= len(items) {
 		return
 	}
 	firstVisible = max(0, firstVisible)
@@ -946,9 +953,7 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 		}
 		activeKeys[item.ImagePath] = struct{}{}
 		if i >= firstVisible && i <= lastVisible {
-			if _, ok := a.thumbs.items[item.ImagePath]; ok {
-				a.thumbs.touch(item.ImagePath)
-			}
+			a.thumbs.touchIfPresent(item.ImagePath)
 		} else {
 			preloadPaths = append(preloadPaths, item.ImagePath)
 		}

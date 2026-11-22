@@ -20,7 +20,7 @@ var globalShortcuts = []string{"Alt+V", "Ctrl+Shift+V", "Alt+Shift+V"}
 
 const (
 	// warmThumbCacheLimit keeps up to 16 recently viewed thumbnails (~3-4 MB at
-	// 680x2000) intact on panel hide when process memory is healthy so MyGo's D3D11
+	// 680x200) intact on panel hide when process memory is healthy so MyGo's D3D11
 	// renderer reuses existing textures instead of creating new IDs on every show.
 	warmThumbCacheLimit = 16
 	// heapReleaseDelay returns idle Go heap spans to the OS shortly after hiding
@@ -97,7 +97,9 @@ type clipApp struct {
 	persistPending     bool
 	updateTimer        *time.Timer
 	heapReleaseTimer   *time.Timer
+	heapReleaseGen     uint64
 	idleUnloadTimer    *time.Timer
+	idleUnloadGen      uint64
 	updateChecking     bool
 	updateInstalling   bool
 	updateProgress     int
@@ -192,6 +194,7 @@ func (a *clipApp) applyAutoHide(autoHide bool) {
 }
 
 func (a *clipApp) stopHeapReleaseTimer() {
+	a.heapReleaseGen++
 	if a.heapReleaseTimer != nil {
 		a.heapReleaseTimer.Stop()
 		a.heapReleaseTimer = nil
@@ -203,11 +206,20 @@ func (a *clipApp) scheduleHeapRelease() {
 	if a.panel == nil || a.quitting {
 		return
 	}
+	panel := a.panel
+	gen := a.heapReleaseGen
 	a.heapReleaseTimer = time.AfterFunc(heapReleaseDelay, func() {
-		if a.panel != nil {
-			a.panel.Update(a.releaseHiddenHeap)
-		}
+		panel.Update(func() {
+			a.releaseHiddenHeapForGen(gen)
+		})
 	})
+}
+
+func (a *clipApp) releaseHiddenHeapForGen(gen uint64) {
+	if gen != a.heapReleaseGen {
+		return
+	}
+	a.releaseHiddenHeap()
 }
 
 // releaseHiddenHeap returns idle Go heap spans to the OS after the panel stays
@@ -226,6 +238,7 @@ func (a *clipApp) releaseHiddenHeap() {
 }
 
 func (a *clipApp) stopIdleUnloadTimer() {
+	a.idleUnloadGen++
 	if a.idleUnloadTimer != nil {
 		a.idleUnloadTimer.Stop()
 		a.idleUnloadTimer = nil
@@ -237,11 +250,20 @@ func (a *clipApp) scheduleIdleUnload() {
 	if a.panel == nil || a.quitting {
 		return
 	}
+	panel := a.panel
+	gen := a.idleUnloadGen
 	a.idleUnloadTimer = time.AfterFunc(idleUnloadDelay, func() {
-		if a.panel != nil {
-			a.panel.Update(a.unloadHiddenIdleState)
-		}
+		panel.Update(func() {
+			a.unloadHiddenIdleStateForGen(gen)
+		})
 	})
+}
+
+func (a *clipApp) unloadHiddenIdleStateForGen(gen uint64) {
+	if gen != a.idleUnloadGen {
+		return
+	}
+	a.unloadHiddenIdleState()
 }
 
 // unloadHiddenIdleState releases UI lists and caches after the panel stays hidden
@@ -282,7 +304,7 @@ func (a *clipApp) unloadHiddenIdleState() {
 }
 
 // releaseHiddenMemory prunes caches and trims OS working set pages as needed.
-// Under the 75 MB working set threshold, up to warmThumbCacheLimit (8) recently
+// Under the 75 MB working set threshold, up to warmThumbCacheLimit (16) recently
 // viewed thumbnails and richSpans are preserved on hide to avoid wake-up CPU spikes.
 func (a *clipApp) releaseHiddenMemory() {
 	a.fileMenuStatID = 0
@@ -297,8 +319,11 @@ func (a *clipApp) releaseHiddenMemory() {
 	if a.thumbs != nil {
 		if overMemory {
 			a.thumbs.clear()
-		} else if a.thumbs.len() > warmThumbCacheLimit {
-			a.thumbs.pruneTo(warmThumbCacheLimit)
+		} else {
+			a.thumbs.setActiveKeys(map[string]struct{}{})
+			if a.thumbs.len() > warmThumbCacheLimit {
+				a.thumbs.pruneTo(warmThumbCacheLimit)
+			}
 		}
 	}
 	if overMemory && a.appIcons != nil {

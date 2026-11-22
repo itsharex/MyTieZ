@@ -591,7 +591,11 @@ func (a *clipApp) drainSaveQueue() {
 			continue
 		}
 		if a.panel != nil {
-			a.panel.Update(func() {
+			panel := a.panel
+			panel.Update(func() {
+				if !panel.IsVisible() {
+					return
+				}
 				wasAtTop := a.listScroll.Y <= atTopEpsilon
 				a.reload()
 				if wasAtTop && len(a.items) > 0 {

@@ -169,6 +169,25 @@ func TestBitmapCacheActiveWindowFilter(t *testing.T) {
 	if !bc.isActive("scrolled-past") {
 		t.Fatalf("expected clear to reset activeKeys filter")
 	}
+
+	// Loading guard and touchIfPresent helpers.
+	if !bc.startLoading("k1") {
+		t.Fatalf("expected first startLoading to succeed")
+	}
+	if bc.startLoading("k1") {
+		t.Fatalf("expected duplicate startLoading to be rejected")
+	}
+	bc.finishLoading("k1")
+	if !bc.startLoading("k1") {
+		t.Fatalf("expected startLoading to succeed after finishLoading")
+	}
+	if bc.touchIfPresent("missing") {
+		t.Fatalf("expected touchIfPresent false for absent key")
+	}
+	bc.put("present", &ui.Bitmap{})
+	if !bc.touchIfPresent("present") {
+		t.Fatalf("expected touchIfPresent true for cached key")
+	}
 }
 
 func TestLoadOrCreateThumbBitmapDiskCacheAndCleanup(t *testing.T) {

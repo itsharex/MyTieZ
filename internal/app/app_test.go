@@ -833,17 +833,20 @@ func TestHiddenMemoryAndCacheRetention(t *testing.T) {
 	a := newClipApp(st, nil)
 	a.richSpans = map[int64][]ui.Span{1: {{Text: "cached span"}}}
 	for i := 0; i < warmThumbCacheLimit; i++ {
-		a.thumbs.items[string(rune('a'+i))] = &ui.Bitmap{}
+		a.thumbs.put(string(rune('a'+i)), &ui.Bitmap{})
 	}
+	a.thumbs.setActiveKeys(map[string]struct{}{"queued-key": {}})
 
-	// 低于 75MB 阈值时，隐藏保留热缓存上限 warmThumbCacheLimit 与 richSpans
+	// 低于 75MB 阈值时，隐藏保留热缓存上限 warmThumbCacheLimit 与 richSpans，同时收窄 activeKeys 取消排队解码
 	a.hidePanel()
 	if a.thumbs.len() != warmThumbCacheLimit || len(a.richSpans) != 1 {
 		t.Fatalf("expected warm thumb cache (%d) and richSpans preserved, got %d / %d", warmThumbCacheLimit, a.thumbs.len(), len(a.richSpans))
 	}
+	if a.thumbs.isActive("queued-key") {
+		t.Fatalf("expected pending decode keys deactivated on hide")
+	}
 
-	a.thumbs.items["overflow"] = &ui.Bitmap{}
-	a.thumbs.touch("overflow")
+	a.thumbs.put("overflow", &ui.Bitmap{})
 	a.hidePanel()
 	if a.thumbs.len() != warmThumbCacheLimit || len(a.richSpans) != 1 {
 		t.Fatalf("expected oversized thumb cache pruned to %d, got %d", warmThumbCacheLimit, a.thumbs.len())
@@ -1149,8 +1152,7 @@ func TestThumbWindowRetentionAndEviction(t *testing.T) {
 			Kind:      store.KindImage,
 			ImagePath: path,
 		}
-		a.thumbs.items[path] = &ui.Bitmap{}
-		a.thumbs.touch(path)
+		a.thumbs.put(path, &ui.Bitmap{})
 	}
 	// Mark index 10 as sensitive and unrevealed; syncThumbWindow should evict it immediately.
 	items[10].Tags = []string{store.SensitiveTag}
@@ -1179,11 +1181,18 @@ func TestThumbWindowRetentionAndEviction(t *testing.T) {
 		t.Fatalf("expected oldest LRU entry %s evicted", items[0].ImagePath)
 	}
 
-	// Empty / invalid range does not drop existing warm cache.
+	// Empty / invalid range does not drop existing warm cache, and empty items clears activeKeys.
 	before := a.thumbs.len()
 	a.syncThumbWindow(items, 0, -1)
 	if a.thumbs.len() != before {
 		t.Fatalf("expected warm cache preserved (%d) on invalid range, got %d", before, a.thumbs.len())
+	}
+	a.syncThumbWindow(nil, 0, -1)
+	if a.thumbs.len() != before {
+		t.Fatalf("expected warm cache preserved (%d) on empty items, got %d", before, a.thumbs.len())
+	}
+	if a.thumbs.isActive(items[8].ImagePath) {
+		t.Fatalf("expected empty items to clear activeKeys")
 	}
 }
 
@@ -1208,8 +1217,7 @@ func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 	}
 	// Seed cache in ascending order so [0..7] are oldest, then render top viewport so [0..firstLast] become MRU.
 	for _, it := range items {
-		a.thumbs.items[it.ImagePath] = &ui.Bitmap{}
-		a.thumbs.touch(it.ImagePath)
+		a.thumbs.put(it.ImagePath, &ui.Bitmap{})
 	}
 	a.items = items
 
@@ -1269,6 +1277,14 @@ func TestUnloadHiddenIdleStateAndReload(t *testing.T) {
 	a.richSpans = map[int64][]ui.Span{1: {{Text: "span"}}}
 	a.searchHits = append([]store.ClipItem(nil), a.items...)
 	a.selected = 0
+
+	// Stale timer generation callback must not unload active state.
+	staleGen := a.idleUnloadGen
+	a.stopIdleUnloadTimer()
+	a.unloadHiddenIdleStateForGen(staleGen)
+	if len(a.items) != 1 || a.thumbs.len() != 1 {
+		t.Fatalf("expected stale idle unload gen ignored, got items=%d thumbs=%d", len(a.items), a.thumbs.len())
+	}
 
 	a.unloadHiddenIdleState()
 

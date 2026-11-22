@@ -40,6 +40,7 @@ type bitmapCache struct {
 	order   []string
 	failed  map[string]bool
 	loading map[string]bool
+	allowed map[string]struct{}
 	gen     uint64
 }
 
@@ -55,6 +56,7 @@ func (bc *bitmapCache) clear() {
 	bc.gen++
 	bc.items = make(map[string]*ui.Bitmap)
 	bc.order = nil
+	bc.allowed = nil
 	if len(bc.failed) > 128 {
 		bc.failed = make(map[string]bool)
 	}
@@ -109,6 +111,44 @@ func (bc *bitmapCache) pruneTo(keep int) bool {
 	return true
 }
 
+// retainOnly updates the active key window and evicts any cached bitmaps
+// outside allowed so scrolled-away thumbnails do not stay resident in memory.
+func (bc *bitmapCache) retainOnly(allowed map[string]struct{}) int {
+	if bc == nil {
+		return 0
+	}
+	bc.allowed = allowed
+	if len(bc.items) == 0 {
+		bc.order = nil
+		return 0
+	}
+	if len(allowed) == 0 {
+		evicted := len(bc.items)
+		bc.items = make(map[string]*ui.Bitmap)
+		bc.order = nil
+		return evicted
+	}
+	evicted := 0
+	for k := range bc.items {
+		if _, ok := allowed[k]; !ok {
+			delete(bc.items, k)
+			evicted++
+		}
+	}
+	if len(bc.order) > 0 {
+		kept := bc.order[:0]
+		for _, k := range bc.order {
+			if _, ok := allowed[k]; ok {
+				if _, exists := bc.items[k]; exists {
+					kept = append(kept, k)
+				}
+			}
+		}
+		bc.order = kept
+	}
+	return evicted
+}
+
 func (bc *bitmapCache) get(win *mygo.Window, key string, maxCount int, fetch func() ([]byte, error)) *ui.Bitmap {
 	return bc.getBitmap(win, key, maxCount, func() (*ui.Bitmap, error) {
 		data, err := fetch()
@@ -144,6 +184,11 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 			if gen != bc.gen {
 				return
 			}
+			if bc.allowed != nil {
+				if _, ok := bc.allowed[key]; !ok {
+					return
+				}
+			}
 			if err != nil || bmp == nil {
 				if len(bc.failed) >= 128 {
 					bc.failed = make(map[string]bool)
@@ -159,6 +204,18 @@ func (bc *bitmapCache) getBitmap(win *mygo.Window, key string, maxCount int, loa
 		})
 	}()
 	return nil
+}
+
+// preloadBitmap warms the cache asynchronously for keys near the viewport
+// without touching existing entries' LRU order.
+func (bc *bitmapCache) preloadBitmap(win *mygo.Window, key string, maxCount int, load func() (*ui.Bitmap, error)) {
+	if bc == nil || key == "" {
+		return
+	}
+	if _, ok := bc.items[key]; ok {
+		return
+	}
+	_ = bc.getBitmap(win, key, maxCount, load)
 }
 
 // decodeThumbBitmap decodes image bytes and downscales oversized images to fit

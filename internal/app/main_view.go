@@ -274,9 +274,16 @@ func (a *clipApp) mainView(c *ui.Context) {
 		}
 
 		ui.Column(c).Grow(1).HandleInput(a.handleListWheel).Children(func() {
+			firstVisible, lastVisible := len(items), -1
 			list := ui.List(c, &a.list, len(items)).Bind(&a.listHandle).TrackScroll(&a.listScroll).
 				Grow(1).Padding(10, 16, 12, 16).Gap(4).
 				Rows(func(row ui.ListRow) {
+					if row.Index < firstVisible {
+						firstVisible = row.Index
+					}
+					if row.Index > lastVisible {
+						lastVisible = row.Index
+					}
 					a.renderCard(row, items[row.Index])
 				}).
 				Children(func() {
@@ -287,6 +294,7 @@ func (a *clipApp) mainView(c *ui.Context) {
 						})
 					}
 				})
+			a.syncThumbWindow(items, firstVisible, lastVisible)
 
 			if plainPastePressed {
 				a.pasteSelectedPlainText()
@@ -868,14 +876,68 @@ func (a *clipApp) getRichPreviewSpans(item store.ClipItem, t *ui.Theme) []ui.Spa
 	return spans
 }
 
+func loadThumbFile(path string) (*ui.Bitmap, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return decodeThumbBitmap(data, 720, 200)
+}
+
 func (a *clipApp) getOrLoadThumb(path string) *ui.Bitmap {
-	return a.thumbs.getBitmap(a.panel, path, 32, func() (*ui.Bitmap, error) {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		return decodeThumbBitmap(data, 720, 200)
+	return a.thumbs.getBitmap(a.panel, path, 0, func() (*ui.Bitmap, error) {
+		return loadThumbFile(path)
 	})
+}
+
+func (a *clipApp) preloadThumb(path string) {
+	a.thumbs.preloadBitmap(a.panel, path, 0, func() (*ui.Bitmap, error) {
+		return loadThumbFile(path)
+	})
+}
+
+const (
+	minThumbPreloadMargin = 6
+	maxThumbPreloadMargin = 12
+)
+
+// syncThumbWindow keeps thumbnails within [firstVisible - margin, lastVisible + margin]
+// where margin is pageSize clamped to [minThumbPreloadMargin, maxThumbPreloadMargin],
+// preloads adjacent pages before/after the viewport, and evicts everything further away.
+func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisible int) {
+	if a.thumbs == nil {
+		return
+	}
+	if len(items) == 0 || firstVisible > lastVisible || lastVisible < 0 || firstVisible >= len(items) {
+		a.thumbs.retainOnly(make(map[string]struct{}))
+		return
+	}
+	firstVisible = max(0, firstVisible)
+	lastVisible = min(len(items)-1, lastVisible)
+	pageSize := max(1, lastVisible-firstVisible+1)
+	margin := min(maxThumbPreloadMargin, max(minThumbPreloadMargin, pageSize))
+	windowStart := max(0, firstVisible-margin)
+	windowEnd := min(len(items)-1, lastVisible+margin)
+
+	keep := make(map[string]struct{})
+	var preloadPaths []string
+	for i := windowStart; i <= windowEnd; i++ {
+		item := items[i]
+		if item.Kind != store.KindImage || item.ImagePath == "" {
+			continue
+		}
+		if store.HasSensitiveTag(item.Tags) && !a.revealedSensitive[item.ID] {
+			continue
+		}
+		keep[item.ImagePath] = struct{}{}
+		if i < firstVisible || i > lastVisible {
+			preloadPaths = append(preloadPaths, item.ImagePath)
+		}
+	}
+	a.thumbs.retainOnly(keep)
+	for _, path := range preloadPaths {
+		a.preloadThumb(path)
+	}
 }
 
 func (a *clipApp) getOrLoadAppIcon(path string) *ui.Bitmap {

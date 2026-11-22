@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image"
 	"os"
 	"path/filepath"
@@ -1110,5 +1111,114 @@ func TestPinnedBadgeRemovedAndDragReorder(t *testing.T) {
 	a.list.Reorder([]int{2}, 0)
 	if a.items[0].ID != i1.ID || a.items[1].ID != i2.ID || a.items[2].ID != i3.ID {
 		t.Fatalf("expected dragging unpinned row ignored, got [%d,%d,%d]", a.items[0].ID, a.items[1].ID, a.items[2].ID)
+	}
+}
+
+func TestThumbWindowRetentionAndEviction(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	items := make([]store.ClipItem, 50)
+	for i := range items {
+		path := fmt.Sprintf("img-%02d.png", i)
+		items[i] = store.ClipItem{
+			ID:        int64(i + 1),
+			Kind:      store.KindImage,
+			ImagePath: path,
+		}
+		a.thumbs.items[path] = &ui.Bitmap{}
+	}
+	// Mark index 10 as sensitive and unrevealed; it should not be retained/preloaded.
+	items[10].Tags = []string{store.SensitiveTag}
+
+	// Lower bound clamp: viewport [8, 10] (pageSize=3) clamps margin to minThumbPreloadMargin (6) -> [2, 16].
+	a.syncThumbWindow(items, 8, 10)
+	for i := range items {
+		path := items[i].ImagePath
+		_, exists := a.thumbs.items[path]
+		want := i >= 2 && i <= 16 && i != 10
+		if exists != want {
+			t.Fatalf("lower-bound item %d (%s): exists=%v, want=%v", i, path, exists, want)
+		}
+	}
+
+	// Upper bound clamp: repopulate and test viewport [15, 34] (pageSize=20) clamps margin to maxThumbPreloadMargin (12) -> [3, 46].
+	for _, it := range items {
+		a.thumbs.items[it.ImagePath] = &ui.Bitmap{}
+	}
+	a.syncThumbWindow(items, 15, 34)
+	for i := range items {
+		path := items[i].ImagePath
+		_, exists := a.thumbs.items[path]
+		want := i >= 3 && i <= 46 && i != 10
+		if exists != want {
+			t.Fatalf("upper-bound item %d (%s): exists=%v, want=%v", i, path, exists, want)
+		}
+	}
+
+	// Empty / invalid range clears all retained thumbnails.
+	a.syncThumbWindow(items, 0, -1)
+	if a.thumbs.len() != 0 {
+		t.Fatalf("expected 0 thumbs retained for empty range, got %d", a.thumbs.len())
+	}
+}
+
+func TestListViewportThumbEvictionOnScroll(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	const total = 18
+	items := make([]store.ClipItem, total)
+	for i := range items {
+		path := fmt.Sprintf("scroll-img-%02d.png", i)
+		items[i] = store.ClipItem{
+			ID:        int64(i + 1),
+			Kind:      store.KindImage,
+			ImagePath: path,
+			Preview:   fmt.Sprintf("100 × 100 · #%02d", i),
+		}
+		a.thumbs.items[path] = &ui.Bitmap{}
+	}
+	a.items = items
+
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	tt.Frame()
+
+	first0, last0 := a.list.Visible()
+	if last0 < first0 {
+		t.Fatalf("expected visible rows after initial frame, got (%d, %d)", first0, last0)
+	}
+	if _, ok := a.thumbs.items[items[0].ImagePath]; !ok {
+		t.Fatalf("expected top visible image retained at top")
+	}
+	if _, ok := a.thumbs.items[items[total-1].ImagePath]; ok {
+		t.Fatalf("expected far-away bottom image evicted when at top (visible=%d..%d)", first0, last0)
+	}
+
+	// Re-populate all thumbs to simulate decoded state, then scroll to bottom.
+	for _, it := range items {
+		a.thumbs.items[it.ImagePath] = &ui.Bitmap{}
+	}
+	a.list.ScrollToEnd()
+	tt.Frame()
+	tt.Frame()
+
+	first1, last1 := a.list.Visible()
+	if last1 < first1 || last1 < total-2 {
+		t.Fatalf("expected list scrolled near bottom, got visible (%d, %d)", first1, last1)
+	}
+	if _, ok := a.thumbs.items[items[0].ImagePath]; ok {
+		t.Fatalf("expected far-away top image evicted after scrolling to bottom (visible=%d..%d)", first1, last1)
+	}
+	if _, ok := a.thumbs.items[items[total-1].ImagePath]; !ok {
+		t.Fatalf("expected bottom visible image retained after scrolling to bottom")
 	}
 }

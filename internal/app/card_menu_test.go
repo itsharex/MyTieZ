@@ -592,3 +592,42 @@ func TestContextMenuDismissedOnHidePanelAndReopens(t *testing.T) {
 		t.Fatalf("expected context menu %q to reopen normally, got %q", want, got)
 	}
 }
+
+func TestQuickTagToggleOffUnderActiveSearchDoesNotPanic(t *testing.T) {
+	msgs := locales.In("zh-Hans")
+	st, a := newTestAppWithStore(t)
+	first, _ := st.SaveText("filtered item one", store.SaveOptions{})
+	second, _ := st.SaveText("filtered item two", store.SaveOptions{})
+	_, _ = st.UpdateTags(first.ID, []string{"work"})
+	_, _ = st.UpdateTags(second.ID, []string{"work"})
+
+	a.query = "#work"
+	a.reload()
+	if len(a.items) != 2 {
+		t.Fatalf("expected 2 items matching #work, got %d", len(a.items))
+	}
+
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	rect, ok := tt.Find("filtered item two")
+	if !ok {
+		t.Fatalf("expected filtered item two in view")
+	}
+
+	tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
+	quickInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardMenuQuickTag())
+	if !ok {
+		t.Fatalf("expected Quick Tag submenu trigger")
+	}
+	tt.Move(quickInfo.Bounds.X+quickInfo.Bounds.W/2, quickInfo.Bounds.Y+quickInfo.Bounds.H/2)
+	workInfo, ok := tt.AccessByRole(ui.RoleMenuItem, "work")
+	if !ok {
+		t.Fatalf("expected 'work' tag in submenu")
+	}
+
+	// Untagging row 0 while filtered by #work shrinks a.items from 2 to 1 mid-frame; must not panic.
+	clickCenter(tt, workInfo.Bounds)
+	tt.Frame()
+	if len(a.items) != 1 || a.items[0].ID != first.ID {
+		t.Fatalf("expected 1 remaining item (%d), got %+v", first.ID, a.items)
+	}
+}

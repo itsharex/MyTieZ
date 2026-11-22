@@ -246,11 +246,14 @@ func (a *clipApp) mainView(c *ui.Context) {
 		ui.Divider(c)
 
 		// 中部虚拟列表（直接铺满到底，无常驻底栏）
+		// Snapshot a.items for this frame so in-row actions (e.g. untagging under a #tag filter or deleting)
+		// that call reload() mid-pass cannot shrink the slice before ui.List finishes iterating.
+		items := a.items
 		a.list.Selected = nil
 		a.list.MoveAnimation = &ui.Snappy
-		a.list.Key = func(i int) any { return a.items[i].ID }
+		a.list.Key = func(i int) any { return items[i].ID }
 		a.list.Label = func(i int) string {
-			it := a.items[i]
+			it := items[i]
 			if store.HasSensitiveTag(it.Tags) && !a.revealedSensitive[it.ID] {
 				return msgs.CardSensitiveHidden()
 			}
@@ -258,13 +261,13 @@ func (a *clipApp) mainView(c *ui.Context) {
 		}
 
 		ui.Column(c).Grow(1).HandleInput(a.handleListWheel).Children(func() {
-			list := ui.List(c, &a.list, len(a.items)).Bind(&a.listHandle).TrackScroll(&a.listScroll).
+			list := ui.List(c, &a.list, len(items)).Bind(&a.listHandle).TrackScroll(&a.listScroll).
 				Grow(1).Padding(10, 16, 12, 16).Gap(4).
 				Rows(func(row ui.ListRow) {
-					a.renderCard(row)
+					a.renderCard(row, items[row.Index])
 				}).
 				Children(func() {
-					if len(a.items) == 0 {
+					if len(items) == 0 {
 						ui.Column(c).Fill().Center().Padding(32).Gap(6).Children(func() {
 							ui.Text(c, msgs.EmptyTitle()).FontSize(15).TextColor(t.TextMuted)
 							ui.Text(c, msgs.EmptySubtitle()).FontSize(13).TextColor(t.TextMuted)
@@ -315,11 +318,10 @@ func (a *clipApp) flushPendingToast(c *ui.Context) {
 	})
 }
 
-func (a *clipApp) renderCard(row ui.ListRow) {
+func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem) {
 	c := row.Context
 	t := c.Theme()
 	msgs := locales.In(c.Locale())
-	item := a.items[row.Index]
 
 	hovered := row.Hovered()
 	pressed := row.Pressed()

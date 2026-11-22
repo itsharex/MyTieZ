@@ -3,6 +3,7 @@ package app
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log"
 	"os"
 	"slices"
@@ -364,6 +365,12 @@ func (a *clipApp) pasteItem(raw store.ClipItem, plainText bool) {
 			log.Printf("write clipboard: %v", err)
 			return
 		}
+		if seq := sys.ClipboardSequenceNumber(); seq != 0 {
+			a.ignoreClipSeq = seq
+		}
+		if item.Kind == store.KindImage && mygo.App.IsReady() {
+			a.releaseImagePasteMemory()
+		}
 	}
 	if !a.settings.ClickCopyOnly && a.settings.DeleteAfterPaste && a.store != nil {
 		if err := a.store.Delete(item.ID); err != nil {
@@ -434,6 +441,11 @@ func writeClipItem(item store.ClipItem, plainText bool) error {
 			transfer.Bytes(transfer.Text, []byte(item.Text)),
 		)))
 	case store.KindImage:
+		if err := sys.WriteClipboardImageFile(item.ImagePath); err == nil {
+			return nil
+		} else if !errors.Is(err, sys.ErrClipboardUnsupported) {
+			return err
+		}
 		b, err := os.ReadFile(item.ImagePath)
 		if err != nil {
 			return err
@@ -449,6 +461,9 @@ func writeClipItem(item store.ClipItem, plainText bool) error {
 }
 
 func (a *clipApp) onClipboardChanged() {
+	if seq := sys.ClipboardSequenceNumber(); seq != 0 && seq == a.ignoreClipSeq && time.Now().Before(a.ignoreUntil) {
+		return
+	}
 	formats := mygo.Clipboard.Formats()
 	if len(formats) == 0 {
 		return

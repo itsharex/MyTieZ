@@ -79,6 +79,7 @@ type clipApp struct {
 
 	ignoreHash         string
 	ignoreUntil        time.Time
+	ignoreClipSeq      uint32
 	winPinned          bool
 	panelNoActivate    bool
 	routedSearchActive bool
@@ -233,6 +234,19 @@ func (a *clipApp) releaseHiddenHeap() {
 		go func() {
 			defer a.memTrimming.Store(false)
 			debug.FreeOSMemory()
+		}()
+	}
+}
+
+// releaseImagePasteMemory returns transient full-resolution image decode
+// buffers to the OS immediately after writing an image to the clipboard,
+// including when the window is pinned or in click-copy-only mode.
+func (a *clipApp) releaseImagePasteMemory() {
+	if a.memTrimming.CompareAndSwap(false, true) {
+		go func() {
+			defer a.memTrimming.Store(false)
+			debug.FreeOSMemory()
+			sys.TrimIdleMemory()
 		}()
 	}
 }

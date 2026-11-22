@@ -191,7 +191,7 @@ func (a *clipApp) filterByTag(tag string) {
 	a.scrollListToTop()
 }
 
-func (a *clipApp) pickableTagSuggestions(item store.ClipItem) []string {
+func (a *clipApp) pickableTagSuggestions(_ store.ClipItem) []string {
 	source := a.allTags
 	if len(a.editingTagOrder) > 0 {
 		source = a.editingTagOrder
@@ -199,18 +199,8 @@ func (a *clipApp) pickableTagSuggestions(item store.ClipItem) []string {
 	if len(source) == 0 {
 		return nil
 	}
-	q := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.tagInput), "#")))
-	var out []string
-	for _, t := range source {
-		if q != "" && !strings.Contains(strings.ToLower(t), q) {
-			continue
-		}
-		out = append(out, t)
-		if len(out) >= 12 {
-			break
-		}
-	}
-	return out
+	limit := min(len(source), 12)
+	return append([]string(nil), source[:limit]...)
 }
 
 func (a *clipApp) fitOverlayTags(c *ui.Context, t *ui.Theme, tags []string) (visible []string, hidden int) {

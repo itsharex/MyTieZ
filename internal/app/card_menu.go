@@ -20,8 +20,8 @@ const (
 	maxFileMenuDirEntries = 5
 	fileMenuStatTTL       = time.Second
 
-	cardMenuMinWidth      float32 = 140
-	cardMenuMaxWidth      float32 = 188
+	cardMenuMinWidth      float32 = 104
+	cardMenuMaxWidth      float32 = 124
 	fileMenuMultiMaxWidth float32 = 236
 	fileMenuTitleFontSize  float32 = 12
 	fileMenuSubFontSize    float32 = 10.5
@@ -74,9 +74,6 @@ var cardContextMenuActions = []cardMenuAction{
 				plainLabel = msgs.RichMenuCopyPlain()
 			}
 			plainIt := m.Item(plainLabel).ID("card-menu:plain-paste")
-			if sc := strings.TrimSpace(a.settings.PlainPasteShortcut); sc != "" {
-				plainIt.Trailing(sc)
-			}
 			if styleCardMenuItem(plainIt, plainLabel, "").Chosen() {
 				a.pasteItem(item, true)
 			}

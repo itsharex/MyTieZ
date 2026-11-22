@@ -68,8 +68,8 @@ func TestRichTextContextMenuPlainAndFormatted(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected %q in rich text context menu, menu=%q", msgs.RichMenuPastePlain(), tt.Menu())
 	}
-	if !strings.Contains(plainInfo.Description, "Shift+Enter") {
-		t.Fatalf("expected plain paste item description to include shortcut hint, got %+v", plainInfo)
+	if strings.Contains(plainInfo.Description, "Shift+Enter") {
+		t.Fatalf("did not expect plain paste item description to include shortcut hint, got %+v", plainInfo)
 	}
 	clickCenter(tt, plainInfo.Bounds)
 

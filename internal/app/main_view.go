@@ -1,6 +1,7 @@
 package app
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -249,8 +250,20 @@ func (a *clipApp) mainView(c *ui.Context) {
 		// Snapshot a.items for this frame so in-row actions (e.g. untagging under a #tag filter or deleting)
 		// that call reload() mid-pass cannot shrink the slice before ui.List finishes iterating.
 		items := a.items
+		pinnedCount := 0
+		for pinnedCount < len(items) && items[pinnedCount].Pinned {
+			pinnedCount++
+		}
 		a.list.Selected = nil
+		a.list.KeepOffset = true
 		a.list.MoveAnimation = &ui.Snappy
+		if pinnedCount >= 2 {
+			a.list.Reorder = func(rows []int, to int) {
+				a.reorderPinnedRows(items, pinnedCount, rows, to)
+			}
+		} else {
+			a.list.Reorder = nil
+		}
 		a.list.Key = func(i int) any { return items[i].ID }
 		a.list.Label = func(i int) string {
 			it := items[i]
@@ -318,6 +331,44 @@ func (a *clipApp) flushPendingToast(c *ui.Context) {
 	})
 }
 
+func (a *clipApp) reorderPinnedRows(items []store.ClipItem, pinnedCount int, rows []int, to int) {
+	if a.store == nil || len(rows) != 1 || pinnedCount < 2 {
+		return
+	}
+	from := rows[0]
+	if from < 0 || from >= pinnedCount {
+		// Ignore drags initiated from unpinned items.
+		return
+	}
+	if to < 0 {
+		to = 0
+	} else if to > pinnedCount {
+		to = pinnedCount
+	}
+	if to == from || to == from+1 {
+		return
+	}
+
+	pinnedIDs := make([]int64, pinnedCount)
+	for i := 0; i < pinnedCount; i++ {
+		pinnedIDs[i] = items[i].ID
+	}
+	moved := pinnedIDs[from]
+	pinnedIDs = append(pinnedIDs[:from], pinnedIDs[from+1:]...)
+	if to > from {
+		to--
+	}
+	pinnedIDs = append(pinnedIDs, 0)
+	copy(pinnedIDs[to+1:], pinnedIDs[to:])
+	pinnedIDs[to] = moved
+
+	if err := a.store.ReorderPinned(pinnedIDs); err != nil {
+		log.Printf("reorder pinned: %v", err)
+		return
+	}
+	a.reload()
+}
+
 func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem) {
 	c := row.Context
 	t := c.Theme()
@@ -367,7 +418,12 @@ func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem) {
 		Background(bg).Border(1, borderColor).
 		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, shadowAlpha)).
 		AnimatePose(ui.Pose{Y: translateY}, ui.Animation{Duration: 240 * time.Millisecond, Ease: ui.EaseOut}).
-		Transition(cardTransition).
+		Transition(cardTransition)
+	if !item.Pinned {
+		// Prevent non-pinned cards from initiating row drag when ListState.Reorder is active.
+		card.Drag(nil)
+	}
+	card.
 		Children(func() {
 			ui.Row(c).MinHeight(cardActionSize).AlignItems(ui.Center).Gap(4).Children(func() {
 				kindIcon, _ := kindMeta(msgs, item.Kind)
@@ -385,11 +441,6 @@ func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem) {
 					sourceName = "Unknown"
 				}
 				ui.Text(c, sourceName).FontSize(11.5).FontWeight(700).TextColor(t.TextMuted).SingleLine()
-
-				if item.Pinned {
-					ui.Text(c, msgs.CardPinned()).FontSize(11).FontWeight(600).TextColor(t.Accent).
-						Padding(1, 5).Radius(radiusMicro).Background(t.Surface.Mix(t.Accent, 0.12))
-				}
 
 				ui.Box(c).Grow(1)
 

@@ -785,3 +785,50 @@ func TestPinyinPolyphoneMemoAndInvalidRegexLines(t *testing.T) {
 		t.Fatalf("expected invalid line numbers [3, 5], got %v", invalid)
 	}
 }
+
+
+func TestReorderPinnedPersistence(t *testing.T) {
+	st, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a, _ := st.SaveText("pin-a", SaveOptions{})
+	b, _ := st.SaveText("pin-b", SaveOptions{})
+	c, _ := st.SaveText("pin-c", SaveOptions{})
+	unpinned, _ := st.SaveText("unpinned", SaveOptions{})
+
+	// Pinning a, b, c places the most recently pinned item first: [c, b, a].
+	for _, id := range []int64{a.ID, b.ID, c.ID} {
+		if pinned, err := st.TogglePin(id); err != nil || !pinned {
+			t.Fatalf("pin %d: pinned=%v err=%v", id, pinned, err)
+		}
+	}
+
+	// Reorder full pinned list to [a, c, b].
+	if err := st.ReorderPinned([]int64{a.ID, c.ID, b.ID}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.ListSummaries("", "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 || got[0].ID != a.ID || got[1].ID != c.ID || got[2].ID != b.ID || got[3].ID != unpinned.ID {
+		t.Fatalf("unexpected order after full reorder: got=[%d,%d,%d,%d], want=[%d,%d,%d,%d]",
+			got[0].ID, got[1].ID, got[2].ID, got[3].ID, a.ID, c.ID, b.ID, unpinned.ID)
+	}
+
+	// Subset reorder (e.g. under a filter showing only [a, b]) swaps their slots while keeping c in place -> [b, c, a].
+	if err := st.ReorderPinned([]int64{b.ID, a.ID}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.ListSummaries("", "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].ID != b.ID || got[1].ID != c.ID || got[2].ID != a.ID {
+		t.Fatalf("unexpected order after subset reorder: got=[%d,%d,%d], want=[%d,%d,%d]",
+			got[0].ID, got[1].ID, got[2].ID, b.ID, c.ID, a.ID)
+	}
+}

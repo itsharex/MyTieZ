@@ -1048,3 +1048,67 @@ func TestMicaPresets(t *testing.T) {
 			mica.surfaceDark, micaAlt.surfaceDark, acrylic.surfaceDark)
 	}
 }
+
+
+func TestPinnedBadgeRemovedAndDragReorder(t *testing.T) {
+	st, a := newTestAppWithStore(t)
+	i1, _ := st.SaveText("pinned one", store.SaveOptions{})
+	i2, _ := st.SaveText("pinned two", store.SaveOptions{})
+	i3, _ := st.SaveText("unpinned three", store.SaveOptions{})
+	_, _ = st.TogglePin(i1.ID)
+	_, _ = st.TogglePin(i2.ID)
+	a.reload()
+
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	msgs := locales.In("zh-Hans")
+	for _, info := range tt.AccessAll() {
+		if info.Role == ui.RoleText && info.Name == msgs.CardPinned() {
+			t.Fatalf("expected %q text badge removed from pinned cards, found %+v", msgs.CardPinned(), info)
+		}
+	}
+	if a.list.Reorder == nil {
+		t.Fatalf("expected Reorder enabled when >=2 pinned cards exist")
+	}
+
+	if !a.list.KeepOffset {
+		t.Fatalf("expected list.KeepOffset=true so pinned reorder keeps scroll position")
+	}
+
+	// Pointer-drag on unpinned card must not initiate drag or reorder.
+	unpinnedRect, ok := tt.Find("unpinned three")
+	if !ok {
+		t.Fatalf("expected unpinned three in view")
+	}
+	pinnedTwoRect, ok := tt.Find("pinned two")
+	if !ok {
+		t.Fatalf("expected pinned two in view")
+	}
+	tt.Press(unpinnedRect.X+20, unpinnedRect.Y+unpinnedRect.H/2)
+	tt.Move(pinnedTwoRect.X+20, pinnedTwoRect.Y+2)
+	tt.Release(pinnedTwoRect.X+20, pinnedTwoRect.Y+2)
+	if a.items[0].ID != i2.ID || a.items[1].ID != i1.ID || a.items[2].ID != i3.ID {
+		t.Fatalf("expected dragging unpinned card ignored, got [%d,%d,%d]", a.items[0].ID, a.items[1].ID, a.items[2].ID)
+	}
+
+	// Pointer-drag pinned row 0 (pinned two) down past pinned row 1 (pinned one) -> [i1, i2, i3] and keeps scroll at top.
+	pinnedOneRect, ok := tt.Find("pinned one")
+	if !ok {
+		t.Fatalf("expected pinned one in view")
+	}
+	tt.Press(pinnedTwoRect.X+20, pinnedTwoRect.Y+pinnedTwoRect.H/2)
+	tt.Move(pinnedOneRect.X+20, pinnedOneRect.Y+pinnedOneRect.H-2)
+	tt.Release(pinnedOneRect.X+20, pinnedOneRect.Y+pinnedOneRect.H-2)
+	tt.Frame()
+	if len(a.items) != 3 || a.items[0].ID != i1.ID || a.items[1].ID != i2.ID || a.items[2].ID != i3.ID {
+		t.Fatalf("expected pinned reorder via drag -> [%d,%d,%d], got [%d,%d,%d]", i1.ID, i2.ID, i3.ID, a.items[0].ID, a.items[1].ID, a.items[2].ID)
+	}
+	if a.listScroll.Y != 0 {
+		t.Fatalf("expected scroll Y to stay at 0 after reordering top pinned item, got %.1f", a.listScroll.Y)
+	}
+
+	// Dragging unpinned row 2 directly must also be ignored.
+	a.list.Reorder([]int{2}, 0)
+	if a.items[0].ID != i1.ID || a.items[1].ID != i2.ID || a.items[2].ID != i3.ID {
+		t.Fatalf("expected dragging unpinned row ignored, got [%d,%d,%d]", a.items[0].ID, a.items[1].ID, a.items[2].ID)
+	}
+}

@@ -241,11 +241,12 @@ CREATE TABLE IF NOT EXISTS clip_items (
 	source_path TEXT NOT NULL DEFAULT '',
 	byte_size INTEGER NOT NULL DEFAULT 0,
 	pinned INTEGER NOT NULL DEFAULT 0,
+	pin_order INTEGER NOT NULL DEFAULT 0,
 	tags_json TEXT NOT NULL DEFAULT '[]',
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_clip_items_order ON clip_items(pinned DESC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clip_items_order ON clip_items(pinned DESC, pin_order ASC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_clip_items_kind_hash ON clip_items(kind, content_hash);
 CREATE INDEX IF NOT EXISTS idx_clip_items_tags ON clip_items(tags_json) WHERE tags_json != '[]' AND tags_json != '';
 CREATE TABLE IF NOT EXISTS app_settings (
@@ -256,7 +257,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
 	if _, err := db.Exec(schema); err != nil {
 		return err
 	}
-	return ensureColumn(db, "clip_items", "tags_json", "TEXT NOT NULL DEFAULT '[]'")
+	if err := ensureColumn(db, "clip_items", "tags_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		return err
+	}
+	return ensureColumn(db, "clip_items", "pin_order", "INTEGER NOT NULL DEFAULT 0")
 }
 
 func ensureColumn(db *sql.DB, table, col, def string) error {
@@ -746,7 +750,7 @@ func (s *Store) listItems(query string, kind ClipKind, limit int, summary bool) 
 SELECT `+cols+`
 FROM clip_items
 `+where+`
-ORDER BY pinned DESC, updated_at DESC, id DESC`+limitClause, args...)
+ORDER BY pinned DESC, pin_order ASC, updated_at DESC, id DESC`+limitClause, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -802,15 +806,89 @@ func (s *Store) TouchItem(id int64) error {
 func (s *Store) TogglePin(id int64) (bool, error) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	if _, err := s.db.Exec(`UPDATE clip_items SET pinned = 1 - pinned WHERE id = ?`, id); err != nil {
-		return false, err
-	}
-	s.bumpRevision(false)
 	var pinned int
 	if err := s.db.QueryRow(`SELECT pinned FROM clip_items WHERE id = ?`, id).Scan(&pinned); err != nil {
 		return false, err
 	}
-	return pinned != 0, nil
+	if pinned == 0 {
+		if _, err := s.db.Exec(
+			`UPDATE clip_items SET pinned = 1, pin_order = COALESCE((SELECT MIN(pin_order) FROM clip_items WHERE pinned = 1), 0) - 1 WHERE id = ?`,
+			id,
+		); err != nil {
+			return false, err
+		}
+		s.bumpRevision(false)
+		return true, nil
+	}
+	if _, err := s.db.Exec(`UPDATE clip_items SET pinned = 0, pin_order = 0 WHERE id = ?`, id); err != nil {
+		return false, err
+	}
+	s.bumpRevision(false)
+	return false, nil
+}
+
+// ReorderPinned persists the relative order of the given pinned item IDs while
+// preserving the slots of any pinned items not included in orderedIDs (e.g. when
+// dragging inside a filtered view).
+func (s *Store) ReorderPinned(orderedIDs []int64) error {
+	if len(orderedIDs) == 0 {
+		return nil
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.Query(`SELECT id FROM clip_items WHERE pinned = 1 ORDER BY pin_order ASC, updated_at DESC, id DESC`)
+	if err != nil {
+		return err
+	}
+	var allPinned []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		allPinned = append(allPinned, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	_ = rows.Close()
+
+	subset := make(map[int64]struct{}, len(orderedIDs))
+	for _, id := range orderedIDs {
+		subset[id] = struct{}{}
+	}
+	orderedIdx := 0
+	for i, id := range allPinned {
+		if _, ok := subset[id]; ok && orderedIdx < len(orderedIDs) {
+			allPinned[i] = orderedIDs[orderedIdx]
+			orderedIdx++
+		}
+	}
+
+	stmt, err := tx.Prepare(`UPDATE clip_items SET pin_order = ? WHERE id = ? AND pinned = 1`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for i, id := range allPinned {
+		if _, err := stmt.Exec(i+1, id); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.bumpRevision(false)
+	return nil
 }
 
 func normalizeTags(tags []string) []string {

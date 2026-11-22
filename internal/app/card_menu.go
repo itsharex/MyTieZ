@@ -109,9 +109,8 @@ var cardContextMenuActions = []cardMenuAction{
 					_, applied := existing[tagName]
 					it := sub.Item(tagName).
 						ID(fmt.Sprintf("card-menu:quick-tag:%d:%s", i, tagName)).
-						Tooltip(tagName).
-						Checked(applied)
-					if styleCardMenuItem(it, tagName, "").Chosen() {
+						Tooltip(tagName)
+					if styleCardMenuCheckItem(it, tagName, applied).Chosen() {
 						if applied {
 							a.removeTagFromItem(item, tagName)
 						} else {
@@ -343,6 +342,22 @@ func styleCardMenuItem(it *ui.MenuItem, title, subtitle string) *ui.MenuItem {
 				Margin(1, 0, 0, 0).
 				SingleLine()
 		}
+	})
+}
+
+func styleCardMenuCheckItem(it *ui.MenuItem, title string, checked bool) *ui.MenuItem {
+	return it.Content(func(mc ui.MenuItemContent) {
+		ui.Row(mc.Context).AlignItems(ui.Center).Gap(6).Children(func() {
+			ui.Box(mc.Context).Size(fileMenuTitleFontSize, fileMenuTitleFontSize).Center().Shrink(0).Children(func() {
+				if checked {
+					ui.Icon(mc.Context, iconCheck).FontSize(fileMenuTitleFontSize).TextColor(mc.Text)
+				}
+			})
+			ui.Text(mc.Context, title).
+				FontSize(fileMenuTitleFontSize).
+				TextColor(mc.Text).
+				SingleLine()
+		})
 	})
 }
 

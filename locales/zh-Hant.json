@@ -31,6 +31,9 @@
   "cardActionTag": "標籤",
   "cardActionPin": "釘選",
   "cardActionDelete": "刪除",
+  "cardMenuEditTags": "編輯標籤",
+  "cardMenuQuickTag": "快捷標籤",
+  "cardMenuUnpin": "取消釘選",
   "cardFilesMore": "等共 {count} 個檔案",
   "fileMenuShowInFolder": "在資料夾中顯示",
   "fileMenuShowNamedFolder": "在資料夾中顯示：{name}",
@@ -158,6 +161,8 @@
   "settingsColorDark": "深色",
   "settingsColorDarkA11y": "外觀深色",
   "settingsCompactMode": "緊湊卡片模式",
+  "settingsShowAllCardActions": "顯示全部卡片操作",
+  "settingsShowAllCardActionsDesc": "開啟後顯示開啟、純文字貼上、標籤等全部快捷按鈕；關閉後僅保留釘選與刪除，其餘操作仍可透過右鍵選單使用",
   "settingsHideCardActions": "懸停顯示卡片操作",
   "settingsShowSourceIcon": "顯示來源應用圖示",
 

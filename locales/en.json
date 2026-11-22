@@ -31,6 +31,9 @@
   "cardActionTag": "Tags",
   "cardActionPin": "Pin",
   "cardActionDelete": "Delete",
+  "cardMenuEditTags": "Edit Tags",
+  "cardMenuQuickTag": "Quick Tag",
+  "cardMenuUnpin": "Unpin",
   "cardFilesMore": "and {count} files total",
   "fileMenuShowInFolder": "Show in Folder",
   "fileMenuShowNamedFolder": "Show in Folder: {name}",
@@ -158,6 +161,8 @@
   "settingsColorDark": "Dark",
   "settingsColorDarkA11y": "Theme Dark",
   "settingsCompactMode": "Compact Cards",
+  "settingsShowAllCardActions": "Show All Card Actions",
+  "settingsShowAllCardActionsDesc": "Show open, plain-text paste, and tag buttons on cards; when off, only pin and delete remain (other actions stay in the context menu)",
   "settingsHideCardActions": "Show Actions on Hover",
   "settingsShowSourceIcon": "Show Source App Icon",
 

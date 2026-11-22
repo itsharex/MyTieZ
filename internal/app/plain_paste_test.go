@@ -84,21 +84,15 @@ func TestRichTextContextMenuPlainAndFormatted(t *testing.T) {
 		t.Fatalf("expected plain-text ignoreHash %q to prevent loop, got %q", wantPlainHash, a.ignoreHash)
 	}
 
-	// Right-click again and pick formatted paste.
+	// Right-click again and verify only plain-paste (no formatted paste item) is shown.
 	tt.RightClickAt(rect.X+12, rect.Y+rect.H/2)
-	fmtInfo, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.RichMenuPasteFormatted())
-	if !ok {
-		t.Fatalf("expected %q in rich text context menu, menu=%q", msgs.RichMenuPasteFormatted(), tt.Menu())
+	if _, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.RichMenuPasteFormatted()); ok {
+		t.Fatalf("did not expect %q in unified rich text context menu, menu=%q", msgs.RichMenuPasteFormatted(), tt.Menu())
 	}
-	clickCenter(tt, fmtInfo.Bounds)
-
-	if len(*writes) != 2 || (*writes)[1].plainText {
-		t.Fatalf("expected formatted write on second choice, got %+v", *writes)
+	if _, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.CardActionOpen()); !ok {
+		t.Fatalf("expected %q in unified rich text context menu, menu=%q", msgs.CardActionOpen(), tt.Menu())
 	}
-	wantRichHash := store.TextContentHash(richText, richHTML)
-	if a.ignoreHash != wantRichHash {
-		t.Fatalf("expected rich ignoreHash %q, got %q", wantRichHash, a.ignoreHash)
-	}
+	tt.Key(0, ui.KeyEscape)
 }
 
 func TestRichTextContextMenuCopyOnlyLabels(t *testing.T) {
@@ -119,8 +113,8 @@ func TestRichTextContextMenuCopyOnlyLabels(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected %q under ClickCopyOnly, menu=%q", msgs.RichMenuCopyPlain(), tt.Menu())
 	}
-	if _, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.RichMenuCopyFormatted()); !ok {
-		t.Fatalf("expected %q under ClickCopyOnly, menu=%q", msgs.RichMenuCopyFormatted(), tt.Menu())
+	if _, ok := tt.AccessByRole(ui.RoleMenuItem, msgs.RichMenuCopyFormatted()); ok {
+		t.Fatalf("did not expect %q under unified menu, menu=%q", msgs.RichMenuCopyFormatted(), tt.Menu())
 	}
 	clickCenter(tt, copyPlainInfo.Bounds)
 

@@ -20,13 +20,137 @@ const (
 	maxFileMenuDirEntries = 5
 	fileMenuStatTTL       = time.Second
 
-	fileMenuMinWidth        float32 = 156
-	fileMenuMultiMaxWidth   float32 = 236
-	fileMenuSingleMaxWidth  float32 = 204
-	fileMenuTitleFontSize   float32 = 12
-	fileMenuSubFontSize     float32 = 10.5
-	fileMenuPanelRadius     float32 = 10
+	cardMenuMinWidth      float32 = 140
+	cardMenuMaxWidth      float32 = 188
+	fileMenuMultiMaxWidth float32 = 236
+	fileMenuTitleFontSize  float32 = 12
+	fileMenuSubFontSize    float32 = 10.5
+	fileMenuPanelRadius    float32 = 10
 )
+
+type cardMenuAction struct {
+	id              string
+	separatorBefore bool
+	visible         func(a *clipApp, item store.ClipItem) bool
+	build           func(a *clipApp, c *ui.Context, msgs locales.Messages, item store.ClipItem, m *ui.Menu)
+}
+
+// cardContextMenuActions centralizes every item shown in the card context menu
+// in display order so future actions only need a single entry here.
+var cardContextMenuActions = []cardMenuAction{
+	{
+		id: "open",
+		visible: func(_ *clipApp, item store.ClipItem) bool {
+			return item.Kind != store.KindFile || len(nonEmptyPaths(item.Files)) > 0
+		},
+		build: func(a *clipApp, c *ui.Context, msgs locales.Messages, item store.ClipItem, m *ui.Menu) {
+			if item.Kind != store.KindFile {
+				title := msgs.CardActionOpen()
+				if styleCardMenuItem(m.Item(title).ID("card-menu:open"), title, "").Chosen() {
+					a.openItem(item)
+				}
+				return
+			}
+			files := nonEmptyPaths(item.Files)
+			if len(files) == 1 {
+				a.buildSingleFileMenuItems(c, item, m)
+				return
+			}
+			openTitle := msgs.CardActionOpen()
+			subIt := m.Submenu(openTitle, func(sub *ui.Menu) {
+				a.buildMultiFileMenu(c, item, sub)
+			}).ID("card-menu:open-files")
+			styleCardMenuItem(subIt, openTitle, "")
+		},
+	},
+	{
+		id: "plain_paste",
+		visible: func(_ *clipApp, item store.ClipItem) bool {
+			return item.Kind == store.KindRichText
+		},
+		build: func(a *clipApp, _ *ui.Context, msgs locales.Messages, item store.ClipItem, m *ui.Menu) {
+			plainLabel := msgs.RichMenuPastePlain()
+			if a.settings.ClickCopyOnly {
+				plainLabel = msgs.RichMenuCopyPlain()
+			}
+			plainIt := m.Item(plainLabel).ID("card-menu:plain-paste")
+			if sc := strings.TrimSpace(a.settings.PlainPasteShortcut); sc != "" {
+				plainIt.Trailing(sc)
+			}
+			if styleCardMenuItem(plainIt, plainLabel, "").Chosen() {
+				a.pasteItem(item, true)
+			}
+		},
+	},
+	{
+		id: "edit_tags",
+		visible: func(_ *clipApp, _ store.ClipItem) bool {
+			return true
+		},
+		build: func(a *clipApp, _ *ui.Context, msgs locales.Messages, item store.ClipItem, m *ui.Menu) {
+			title := msgs.CardMenuEditTags()
+			if styleCardMenuItem(m.Item(title).ID("card-menu:edit-tags"), title, "").Chosen() {
+				a.openTagEditor(item.ID)
+			}
+		},
+	},
+	{
+		id: "quick_tag",
+		visible: func(a *clipApp, _ store.ClipItem) bool {
+			return len(a.allTags) > 0
+		},
+		build: func(a *clipApp, _ *ui.Context, msgs locales.Messages, item store.ClipItem, m *ui.Menu) {
+			subTitle := msgs.CardMenuQuickTag()
+			subIt := m.Submenu(subTitle, func(sub *ui.Menu) {
+				sub.MaxWidth(min(cardMenuMaxWidth, a.panelWidth()-64))
+				existing := make(map[string]struct{}, len(item.Tags))
+				for _, tg := range item.Tags {
+					existing[tg] = struct{}{}
+				}
+				for i, tag := range a.allTags {
+					tagName := tag
+					_, applied := existing[tagName]
+					it := sub.Item(tagName).
+						ID(fmt.Sprintf("card-menu:quick-tag:%d:%s", i, tagName)).
+						Tooltip(tagName).
+						Disabled(applied)
+					if styleCardMenuItem(it, tagName, "").Chosen() {
+						a.addTagToItem(item, tagName)
+					}
+				}
+			}).ID("card-menu:quick-tag")
+			styleCardMenuItem(subIt, subTitle, "")
+		},
+	},
+	{
+		id: "pin",
+		visible: func(_ *clipApp, _ store.ClipItem) bool {
+			return true
+		},
+		build: func(a *clipApp, _ *ui.Context, msgs locales.Messages, item store.ClipItem, m *ui.Menu) {
+			title := msgs.CardActionPin()
+			if item.Pinned {
+				title = msgs.CardMenuUnpin()
+			}
+			if styleCardMenuItem(m.Item(title).ID("card-menu:pin"), title, "").Chosen() {
+				a.togglePin(item.ID)
+			}
+		},
+	},
+	{
+		id:              "delete",
+		separatorBefore: true,
+		visible: func(_ *clipApp, _ store.ClipItem) bool {
+			return true
+		},
+		build: func(a *clipApp, _ *ui.Context, msgs locales.Messages, item store.ClipItem, m *ui.Menu) {
+			title := msgs.CardActionDelete()
+			if styleCardMenuItem(m.Item(title).ID("card-menu:delete").Danger(), title, "").Chosen() {
+				a.deleteItem(item.ID)
+			}
+		},
+	},
+}
 
 func (a *clipApp) fileMenuOpenPtr(id int64) *bool {
 	if a.fileMenuOpen == nil {
@@ -165,11 +289,28 @@ func hasDuplicateBaseNames(files []string) bool {
 	return false
 }
 
+// cardPopoverPanelStyle keeps menu panels themed and bounded so submenus fit
+// comfortably inside the 400px panel even when flipped horizontally or opened
+// near the center.
 func (a *clipApp) cardPopoverPanelStyle(c *ui.Context, t *ui.Theme, maxW float32) func(panel ui.Element) {
 	bg := a.floatingSurface(c, t)
 	sa := shadowAlpha(t, 0.14, 0.36)
+	panelIdx := 0
 	return func(panel ui.Element) {
-		panel.MinWidth(fileMenuMinWidth).MaxWidth(maxW).
+		minW, curMaxW := cardMenuMinWidth, maxW
+		if panelIdx == 0 {
+			panel.Bind(&a.cardMenuRootHandle)
+		} else if rb := a.cardMenuRootHandle.Bounds(c); rb.W > 0 {
+			const edgeMargin float32 = 4
+			leftRoom := rb.X - edgeMargin
+			rightRoom := a.panelWidth() - edgeMargin - (rb.X + rb.W)
+			if availW := max(leftRoom, rightRoom); availW > 0 {
+				curMaxW = max(72, min(maxW, availW))
+				minW = min(cardMenuMinWidth, curMaxW)
+			}
+		}
+		panelIdx++
+		panel.MinWidth(minW).MaxWidth(curMaxW).
 			Padding(4).Radius(fileMenuPanelRadius).
 			Background(bg).Border(1, t.Border).
 			NoShadow().Shadow(0, 6, 18, 0, ui.RGBA(0, 0, 0, sa))
@@ -266,13 +407,12 @@ func (a *clipApp) buildMultiFileMenu(c *ui.Context, item store.ClipItem, m *ui.M
 	}
 }
 
-func (a *clipApp) buildSingleFileMenu(c *ui.Context, item store.ClipItem, m *ui.Menu) {
+func (a *clipApp) buildSingleFileMenuItems(c *ui.Context, item store.ClipItem, m *ui.Menu) {
 	files := nonEmptyPaths(item.Files)
 	if len(files) == 0 {
 		return
 	}
 	msgs := locales.In(c.Locale())
-	m.MaxWidth(min(fileMenuSingleMaxWidth, a.panelWidth()-64))
 
 	p := files[0]
 	exists := a.fileMenuExistMap(item, files)[p]
@@ -332,64 +472,29 @@ func (a *clipApp) renderFileOpenMenuBtn(c *ui.Context, item store.ClipItem, acti
 		})
 }
 
-func (a *clipApp) attachFileCardContextMenu(c *ui.Context, card ui.Element, item store.ClipItem) {
-	if item.Kind != store.KindFile {
-		return
-	}
-	files := nonEmptyPaths(item.Files)
-	if len(files) == 0 {
-		return
-	}
-	t := c.Theme()
-	maxW := min(fileMenuMultiMaxWidth, a.panelWidth()-64)
-	if len(files) == 1 {
-		maxW = min(fileMenuSingleMaxWidth, a.panelWidth()-64)
-	}
-	card.PopoverMenu(func(m *ui.Menu) {
-		if len(files) == 1 {
-			a.buildSingleFileMenu(c, item, m)
-			return
-		}
-		a.buildMultiFileMenu(c, item, m)
-	}, ui.PopoverMenuOptions{
-		Panel: a.cardPopoverPanelStyle(c, t, maxW),
-		Item:  cardPopoverItemStyle,
-	})
-}
-
-func (a *clipApp) buildRichTextMenu(c *ui.Context, item store.ClipItem, m *ui.Menu) {
+func (a *clipApp) buildCardContextMenu(c *ui.Context, item store.ClipItem, m *ui.Menu) {
 	msgs := locales.In(c.Locale())
-	plainLabel := msgs.RichMenuPastePlain()
-	richLabel := msgs.RichMenuPasteFormatted()
-	if a.settings.ClickCopyOnly {
-		plainLabel = msgs.RichMenuCopyPlain()
-		richLabel = msgs.RichMenuCopyFormatted()
-	}
+	m.MaxWidth(min(cardMenuMaxWidth, a.panelWidth()-64))
 
-	plainIt := m.Item(plainLabel).ID("rich-menu:plain")
-	if sc := strings.TrimSpace(a.settings.PlainPasteShortcut); sc != "" {
-		plainIt.Trailing(sc)
-	}
-	if styleCardMenuItem(plainIt, plainLabel, "").Chosen() {
-		a.pasteItem(item, true)
-	}
-
-	richIt := m.Item(richLabel).ID("rich-menu:formatted")
-	if styleCardMenuItem(richIt, richLabel, "").Chosen() {
-		a.pasteItem(item, false)
+	hasPrev := false
+	for _, act := range cardContextMenuActions {
+		if act.visible != nil && !act.visible(a, item) {
+			continue
+		}
+		if act.separatorBefore && hasPrev {
+			m.Separator()
+		}
+		act.build(a, c, msgs, item, m)
+		hasPrev = true
 	}
 }
 
-func (a *clipApp) attachRichTextCardContextMenu(c *ui.Context, card ui.Element, item store.ClipItem) {
-	if item.Kind != store.KindRichText {
-		return
-	}
+func (a *clipApp) attachCardContextMenu(c *ui.Context, card ui.Element, item store.ClipItem) {
 	t := c.Theme()
-	maxW := min(fileMenuMultiMaxWidth, a.panelWidth()-64)
 	card.PopoverMenu(func(m *ui.Menu) {
-		a.buildRichTextMenu(c, item, m)
+		a.buildCardContextMenu(c, item, m)
 	}, ui.PopoverMenuOptions{
-		Panel: a.cardPopoverPanelStyle(c, t, maxW),
+		Panel: a.cardPopoverPanelStyle(c, t, min(cardMenuMaxWidth, a.panelWidth()-64)),
 		Item:  cardPopoverItemStyle,
 	})
 }

@@ -316,6 +316,36 @@ func (msgs Messages) CardActionDelete() string {
 	return Catalog.Format(msgs.locale, "cardActionDelete", nil)
 }
 
+// CardMenuEditTags says "编辑标签"
+// in the language the app shows.
+func CardMenuEditTags() string { return In(i18n.Locale()).CardMenuEditTags() }
+
+// CardMenuEditTags says "编辑标签"
+// in the language of msgs.
+func (msgs Messages) CardMenuEditTags() string {
+	return Catalog.Format(msgs.locale, "cardMenuEditTags", nil)
+}
+
+// CardMenuQuickTag says "快捷标签"
+// in the language the app shows.
+func CardMenuQuickTag() string { return In(i18n.Locale()).CardMenuQuickTag() }
+
+// CardMenuQuickTag says "快捷标签"
+// in the language of msgs.
+func (msgs Messages) CardMenuQuickTag() string {
+	return Catalog.Format(msgs.locale, "cardMenuQuickTag", nil)
+}
+
+// CardMenuUnpin says "取消置顶"
+// in the language the app shows.
+func CardMenuUnpin() string { return In(i18n.Locale()).CardMenuUnpin() }
+
+// CardMenuUnpin says "取消置顶"
+// in the language of msgs.
+func (msgs Messages) CardMenuUnpin() string {
+	return Catalog.Format(msgs.locale, "cardMenuUnpin", nil)
+}
+
 // CardFilesMore says "等共 {count} 个文件"
 // in the language the app shows.
 func CardFilesMore(count int) string { return In(i18n.Locale()).CardFilesMore(count) }
@@ -1532,6 +1562,28 @@ func SettingsCompactMode() string { return In(i18n.Locale()).SettingsCompactMode
 // in the language of msgs.
 func (msgs Messages) SettingsCompactMode() string {
 	return Catalog.Format(msgs.locale, "settingsCompactMode", nil)
+}
+
+// SettingsShowAllCardActions says "显示全部卡片操作"
+// in the language the app shows.
+func SettingsShowAllCardActions() string { return In(i18n.Locale()).SettingsShowAllCardActions() }
+
+// SettingsShowAllCardActions says "显示全部卡片操作"
+// in the language of msgs.
+func (msgs Messages) SettingsShowAllCardActions() string {
+	return Catalog.Format(msgs.locale, "settingsShowAllCardActions", nil)
+}
+
+// SettingsShowAllCardActionsDesc says "…"
+// in the language the app shows.
+func SettingsShowAllCardActionsDesc() string {
+	return In(i18n.Locale()).SettingsShowAllCardActionsDesc()
+}
+
+// SettingsShowAllCardActionsDesc says "…"
+// in the language of msgs.
+func (msgs Messages) SettingsShowAllCardActionsDesc() string {
+	return Catalog.Format(msgs.locale, "settingsShowAllCardActionsDesc", nil)
 }
 
 // SettingsHideCardActions says "悬停显示卡片操作"

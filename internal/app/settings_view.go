@@ -163,6 +163,9 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.renderSwitchRow(c, msgs.SettingsCompactMode(), "", &a.settings.CompactMode, func(bool) {
 						a.persistSettings()
 					})
+					a.renderSwitchRow(c, msgs.SettingsShowAllCardActions(), msgs.SettingsShowAllCardActionsDesc(), &a.settings.ShowAllCardActions, func(bool) {
+						a.persistSettings()
+					})
 					a.renderSwitchRow(c, msgs.SettingsHideCardActions(), "", &a.settings.HideCardActions, func(bool) {
 						a.persistSettings()
 					})

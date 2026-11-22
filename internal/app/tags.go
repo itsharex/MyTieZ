@@ -112,10 +112,16 @@ func (a *clipApp) toggleTagEditor(id int64) {
 		a.editingTagOrder = nil
 		return
 	}
-	a.editingTagsID = id
-	a.tagInput = ""
+	a.openTagEditor(id)
+}
+
+func (a *clipApp) openTagEditor(id int64) {
+	if a.editingTagsID != id {
+		a.editingTagsID = id
+		a.tagInput = ""
+		a.editingTagOrder = append([]string(nil), a.allTags...)
+	}
 	a.tagFocusPending = true
-	a.editingTagOrder = append([]string(nil), a.allTags...)
 	a.activatePanelForInput()
 }
 

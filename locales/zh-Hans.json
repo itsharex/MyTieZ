@@ -31,6 +31,9 @@
   "cardActionTag": "标签",
   "cardActionPin": "置顶",
   "cardActionDelete": "删除",
+  "cardMenuEditTags": "编辑标签",
+  "cardMenuQuickTag": "快捷标签",
+  "cardMenuUnpin": "取消置顶",
   "cardFilesMore": "等共 {count} 个文件",
   "@cardFilesMore": {
     "placeholders": {
@@ -188,6 +191,8 @@
   "settingsColorDark": "深色",
   "settingsColorDarkA11y": "外观深色",
   "settingsCompactMode": "紧凑卡片模式",
+  "settingsShowAllCardActions": "显示全部卡片操作",
+  "settingsShowAllCardActionsDesc": "开启后显示打开、纯文本粘贴、标签等全部快捷按钮；关闭后仅保留置顶与删除，其余操作仍可通过右键菜单使用",
   "settingsHideCardActions": "悬停显示卡片操作",
   "settingsShowSourceIcon": "显示来源应用图标",
 

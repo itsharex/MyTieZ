@@ -392,7 +392,8 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 
 				isSensitive := store.HasSensitiveTag(item.Tags)
 				isRevealed := isSensitive && a.revealedSensitive[item.ID]
-				isMultiFile := item.Kind == store.KindFile && len(nonEmptyPaths(item.Files)) > 1
+				showAllActions := a.settings.ShowAllCardActions
+				isMultiFile := showAllActions && item.Kind == store.KindFile && len(nonEmptyPaths(item.Files)) > 1
 				fileMenuOpen := isMultiFile && a.isFileMenuOpen(item.ID)
 				if isSensitive && (!a.settings.HideCardActions || hovered || isRevealed) {
 					eyeIcon := iconEye
@@ -407,16 +408,27 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 				}
 
 				if !a.settings.HideCardActions || hovered || fileMenuOpen {
-					if isMultiFile {
-						a.renderFileOpenMenuBtn(c, item, fileMenuOpen)
-					} else {
-						a.renderCardActionBtn(c, iconOpen, msgs.CardActionOpen(), false, func() {
-							a.openItem(item)
+					if showAllActions {
+						if item.Kind == store.KindRichText {
+							plainLabel := msgs.RichMenuPastePlain()
+							if a.settings.ClickCopyOnly {
+								plainLabel = msgs.RichMenuCopyPlain()
+							}
+							a.renderCardActionBtn(c, iconPlainPaste, plainLabel, false, func() {
+								a.pasteItem(item, true)
+							})
+						}
+						if isMultiFile {
+							a.renderFileOpenMenuBtn(c, item, fileMenuOpen)
+						} else {
+							a.renderCardActionBtn(c, iconOpen, msgs.CardActionOpen(), false, func() {
+								a.openItem(item)
+							})
+						}
+						a.renderCardActionBtn(c, iconTag, msgs.CardActionTag(), len(item.Tags) > 0 || a.editingTagsID == item.ID, func() {
+							a.toggleTagEditor(item.ID)
 						})
 					}
-					a.renderCardActionBtn(c, iconTag, msgs.CardActionTag(), len(item.Tags) > 0 || a.editingTagsID == item.ID, func() {
-						a.toggleTagEditor(item.ID)
-					})
 					a.renderCardActionBtn(c, iconPin, msgs.CardActionPin(), item.Pinned, func() {
 						a.togglePin(item.ID)
 					})
@@ -464,8 +476,7 @@ func (a *clipApp) renderCard(row ui.ListRow) {
 			a.renderCardTags(c, t, item)
 		})
 
-	a.attachFileCardContextMenu(c, card, item)
-	a.attachRichTextCardContextMenu(c, card, item)
+	a.attachCardContextMenu(c, card, item)
 
 	if card.RowClicked() {
 		a.selected = row.Index

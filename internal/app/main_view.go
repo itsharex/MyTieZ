@@ -71,6 +71,7 @@ func (a *clipApp) renderWindowActionButtons(c *ui.Context) {
 }
 
 func (a *clipApp) view(c *ui.Context) {
+	defer func() { a.closeCardContextMenu = false }()
 	c.SetTheme(a.resolveTheme(c))
 	t := c.Theme()
 	c.Root().Background(a.rootBackground(c, t))

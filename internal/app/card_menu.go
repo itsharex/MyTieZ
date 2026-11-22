@@ -186,6 +186,7 @@ func (a *clipApp) hasOpenFileMenu() bool {
 }
 
 func (a *clipApp) closeFileMenus() {
+	a.closeCardContextMenu = true
 	for _, ptr := range a.fileMenuOpen {
 		if ptr != nil {
 			*ptr = false
@@ -474,6 +475,9 @@ func (a *clipApp) renderFileOpenMenuBtn(c *ui.Context, item store.ClipItem, acti
 }
 
 func (a *clipApp) buildCardContextMenu(c *ui.Context, item store.ClipItem, m *ui.Menu) {
+	if a.closeCardContextMenu {
+		return
+	}
 	msgs := locales.In(c.Locale())
 	m.MaxWidth(min(cardMenuMaxWidth, a.panelWidth()-64))
 

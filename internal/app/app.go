@@ -65,7 +65,8 @@ type clipApp struct {
 	fileMenuStatAt     time.Time
 	fileMenuStatPaths  []string
 	fileMenuExists     map[string]bool
-	cardMenuRootHandle ui.Handle
+	cardMenuRootHandle   ui.Handle
+	closeCardContextMenu bool
 
 	ignoreHash       string
 	ignoreUntil      time.Time

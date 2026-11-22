@@ -560,3 +560,35 @@ func TestFileMenuHideCardActionsAndNoFocusEscape(t *testing.T) {
 		t.Fatalf("expected Escape to close menu without opening files")
 	}
 }
+
+func TestContextMenuDismissedOnHidePanelAndReopens(t *testing.T) {
+	msgs := locales.In("zh-Hans")
+	st, a := newTestAppWithStore(t)
+	_, _ = st.SaveText("hide panel menu check", store.SaveOptions{})
+	a.reload()
+
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	rect, ok := tt.Find("hide panel menu check")
+	if !ok {
+		t.Fatalf("expected card in view")
+	}
+
+	tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
+	if got := tt.Menu(); len(got) == 0 {
+		t.Fatalf("expected context menu open after right-click")
+	}
+
+	// Simulate hiding and re-showing the panel: menu must be dismissed on next frame.
+	a.hidePanel()
+	tt.Frame()
+	if got := tt.Menu(); len(got) != 0 {
+		t.Fatalf("expected context menu closed after hidePanel, got %q", got)
+	}
+
+	// Right-clicking again after re-show must still open the menu normally.
+	tt.RightClickAt(rect.X+16, rect.Y+rect.H/2)
+	want := []string{msgs.CardActionOpen(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}
+	if got := tt.Menu(); !slices.Equal(got, want) {
+		t.Fatalf("expected context menu %q to reopen normally, got %q", want, got)
+	}
+}

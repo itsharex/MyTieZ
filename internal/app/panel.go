@@ -16,6 +16,7 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 	if a.panel == nil {
 		return
 	}
+	a.stopIdleUnloadTimer()
 	sys.TrackForegroundWindow()
 	wasDocked := a.edgeDock != dockNone
 	if wasDocked {
@@ -78,6 +79,7 @@ func (a *clipApp) hidePanel() {
 		a.setPanelNoActivate(true)
 	}
 	a.releaseHiddenMemory()
+	a.scheduleIdleUnload()
 }
 
 func (a *clipApp) togglePanel() {

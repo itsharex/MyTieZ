@@ -50,9 +50,19 @@ func WorkingSetBytes() uintptr {
 	return pmc.workingSetSize
 }
 
-// TrimMemory gently trims excess physical pages when the working set exceeds 50 MB,
-// keeping a 20-36 MB soft working set target to avoid aggressive page-out thrashing.
+// TrimMemory gently trims excess physical pages when the working set exceeds 75 MB,
+// keeping a 24-48 MB soft working set target to avoid aggressive page-out thrashing.
 func TrimMemory() bool {
+	return trimWorkingSetAbove(MemoryTrimThresholdBytes)
+}
+
+// TrimIdleMemory trims excess physical pages when the app has been hidden and
+// unloaded for an idle period, using the 48 MB soft ceiling as threshold.
+func TrimIdleMemory() bool {
+	return trimWorkingSetAbove(memorySoftMaxBytes)
+}
+
+func trimWorkingSetAbove(threshold uintptr) bool {
 	proc, _, _ := procGetCurrentProcess.Call()
 	if proc == 0 {
 		return false
@@ -60,7 +70,7 @@ func TrimMemory() bool {
 	var pmc processMemoryCounters
 	pmc.cb = uint32(unsafe.Sizeof(pmc))
 	ok, _, _ := procGetProcessMemoryInfo.Call(proc, uintptr(unsafe.Pointer(&pmc)), uintptr(pmc.cb))
-	if ok == 0 || pmc.workingSetSize <= MemoryTrimThresholdBytes {
+	if ok == 0 || pmc.workingSetSize <= threshold {
 		return false
 	}
 	_, _, _ = procSetProcessWorkingSet.Call(proc, memorySoftMinBytes, memorySoftMaxBytes)

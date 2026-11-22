@@ -5,7 +5,11 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func TestDecodeThumbBitmapDownscales(t *testing.T) {
@@ -70,5 +74,69 @@ func TestDownscaleBilinearFastPaths(t *testing.T) {
 	gotR := outRGBA.RGBAAt(8, 4)
 	if gotR != (color.RGBA{R: 90, G: 140, B: 210, A: 255}) {
 		t.Fatalf("unexpected pixel from RGBA fast path: %+v", gotR)
+	}
+}
+
+func TestDecodeThumbBitmapFile(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 1200, 600))
+	path := filepath.Join(t.TempDir(), "sample.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, src); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	bmp, err := decodeThumbBitmapFile(path, 720, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, h := bmp.Size()
+	if w != 400 || h != 200 {
+		t.Fatalf("expected 400x200 downscaled thumbnail, got %dx%d", w, h)
+	}
+}
+
+func TestBitmapCacheByteBudgetEviction(t *testing.T) {
+	bc := newBitmapCacheWithBudget(0, 0)
+	// Each 100x100 bitmap is 40,000 bytes (RGBA).
+	makeBmp := func() *ui.Bitmap {
+		return ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 100, 100)))
+	}
+	bc.put("a", makeBmp())
+	bc.put("b", makeBmp())
+	bc.put("c", makeBmp())
+	if got := bc.bytes(); got != 120000 {
+		t.Fatalf("expected 120000 tracked bytes, got %d", got)
+	}
+
+	// Budget 80,000 keeps the 2 most recent entries (b, c) and evicts a.
+	if !bc.pruneToBytes(80000) {
+		t.Fatalf("expected pruneToBytes to evict oldest entry")
+	}
+	if bc.len() != 2 || bc.bytes() != 80000 {
+		t.Fatalf("expected 2 entries / 80000 bytes, got %d / %d", bc.len(), bc.bytes())
+	}
+	if _, ok := bc.items["a"]; ok {
+		t.Fatalf("expected oldest entry a evicted")
+	}
+	if _, ok := bc.items["c"]; !ok {
+		t.Fatalf("expected newest entry c retained")
+	}
+
+	// Very tight budget still keeps at least the newest entry.
+	bc.pruneToBytes(1)
+	if bc.len() != 1 || bc.bytes() != 40000 {
+		t.Fatalf("expected 1 newest entry retained under tight budget, got %d / %d", bc.len(), bc.bytes())
+	}
+
+	bc.clear()
+	if bc.bytes() != 0 {
+		t.Fatalf("expected 0 bytes after clear, got %d", bc.bytes())
 	}
 }

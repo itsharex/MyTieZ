@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,6 +22,10 @@ const (
 	// warmThumbCacheLimit keeps up to 8 recently viewed thumbnails (~1 MB) intact
 	// on panel hide when process memory is healthy.
 	warmThumbCacheLimit = 8
+	// idleUnloadDelay unloads hidden UI caches and item slices after the panel
+	// stays hidden for 3 minutes (inspired by CopyQ's tab expiration), allowing
+	// long-running background instances to settle at minimal RAM usage.
+	idleUnloadDelay = 3 * time.Minute
 )
 
 type clipApp struct {
@@ -87,6 +92,7 @@ type clipApp struct {
 	persistTimer     *time.Timer
 	persistPending   bool
 	updateTimer      *time.Timer
+	idleUnloadTimer  *time.Timer
 	updateChecking   bool
 	updateInstalling bool
 	updateProgress   int
@@ -130,8 +136,8 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 		atTop:           true,
 		winPinned:       !cfg.AutoHideOnBlur,
 		panelNoActivate: cfg.NoFocusMode,
-		thumbs:          newBitmapCacheWithConcurrency(2),
-		appIcons:        newBitmapCacheWithConcurrency(2),
+		thumbs:          newBitmapCacheWithBudget(2, maxThumbCacheBytes),
+		appIcons:        newBitmapCacheWithBudget(2, maxAppIconCacheBytes),
 	}
 	a.syncPlainPasteShortcut()
 	return a
@@ -177,10 +183,73 @@ func (a *clipApp) applyAutoHide(autoHide bool) {
 	a.syncOutsideClickWatch()
 }
 
+func (a *clipApp) stopIdleUnloadTimer() {
+	if a.idleUnloadTimer != nil {
+		a.idleUnloadTimer.Stop()
+		a.idleUnloadTimer = nil
+	}
+}
+
+func (a *clipApp) scheduleIdleUnload() {
+	a.stopIdleUnloadTimer()
+	if a.panel == nil || a.quitting {
+		return
+	}
+	a.idleUnloadTimer = time.AfterFunc(idleUnloadDelay, func() {
+		if a.panel != nil {
+			a.panel.Update(a.unloadHiddenIdleState)
+		}
+	})
+}
+
+// unloadHiddenIdleState releases UI lists and caches after the panel stays hidden
+// for idleUnloadDelay, similar to CopyQ's expired tab unloading. The next showPanel
+// reloads fresh summaries seamlessly via reloadIfStale.
+func (a *clipApp) unloadHiddenIdleState() {
+	a.stopIdleUnloadTimer()
+	if a.quitting || (a.panel != nil && a.panel.IsVisible()) {
+		return
+	}
+	if a.thumbs != nil {
+		a.thumbs.clear()
+	}
+	if a.appIcons != nil {
+		a.appIcons.clear()
+	}
+	a.richSpans = nil
+	a.searchHits = nil
+	a.items = nil
+	a.selected = -1
+	a.loadedRevision = 0
+	a.fileMenuStatID = 0
+	a.fileMenuStatPaths = nil
+	a.fileMenuExists = nil
+	a.fileMenuOpen = nil
+
+	if a.memTrimming.CompareAndSwap(false, true) {
+		st := a.store
+		go func() {
+			defer a.memTrimming.Store(false)
+			if st != nil {
+				st.ShrinkMemory()
+			}
+			debug.FreeOSMemory()
+			sys.TrimIdleMemory()
+		}()
+	}
+}
+
 // releaseHiddenMemory prunes caches and trims OS working set pages as needed.
 // Under the 75 MB working set threshold, up to warmThumbCacheLimit (8) recently
 // viewed thumbnails and richSpans are preserved on hide to avoid wake-up CPU spikes.
 func (a *clipApp) releaseHiddenMemory() {
+	a.fileMenuStatID = 0
+	a.fileMenuStatPaths = nil
+	a.fileMenuExists = nil
+	if strings.TrimSpace(a.query) == "" {
+		a.searchHits = nil
+	}
+
 	overMemory := sys.WorkingSetBytes() > sys.MemoryTrimThresholdBytes
 
 	if a.thumbs != nil {
@@ -190,6 +259,9 @@ func (a *clipApp) releaseHiddenMemory() {
 			a.thumbs.pruneTo(warmThumbCacheLimit)
 		}
 	}
+	if overMemory && a.appIcons != nil {
+		a.appIcons.clear()
+	}
 	if overMemory && len(a.richSpans) > 0 {
 		a.richSpans = nil
 	}
@@ -198,8 +270,12 @@ func (a *clipApp) releaseHiddenMemory() {
 		return
 	}
 	if mygo.App.IsReady() && a.memTrimming.CompareAndSwap(false, true) {
+		st := a.store
 		go func() {
 			defer a.memTrimming.Store(false)
+			if st != nil {
+				st.ShrinkMemory()
+			}
 			if sys.WorkingSetBytes() > sys.MemoryTrimThresholdBytes {
 				debug.FreeOSMemory()
 				sys.TrimMemory()

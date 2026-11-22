@@ -1247,3 +1247,41 @@ func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 		t.Fatalf("expected recently viewed top image retained in LRU after scrolling to bottom")
 	}
 }
+
+func TestUnloadHiddenIdleStateAndReload(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	if _, err := st.SaveText("idle-unload-item", store.SaveOptions{Deduplicate: true, MaxHistory: 50}); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newClipApp(st, nil)
+	a.reload()
+	if len(a.items) != 1 {
+		t.Fatalf("expected 1 loaded item, got %d", len(a.items))
+	}
+	a.thumbs.put("t1", &ui.Bitmap{})
+	a.appIcons.put("i1", &ui.Bitmap{})
+	a.richSpans = map[int64][]ui.Span{1: {{Text: "span"}}}
+	a.searchHits = append([]store.ClipItem(nil), a.items...)
+	a.selected = 0
+
+	a.unloadHiddenIdleState()
+
+	if a.thumbs.len() != 0 || a.appIcons.len() != 0 || len(a.richSpans) != 0 {
+		t.Fatalf("expected all caches cleared on idle unload, got thumbs=%d icons=%d spans=%d", a.thumbs.len(), a.appIcons.len(), len(a.richSpans))
+	}
+	if len(a.items) != 0 || len(a.searchHits) != 0 || a.selected != -1 || a.loadedRevision != 0 {
+		t.Fatalf("expected list state unloaded, got items=%d searchHits=%d selected=%d rev=%d", len(a.items), len(a.searchHits), a.selected, a.loadedRevision)
+	}
+
+	// Next wake-up reloads transparently via reloadIfStale.
+	a.reloadIfStale()
+	if len(a.items) != 1 || a.items[0].Text != "idle-unload-item" {
+		t.Fatalf("expected item reloaded after idle unload, got %+v", a.items)
+	}
+}

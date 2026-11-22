@@ -2,7 +2,6 @@ package app
 
 import (
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -895,16 +894,14 @@ func (a *clipApp) getRichPreviewSpans(item store.ClipItem, t *ui.Theme) []ui.Spa
 
 const (
 	maxThumbCacheCount    = 24
+	maxThumbCacheBytes    = 8 << 20
+	maxAppIconCacheBytes  = 2 << 20
 	minThumbPreloadMargin = 3
 	maxThumbPreloadMargin = 6
 )
 
 func loadThumbFile(path string) (*ui.Bitmap, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return decodeThumbBitmap(data, 720, 200)
+	return decodeThumbBitmapFile(path, 720, 200)
 }
 
 func (a *clipApp) getOrLoadThumb(path string) *ui.Bitmap {
@@ -954,6 +951,7 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 	if a.thumbs.len() > maxThumbCacheCount {
 		a.thumbs.pruneTo(maxThumbCacheCount)
 	}
+	a.thumbs.pruneToBytes(maxThumbCacheBytes)
 	for _, path := range preloadPaths {
 		a.preloadThumb(path)
 	}

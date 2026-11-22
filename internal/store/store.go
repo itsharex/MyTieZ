@@ -207,6 +207,7 @@ func OpenStore(baseDir string) (*Store, error) {
 		`PRAGMA journal_mode=WAL;`,
 		`PRAGMA busy_timeout=5000;`,
 		`PRAGMA synchronous=NORMAL;`,
+		`PRAGMA cache_size=-2048;`,
 	}
 	for _, p := range pragmas {
 		if _, err := db.Exec(p); err != nil {
@@ -300,6 +301,16 @@ func (s *Store) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+// ShrinkMemory asks SQLite to release unused page cache memory.
+func (s *Store) ShrinkMemory() {
+	if s == nil || s.db == nil {
+		return
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_, _ = s.db.Exec(`PRAGMA shrink_memory;`)
 }
 
 func (s *Store) LoadSettings() (Settings, error) {

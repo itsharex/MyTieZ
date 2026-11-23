@@ -609,6 +609,9 @@ func (a *clipApp) drainSaveQueue() {
 			panel := a.panel
 			panel.Update(func() {
 				if !panel.IsVisible() {
+					if a.loadedRevision != 0 {
+						a.settleHiddenState()
+					}
 					return
 				}
 				wasAtTop := a.listScroll.Y <= atTopEpsilon

@@ -72,6 +72,10 @@ func (a *clipApp) renderWindowActionButtons(c *ui.Context) {
 
 func (a *clipApp) view(c *ui.Context) {
 	defer func() { a.closeCardContextMenu = false }()
+	if a.snapNextFrame {
+		c.DisableAnimations()
+		a.snapNextFrame = false
+	}
 	c.SetTheme(a.resolveTheme(c))
 	t := c.Theme()
 	c.Root().Background(a.rootBackground(c, t))
@@ -246,6 +250,7 @@ func (a *clipApp) mainView(c *ui.Context) {
 		ui.Divider(c)
 
 		// 中部虚拟列表（直接铺满到底，无常驻底栏）
+		a.consumePendingListReset()
 		// Snapshot a.items for this frame so in-row actions (e.g. untagging under a #tag filter or deleting)
 		// that call reload() mid-pass cannot shrink the slice before ui.List finishes iterating.
 		items := a.items

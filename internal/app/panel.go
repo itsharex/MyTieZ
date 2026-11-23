@@ -6,7 +6,32 @@ import (
 	"mytiez/internal/sys"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
+
+func (a *clipApp) resetHiddenListPresentation() {
+	a.stopSearchTimer()
+	a.selected = -1
+	a.filterIdx = 0
+	a.resetScrollToTop()
+	a.topReachedAt = time.Time{}
+	a.listScroll = ui.ScrollState{}
+	a.listResetPending = true
+	a.snapNextFrame = true
+}
+
+func (a *clipApp) settleHiddenState() {
+	a.resetHiddenListPresentation()
+	a.reloadIfStale()
+}
+
+func (a *clipApp) consumePendingListReset() {
+	if !a.listResetPending {
+		return
+	}
+	a.list = ui.ListState{}
+	a.listResetPending = false
+}
 
 func (a *clipApp) showPanel() {
 	a.showPanelWithFocus(!a.settings.NoFocusMode)
@@ -19,11 +44,12 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 	a.stopHeapReleaseTimer()
 	a.stopIdleUnloadTimer()
 	sys.TrackForegroundWindow()
+	wasVisible := a.panel.IsVisible()
 	wasDocked := a.edgeDock != dockNone
 	if wasDocked {
 		a.undockWindow(false)
 	}
-	if !a.panel.IsVisible() {
+	if !wasVisible {
 		// 非固定窗口每次重新呼出从「全部」Tab 开始，避免遗忘停留在旧子分类中
 		a.filterIdx = 0
 		cursor := mygo.Screen.CursorScreenPoint()
@@ -49,11 +75,20 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 	a.confirmClearOpen = false
 	a.resetScrollToTop()
 	a.reloadIfStale()
+	if !wasVisible || wasDocked {
+		a.resetHiddenListPresentation()
+		a.consumePendingListReset()
+	}
 	a.scrollListToTop()
 	a.setPanelNoActivate(!focus)
 	// 不抢焦点呼出时必须置顶，否则非置顶窗口执行 ShowInactive 会被压在当前前台窗口后面
 	a.panel.SetAlwaysOnTop(a.winPinned || !focus)
 	a.lastShowAt = time.Now()
+	hwnd := a.panel.NativeHandle()
+	cloaked := !wasVisible && a.hasShownOnce && hwnd != 0 && sys.SetWindowCloaked(hwnd, true)
+	if cloaked {
+		defer sys.SetWindowCloaked(hwnd, false)
+	}
 	if focus {
 		a.panel.Show()
 		a.panel.Focus()
@@ -62,6 +97,10 @@ func (a *clipApp) showPanelWithFocus(focus bool) {
 		a.syncOutsideClickWatch()
 		a.syncKeyRouter()
 	}
+	if cloaked {
+		sys.SyncWindowPaint(hwnd)
+	}
+	a.hasShownOnce = true
 }
 
 func (a *clipApp) hidePanel() {
@@ -79,6 +118,7 @@ func (a *clipApp) hidePanel() {
 	if a.settings.NoFocusMode {
 		a.setPanelNoActivate(true)
 	}
+	a.settleHiddenState()
 	a.releaseHiddenMemory()
 	a.scheduleHeapRelease()
 	a.scheduleIdleUnload()

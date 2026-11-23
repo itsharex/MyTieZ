@@ -1301,3 +1301,105 @@ func TestUnloadHiddenIdleStateAndReload(t *testing.T) {
 		t.Fatalf("expected item reloaded after idle unload, got %+v", a.items)
 	}
 }
+
+func TestHiddenPanelSettlesListAndFirstFrameWithoutJump(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	for i := 0; i < 15; i++ {
+		if _, err := st.SaveText(
+			fmt.Sprintf("entry-%02d clipboard item", i),
+			store.SaveOptions{Deduplicate: false},
+		); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	a := newClipApp(st, nil)
+	a.settings.MoveToTopOnPaste = true
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	// Scroll down so controls collapse and scroll Y leaves the top.
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
+	tt.Advance(250 * time.Millisecond)
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 300)
+	tt.Advance(250 * time.Millisecond)
+	if !a.controlsCollapsed || a.listScroll.Y <= hideScrollOffset || a.atTop {
+		t.Fatalf("expected scrolled away with controls collapsed, collapsed=%v scrollY=%v atTop=%v", a.controlsCollapsed, a.listScroll.Y, a.atTop)
+	}
+
+	// Switch to text tab, then paste an entry from down the list and hide the panel.
+	a.filterIdx = 1
+	a.onTabChanged()
+	tt.Frame()
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
+	tt.Advance(250 * time.Millisecond)
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 300)
+	tt.Advance(250 * time.Millisecond)
+
+	target := a.items[len(a.items)-2]
+	time.Sleep(5 * time.Millisecond)
+	tt.Move(1, 1)
+	tt.Advance(300 * time.Millisecond)
+	a.pasteItem(target, false)
+	a.hidePanel()
+
+	// Before any new UI frame renders, list order, active tab, and scroll state must already be settled.
+	if len(a.items) == 0 || a.items[0].ID != target.ID {
+		t.Fatalf("expected pasted item %d settled at top while hidden, got %+v", target.ID, a.items[0])
+	}
+	if a.filterIdx != 0 || a.listScroll.Y != 0 || !a.atTop || a.controlsCollapsed || a.selected != -1 {
+		t.Fatalf("expected hidden state reset to top/all tab, filter=%d scrollY=%v atTop=%v collapsed=%v selected=%d",
+			a.filterIdx, a.listScroll.Y, a.atTop, a.controlsCollapsed, a.selected)
+	}
+
+	// Simulate another clipboard item arriving while the panel remains hidden.
+	time.Sleep(5 * time.Millisecond)
+	bgItem, err := st.SaveText("background-copied-while-hidden", store.SaveOptions{Deduplicate: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.settleHiddenState()
+	if len(a.items) == 0 || a.items[0].ID != bgItem.ID || a.items[1].ID != target.ID {
+		t.Fatalf("expected background item %d above pasted item %d while hidden, got [%d, %d]",
+			bgItem.ID, target.ID, a.items[0].ID, a.items[1].ID)
+	}
+
+	// First frame on reopen must already be in its final settled state with no pending animations or position jumps.
+	tt.Frame()
+	if a.listScroll.Y != 0 || !a.atTop || a.controlsCollapsed || a.snapNextFrame || a.listResetPending {
+		t.Fatalf("expected first frame settled at top, scrollY=%v atTop=%v collapsed=%v snap=%v reset=%v",
+			a.listScroll.Y, a.atTop, a.controlsCollapsed, a.snapNextFrame, a.listResetPending)
+	}
+	if tt.FramePending() {
+		t.Fatalf("expected zero pending animations on first frame after reopen")
+	}
+	bgFirstRect, ok := tt.Find(bgItem.Text)
+	if !ok {
+		t.Fatalf("expected background item visible on first frame, texts=%q", tt.Texts())
+	}
+	targetFirstRect, ok := tt.Find(target.Text)
+	if !ok {
+		t.Fatalf("expected pasted item visible on first frame, texts=%q", tt.Texts())
+	}
+
+	tt.Advance(300 * time.Millisecond)
+	bgSettledRect, ok := tt.Find(bgItem.Text)
+	if !ok {
+		t.Fatalf("expected background item still visible after advancing time")
+	}
+	targetSettledRect, ok := tt.Find(target.Text)
+	if !ok {
+		t.Fatalf("expected pasted item still visible after advancing time")
+	}
+	if bgFirstRect != bgSettledRect || targetFirstRect != targetSettledRect {
+		t.Fatalf("expected zero visible jump after reopen: bg %+v -> %+v, target %+v -> %+v",
+			bgFirstRect, bgSettledRect, targetFirstRect, targetSettledRect)
+	}
+}
+

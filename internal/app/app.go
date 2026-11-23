@@ -114,6 +114,9 @@ type clipApp struct {
 	atTop               bool
 	topReachedAt        time.Time
 	upScrollAccum       float32
+	listResetPending    bool
+	snapNextFrame       bool
+	hasShownOnce        bool
 	expanded            settingsGroupExpanded
 	confirmAction       string
 	recordingHotkey     bool

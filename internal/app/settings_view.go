@@ -154,7 +154,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						{label: msgs.SettingsLangTw(), a11y: msgs.SettingsLangTw(), active: curLocale == "zh-Hant", onClick: func() { a.setLanguage("zh-Hant") }},
 						{label: msgs.SettingsLangEn(), a11y: msgs.SettingsLangEn(), active: curLocale == "en", onClick: func() { a.setLanguage("en") }},
 					})
-					a.renderBackdropSelectRow(c, msgs)
+					a.renderBackdropGroup(c, msgs)
 					a.renderChoiceGroup(c, msgs.SettingsColorMode(), []choiceOption{
 						{label: msgs.SettingsColorSystem(), a11y: msgs.SettingsColorSystemA11y(), active: a.settings.ColorMode == "system", onClick: func() { a.setColorMode("system") }},
 						{label: msgs.SettingsColorLight(), a11y: msgs.SettingsColorLightA11y(), active: a.settings.ColorMode == "light", onClick: func() { a.setColorMode("light") }},
@@ -322,68 +322,37 @@ func (a *clipApp) setMaxHistory(val int) {
 	}
 }
 
-func (a *clipApp) renderBackdropSelectRow(c *ui.Context, msgs locales.Messages) {
-	t := c.Theme()
+func (a *clipApp) renderBackdropGroup(c *ui.Context, msgs locales.Messages) {
 	type backdropOpt struct {
 		mode  string
 		label string
 		a11y  string
 	}
-	opts := []backdropOpt{
+	raw := []backdropOpt{
 		{mode: "solid", label: msgs.SettingsBackdropSolid(), a11y: msgs.SettingsBackdropSolidA11y()},
 		{mode: "mica", label: msgs.SettingsBackdropMica(), a11y: msgs.SettingsBackdropMicaA11y()},
 		{mode: "mica_alt", label: msgs.SettingsBackdropMicaAlt(), a11y: msgs.SettingsBackdropMicaAltA11y()},
 		{mode: "acrylic_base", label: msgs.SettingsBackdropAcrylicBase(), a11y: msgs.SettingsBackdropAcrylicBaseA11y()},
 		{mode: "acrylic", label: msgs.SettingsBackdropAcrylic(), a11y: msgs.SettingsBackdropAcrylicA11y()},
 	}
-	curLabel := msgs.SettingsBackdropSolid()
-	for _, opt := range opts {
-		if opt.mode == a.settings.BackdropMode {
-			curLabel = opt.label
-			break
-		}
-	}
-	a.renderSettingRow(c, msgs.SettingsBackdrop(), "", func() {
-		sel := ui.SelectBase(c.Key("backdrop-select"), &a.settings.BackdropMode)
-		trig := sel.Trigger
-		bg := t.Surface
-		if trig.Hovered() {
-			bg = t.SurfaceHover
-		}
-		trig.Height(pillHeight).MinWidth(132).Padding(0, 12).Radius(radiusGroup).
-			Justify(ui.SpaceBetween).AlignItems(ui.Center).Gap(8).
-			Background(bg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
-			Label(msgs.SettingsBackdrop()).
-			Children(func() {
-				ui.Text(c, curLabel).FontSize(13).FontWeight(600).TextColor(t.Text).SingleLine()
-				ui.Icon(c, iconChevronDown).FontSize(14).TextColor(t.TextMuted)
-			})
-		sa := shadowAlpha(t, 0.12, 0.34)
-		sel.Popup(func(panel ui.Element) {
-			panel.Margin(4, 0, 0, 0).Padding(4).Radius(radiusGroup).
-				Background(a.floatingSurface(c, t)).Border(1, t.Border).
-				Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, sa))
-			for _, opt := range opts {
-				item := sel.Item(opt.mode).Padding(6, 10).Radius(radiusMicro).Label(opt.a11y)
-				fg := t.Text
-				switch {
-				case item.Highlighted():
-					item.Background(t.Accent)
-					fg = t.AccentText
-				case opt.mode == a.settings.BackdropMode:
-					item.Background(t.SurfaceHover)
+	opts := make([]choiceOption, 0, len(raw))
+	for _, opt := range raw {
+		mode := opt.mode
+		opts = append(opts, choiceOption{
+			label:  opt.label,
+			a11y:   opt.a11y,
+			active: a.settings.BackdropMode == mode,
+			onClick: func() {
+				if a.settings.BackdropMode == mode {
+					return
 				}
-				item.Children(func() {
-					ui.Text(c, opt.label).FontSize(13).FontWeight(500).TextColor(fg).SingleLine()
-				})
-			}
+				a.settings.BackdropMode = mode
+				a.applyBackdrop()
+				a.persistSettings()
+			},
 		})
-		if trig.Changed() {
-			a.confirmAction = ""
-			a.applyBackdrop()
-			a.persistSettings()
-		}
-	})
+	}
+	a.renderChoiceGrid(c, msgs.SettingsBackdrop(), 3, opts)
 }
 
 func (a *clipApp) setQuickPasteModifier(mod string) {
@@ -662,6 +631,34 @@ func (a *clipApp) renderChoiceGroup(c *ui.Context, title string, opts []choiceOp
 	})
 }
 
+// renderChoiceGrid 按固定列数渲染平铺选项组，末行不足时使用透明占位对齐列宽。
+func (a *clipApp) renderChoiceGrid(c *ui.Context, title string, cols int, opts []choiceOption) {
+	if cols <= 0 {
+		a.renderChoiceGroup(c, title, opts)
+		return
+	}
+	ui.Column(c).FillWidth().Padding(8, 16).Gap(8).Children(func() {
+		a.renderSettingTitle(c, title, "")
+		ui.Column(c).FillWidth().Gap(8).Children(func() {
+			for start := 0; start < len(opts); start += cols {
+				end := min(start+cols, len(opts))
+				ui.Row(c).FillWidth().Gap(8).Children(func() {
+					for _, opt := range opts[start:end] {
+						item := opt
+						ui.Box(c).Grow(1).Shrink(0).Basis(0).MinWidth(0).Children(func() {
+							a.renderChoicePill(c, item.label, item.a11y, item.tooltip, item.active, item.onClick).
+								FillWidth().MinWidth(0)
+						})
+					}
+					for empty := end - start; empty < cols; empty++ {
+						ui.Box(c).Grow(1).Shrink(0).Basis(0).MinWidth(0).Height(32)
+					}
+				})
+			}
+		})
+	})
+}
+
 func (a *clipApp) renderSwitchRow(c *ui.Context, title, desc string, val *bool, onChanged func(bool)) {
 	msgs := locales.In(c.Locale())
 	a.renderSettingRow(c, title, desc, func() {
@@ -709,7 +706,7 @@ func b2f(b bool) float32 {
 	return 0
 }
 
-func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel, tooltip string, active bool, onClick func()) {
+func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel, tooltip string, active bool, onClick func()) ui.Element {
 	t := c.Theme()
 	pill := ui.ButtonBase(c).Grow(1).Shrink(0).Padding(0, 12).Height(32).Center().Radius(radiusGroup).Label(a11yLabel)
 	if tooltip != "" {
@@ -732,6 +729,7 @@ func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel, tooltip strin
 		Children(func() {
 			ui.Text(c, text).FontSize(13).FontWeight(600).TextColor(fg).SingleLine()
 		})
+	return pill
 }
 
 func (a *clipApp) renderConfirmActionRow(c *ui.Context, title, desc, actionKey, label, confirmLabel string, onConfirm func()) {

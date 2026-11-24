@@ -1382,83 +1382,83 @@ func (msgs Messages) SettingsBackdrop() string {
 	return Catalog.Format(msgs.locale, "settingsBackdrop", nil)
 }
 
-// SettingsBackdropMica says "云母"
+// SettingsBackdropMica says "Mica"
 // in the language the app shows.
 func SettingsBackdropMica() string { return In(i18n.Locale()).SettingsBackdropMica() }
 
-// SettingsBackdropMica says "云母"
+// SettingsBackdropMica says "Mica"
 // in the language of msgs.
 func (msgs Messages) SettingsBackdropMica() string {
 	return Catalog.Format(msgs.locale, "settingsBackdropMica", nil)
 }
 
-// SettingsBackdropMicaA11y says "材质云母"
+// SettingsBackdropMicaA11y says "材质 Mica"
 // in the language the app shows.
 func SettingsBackdropMicaA11y() string { return In(i18n.Locale()).SettingsBackdropMicaA11y() }
 
-// SettingsBackdropMicaA11y says "材质云母"
+// SettingsBackdropMicaA11y says "材质 Mica"
 // in the language of msgs.
 func (msgs Messages) SettingsBackdropMicaA11y() string {
 	return Catalog.Format(msgs.locale, "settingsBackdropMicaA11y", nil)
 }
 
-// SettingsBackdropMicaAlt says "云母 Alt"
+// SettingsBackdropMicaAlt says "Mica Alt"
 // in the language the app shows.
 func SettingsBackdropMicaAlt() string { return In(i18n.Locale()).SettingsBackdropMicaAlt() }
 
-// SettingsBackdropMicaAlt says "云母 Alt"
+// SettingsBackdropMicaAlt says "Mica Alt"
 // in the language of msgs.
 func (msgs Messages) SettingsBackdropMicaAlt() string {
 	return Catalog.Format(msgs.locale, "settingsBackdropMicaAlt", nil)
 }
 
-// SettingsBackdropMicaAltA11y says "材质云母 Alt"
+// SettingsBackdropMicaAltA11y says "材质 Mica Alt"
 // in the language the app shows.
 func SettingsBackdropMicaAltA11y() string { return In(i18n.Locale()).SettingsBackdropMicaAltA11y() }
 
-// SettingsBackdropMicaAltA11y says "材质云母 Alt"
+// SettingsBackdropMicaAltA11y says "材质 Mica Alt"
 // in the language of msgs.
 func (msgs Messages) SettingsBackdropMicaAltA11y() string {
 	return Catalog.Format(msgs.locale, "settingsBackdropMicaAltA11y", nil)
 }
 
-// SettingsBackdropAcrylicBase says "标准亚克力"
+// SettingsBackdropAcrylicBase says "Acrylic"
 // in the language the app shows.
 func SettingsBackdropAcrylicBase() string { return In(i18n.Locale()).SettingsBackdropAcrylicBase() }
 
-// SettingsBackdropAcrylicBase says "标准亚克力"
+// SettingsBackdropAcrylicBase says "Acrylic"
 // in the language of msgs.
 func (msgs Messages) SettingsBackdropAcrylicBase() string {
 	return Catalog.Format(msgs.locale, "settingsBackdropAcrylicBase", nil)
 }
 
-// SettingsBackdropAcrylicBaseA11y says "材质标准亚克力"
+// SettingsBackdropAcrylicBaseA11y says "材质 Acrylic"
 // in the language the app shows.
 func SettingsBackdropAcrylicBaseA11y() string {
 	return In(i18n.Locale()).SettingsBackdropAcrylicBaseA11y()
 }
 
-// SettingsBackdropAcrylicBaseA11y says "材质标准亚克力"
+// SettingsBackdropAcrylicBaseA11y says "材质 Acrylic"
 // in the language of msgs.
 func (msgs Messages) SettingsBackdropAcrylicBaseA11y() string {
 	return Catalog.Format(msgs.locale, "settingsBackdropAcrylicBaseA11y", nil)
 }
 
-// SettingsBackdropAcrylic says "轻薄亚克力"
+// SettingsBackdropAcrylic says "Acrylic Thin"
 // in the language the app shows.
 func SettingsBackdropAcrylic() string { return In(i18n.Locale()).SettingsBackdropAcrylic() }
 
-// SettingsBackdropAcrylic says "轻薄亚克力"
+// SettingsBackdropAcrylic says "Acrylic Thin"
 // in the language of msgs.
 func (msgs Messages) SettingsBackdropAcrylic() string {
 	return Catalog.Format(msgs.locale, "settingsBackdropAcrylic", nil)
 }
 
-// SettingsBackdropAcrylicA11y says "材质轻薄亚克力"
+// SettingsBackdropAcrylicA11y says "材质 Acrylic Thin"
 // in the language the app shows.
 func SettingsBackdropAcrylicA11y() string { return In(i18n.Locale()).SettingsBackdropAcrylicA11y() }
 
-// SettingsBackdropAcrylicA11y says "材质轻薄亚克力"
+// SettingsBackdropAcrylicA11y says "材质 Acrylic Thin"
 // in the language of msgs.
 func (msgs Messages) SettingsBackdropAcrylicA11y() string {
 	return Catalog.Format(msgs.locale, "settingsBackdropAcrylicA11y", nil)

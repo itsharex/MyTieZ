@@ -162,19 +162,14 @@ func TestSettingsAndQuickPaste(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
-	curTrigger := "纯色"
 	for _, tc := range []struct {
 		itemLabel string
-		nextText  string
 		want      string
 	}{
-		{"材质云母 Alt", "云母 Alt", "mica_alt"},
-		{"材质标准亚克力", "标准亚克力", "acrylic_base"},
-		{"材质轻薄亚克力", "轻薄亚克力", "acrylic"},
+		{"材质 Mica Alt", "mica_alt"},
+		{"材质 Acrylic", "acrylic_base"},
+		{"材质 Acrylic Thin", "acrylic"},
 	} {
-		if err := tt.Click(curTrigger); err != nil {
-			t.Fatal(err)
-		}
 		if err := tt.Click(tc.itemLabel); err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +179,6 @@ func TestSettingsAndQuickPaste(t *testing.T) {
 		if loaded, err := a.store.LoadSettings(); err != nil || loaded.BackdropMode != tc.want {
 			t.Fatalf("expected persisted BackdropMode=%s, got %q err=%v", tc.want, loaded.BackdropMode, err)
 		}
-		curTrigger = tc.nextText
 	}
 	if backdropVibrancy("mica_alt") != mygo.VibrancyTabbed || backdropVibrancy("acrylic") != mygo.VibrancyAcrylic {
 		t.Fatalf("unexpected vibrancy mapping")

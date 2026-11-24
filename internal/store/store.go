@@ -80,6 +80,7 @@ type Settings struct {
 	ColorMode                string   `json:"color_mode"`    // "system" | "light" | "dark"
 	BackdropMode             string   `json:"backdrop_mode"` // "solid" | "mica" | "mica_alt" | "acrylic_base" | "acrylic"
 	AccentColor              string   `json:"accent_color"`  // "" (default blue) or "#rrggbb"
+	FontFamily               string   `json:"font_family"`   // "" (default Microsoft YaHei UI) or font family name
 	CompactMode        bool   `json:"compact_mode"`
 	ShowAllCardActions bool   `json:"show_all_card_actions"`
 	HideCardActions    bool   `json:"hide_card_actions"`
@@ -350,6 +351,7 @@ func (s *Store) LoadSettings() (Settings, error) {
 		cfg.BackdropMode = DefaultSettings().BackdropMode
 	}
 	cfg.AccentColor = NormalizeHexColor(cfg.AccentColor)
+	cfg.FontFamily = strings.TrimSpace(cfg.FontFamily)
 	if cfg.PasteMethod != "shift_insert" && cfg.PasteMethod != "ctrl_v" && cfg.PasteMethod != "game_mode" {
 		cfg.PasteMethod = "shift_insert"
 	}

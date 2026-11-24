@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"time"
 
 	"mytiez/internal/store"
@@ -261,10 +262,14 @@ func (a *clipApp) resolveTheme(c *ui.Context) *ui.Theme {
 	vibrancy := a.usingVibrancy(c)
 	scale := c.Preferences().TextScale
 	accentHex := store.NormalizeHexColor(a.settings.AccentColor)
-	if !vibrancy && (scale <= 0 || scale == 1) && accentHex == "" {
+	fontFamily := strings.TrimSpace(a.settings.FontFamily)
+	if !vibrancy && (scale <= 0 || scale == 1) && accentHex == "" && fontFamily == "" {
 		return base
 	}
 	cloned := *base
+	if fontFamily != "" {
+		cloned.Font = fontFamily
+	}
 	if accentHex != "" {
 		applyAccentColor(&cloned, ui.Hex(accentHex), useDark)
 	}

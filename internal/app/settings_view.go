@@ -26,6 +26,7 @@ type settingsGroupExpanded struct {
 	privacyRules   bool
 	privacyMasking bool
 	accentPicker   bool
+	fontPicker     bool
 }
 
 func (a *clipApp) settingsView(c *ui.Context) {
@@ -180,6 +181,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						{label: msgs.SettingsLangTw(), a11y: msgs.SettingsLangTw(), active: curLocale == "zh-Hant", onClick: func() { a.setLanguage("zh-Hant") }},
 						{label: msgs.SettingsLangEn(), a11y: msgs.SettingsLangEn(), active: curLocale == "en", onClick: func() { a.setLanguage("en") }},
 					})
+					a.renderFontPickerSection(c, msgs)
 					a.renderBackdropGroup(c, msgs)
 					a.renderChoiceGroup(c, msgs.SettingsColorMode(), []choiceOption{
 						{label: msgs.SettingsColorSystem(), a11y: msgs.SettingsColorSystemA11y(), active: a.settings.ColorMode == "system", onClick: func() { a.setColorMode("system") }},

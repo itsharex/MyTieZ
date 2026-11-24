@@ -1494,3 +1494,59 @@ func TestOverrideWinVSetting(t *testing.T) {
 	}
 }
 
+func TestFontPickerLazyAndPersistence(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	if a.systemFontsLoaded {
+		t.Fatalf("expected systemFontsLoaded=false on startup (lazy load)")
+	}
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("界面设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if a.systemFontsLoaded {
+		t.Fatalf("expected systemFontsLoaded=false before opening font picker")
+	}
+
+	// 预先注入测试字体列表或直接触发点击展开验证懒加载触发
+	if err := tt.Click("选择界面字体"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.systemFontsLoaded {
+		t.Fatalf("expected systemFontsLoaded=true after opening font picker")
+	}
+	// 注入确定字体集合用于测试选择与搜索
+	a.systemFonts = []ui.FontFamily{
+		{Name: "HarmonyOS Sans SC"},
+		{Name: "Consolas", Monospaced: true},
+	}
+	tt.Advance(20 * time.Millisecond)
+
+	if err := tt.Click("HarmonyOS Sans SC"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.FontFamily != "HarmonyOS Sans SC" {
+		t.Fatalf("expected FontFamily=HarmonyOS Sans SC, got %q", a.settings.FontFamily)
+	}
+	if loaded, err := a.store.LoadSettings(); err != nil || loaded.FontFamily != "HarmonyOS Sans SC" {
+		t.Fatalf("expected persisted FontFamily=HarmonyOS Sans SC, got %q err=%v", loaded.FontFamily, err)
+	}
+
+	if err := tt.Click("恢复默认"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.FontFamily != "" {
+		t.Fatalf("expected FontFamily cleared after reset, got %q", a.settings.FontFamily)
+	}
+}
+

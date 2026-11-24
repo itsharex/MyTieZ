@@ -1636,6 +1636,66 @@ func (msgs Messages) SettingsAccentSwatchA11y(color string) string {
 	return Catalog.Format(msgs.locale, "settingsAccentSwatchA11y", map[string]any{"color": color})
 }
 
+// SettingsFont says "界面字体"
+// in the language the app shows.
+func SettingsFont() string { return In(i18n.Locale()).SettingsFont() }
+
+// SettingsFont says "界面字体"
+// in the language of msgs.
+func (msgs Messages) SettingsFont() string {
+	return Catalog.Format(msgs.locale, "settingsFont", nil)
+}
+
+// SettingsFontDefault says "默认"
+// in the language the app shows.
+func SettingsFontDefault() string { return In(i18n.Locale()).SettingsFontDefault() }
+
+// SettingsFontDefault says "默认"
+// in the language of msgs.
+func (msgs Messages) SettingsFontDefault() string {
+	return Catalog.Format(msgs.locale, "settingsFontDefault", nil)
+}
+
+// SettingsFontSearch says "搜索字体..."
+// in the language the app shows.
+func SettingsFontSearch() string { return In(i18n.Locale()).SettingsFontSearch() }
+
+// SettingsFontSearch says "搜索字体..."
+// in the language of msgs.
+func (msgs Messages) SettingsFontSearch() string {
+	return Catalog.Format(msgs.locale, "settingsFontSearch", nil)
+}
+
+// SettingsFontEmpty says "未找到匹配的字体"
+// in the language the app shows.
+func SettingsFontEmpty() string { return In(i18n.Locale()).SettingsFontEmpty() }
+
+// SettingsFontEmpty says "未找到匹配的字体"
+// in the language of msgs.
+func (msgs Messages) SettingsFontEmpty() string {
+	return Catalog.Format(msgs.locale, "settingsFontEmpty", nil)
+}
+
+// SettingsFontReset says "恢复默认"
+// in the language the app shows.
+func SettingsFontReset() string { return In(i18n.Locale()).SettingsFontReset() }
+
+// SettingsFontReset says "恢复默认"
+// in the language of msgs.
+func (msgs Messages) SettingsFontReset() string {
+	return Catalog.Format(msgs.locale, "settingsFontReset", nil)
+}
+
+// SettingsFontPickerA11y says "选择界面字体"
+// in the language the app shows.
+func SettingsFontPickerA11y() string { return In(i18n.Locale()).SettingsFontPickerA11y() }
+
+// SettingsFontPickerA11y says "选择界面字体"
+// in the language of msgs.
+func (msgs Messages) SettingsFontPickerA11y() string {
+	return Catalog.Format(msgs.locale, "settingsFontPickerA11y", nil)
+}
+
 // SettingsCompactMode says "紧凑卡片模式"
 // in the language the app shows.
 func SettingsCompactMode() string { return In(i18n.Locale()).SettingsCompactMode() }

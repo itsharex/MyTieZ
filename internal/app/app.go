@@ -120,6 +120,9 @@ type clipApp struct {
 	hasShownOnce        bool
 	expanded            settingsGroupExpanded
 	accentPicker        *accentPickerState
+	fontQuery           string
+	systemFonts         []ui.FontFamily
+	systemFontsLoaded   bool
 	confirmAction       string
 	recordingHotkey     bool
 	recordingTarget     string // "" | "global" | "plain_paste"

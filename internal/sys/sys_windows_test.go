@@ -102,3 +102,22 @@ func TestWriteDIBInto(t *testing.T) {
 		t.Fatalf("unexpected Gray pixel BGRA: %v", gbuf[40:44])
 	}
 }
+
+func TestMatchesGlobalHotkey(t *testing.T) {
+	target := globalHotkeyTarget{vk: vkV, win: true}
+	if !matchesGlobalHotkey(target, vkV, true, false, false, false) {
+		t.Fatalf("expected Win+V to match target")
+	}
+	if matchesGlobalHotkey(target, vkV, false, false, false, false) {
+		t.Fatalf("expected bare V not to match Win+V")
+	}
+	if matchesGlobalHotkey(target, vkV, true, true, false, false) {
+		t.Fatalf("expected Ctrl+Win+V not to match Win+V")
+	}
+	if matchesGlobalHotkey(target, 'C', true, false, false, false) {
+		t.Fatalf("expected Win+C not to match Win+V")
+	}
+	if matchesGlobalHotkey(globalHotkeyTarget{}, vkV, true, false, false, false) {
+		t.Fatalf("expected empty target not to match")
+	}
+}

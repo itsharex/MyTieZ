@@ -10,11 +10,43 @@ import (
 	"github.com/egoist/mygo"
 )
 
+func (a *clipApp) applyWinVOverride() {
+	if a.settings.OverrideWinV {
+		if !mygo.App.IsReady() {
+			return
+		}
+		if a.shortcut != "" {
+			mygo.GlobalShortcut.Unregister(a.shortcut)
+		}
+		_, ok := sys.StartGlobalHotkeyHook(0x56, true, false, false, false, func() {
+			if a.panel != nil {
+				a.panel.Update(a.togglePanel)
+			}
+		})
+		if !ok {
+			a.settings.OverrideWinV = false
+			if a.shortcut != "" && !mygo.GlobalShortcut.IsRegistered(a.shortcut) {
+				_ = mygo.GlobalShortcut.Register(a.shortcut, a.togglePanel)
+			}
+			a.setStatus(locales.SettingsOverrideWinVErr())
+			return
+		}
+		if a.trayOpenItem != nil {
+			a.trayOpenItem.SetAccelerator("Win+V")
+		}
+		return
+	}
+	sys.StopGlobalHotkeyHook()
+	if a.settings.Hotkey != "" {
+		_ = a.switchHotkey(a.settings.Hotkey)
+	}
+}
+
 func (a *clipApp) switchHotkey(newKey string) error {
 	if newKey == "" {
 		return nil
 	}
-	if !mygo.App.IsReady() {
+	if !mygo.App.IsReady() || a.settings.OverrideWinV {
 		a.shortcut = newKey
 		return nil
 	}
@@ -66,6 +98,7 @@ func (a *clipApp) setupTray() {
 	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		sys.CancelGameModePaste()
+		sys.StopGlobalHotkeyHook()
 		a.stopOutsideClickWatch()
 		a.stopKeyRouting()
 		a.stopEdgeDocking()
@@ -98,9 +131,13 @@ func (a *clipApp) updateTrayMenu() {
 	if a.tray == nil {
 		return
 	}
+	accel := a.shortcut
+	if a.settings.OverrideWinV {
+		accel = "Win+V"
+	}
 	a.trayOpenItem = &mygo.MenuItem{
 		Label:       locales.TrayOpen(),
-		Accelerator: a.shortcut,
+		Accelerator: accel,
 		Click:       func(*mygo.MenuItem, *mygo.Window) { a.showPanel() },
 	}
 	menu := mygo.NewMenu([]*mygo.MenuItem{

@@ -60,6 +60,7 @@ type Settings struct {
 	PinSearchBox       bool   `json:"pin_search_box"`
 	ScrollTopButton    bool   `json:"scroll_top_button"`
 	Hotkey             string `json:"hotkey"`
+	OverrideWinV       bool   `json:"override_win_v"`
 	Deduplicate        bool   `json:"deduplicate"`
 	MaxHistory         int    `json:"max_history"`
 	CaptureFiles       bool   `json:"capture_files"`

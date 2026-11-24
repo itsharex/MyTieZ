@@ -308,7 +308,7 @@ func (a *clipApp) resetSettings() {
 		if err := mygo.App.SetOpenAtLogin(a.settings.AutoStart); err != nil {
 			log.Printf("reset open at login: %v", err)
 		}
-		_ = a.switchHotkey(a.settings.Hotkey)
+		a.applyWinVOverride()
 	}
 	if a.panel != nil {
 		a.panel.SetSize(a.settings.WindowWidth, a.settings.WindowHeight)

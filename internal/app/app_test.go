@@ -808,6 +808,8 @@ func TestPrivacyProtectionUI(t *testing.T) {
 	if !tt.HasText("保护种类") || !tt.HasText("自定义规则") || !tt.HasText("脱敏预览设置") || tt.HasText("密钥/Token") {
 		t.Fatalf("expected collapsed privacy subgroups, texts=%q", tt.Texts())
 	}
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
+	tt.Advance(250 * time.Millisecond)
 	if err := tt.Click("保护种类"); err != nil {
 		t.Fatal(err)
 	}
@@ -1444,6 +1446,51 @@ func TestAccentColorSettings(t *testing.T) {
 	}
 	if loaded, err := a.store.LoadSettings(); err != nil || loaded.AccentColor != "" {
 		t.Fatalf("expected persisted AccentColor empty after reset, got %q err=%v", loaded.AccentColor, err)
+	}
+}
+
+func TestOverrideWinVSetting(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("剪贴板设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+
+	if !tt.HasText("呼出快捷键") {
+		t.Fatalf("expected custom hotkey row visible when OverrideWinV=false")
+	}
+	if err := tt.Click("切换使用 Win+V 呼出"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.settings.OverrideWinV {
+		t.Fatalf("expected OverrideWinV=true after toggle")
+	}
+	if loaded, err := a.store.LoadSettings(); err != nil || !loaded.OverrideWinV {
+		t.Fatalf("expected persisted OverrideWinV=true, got %+v err=%v", loaded, err)
+	}
+	if !tt.HasText("呼出快捷键") {
+		t.Fatalf("expected custom hotkey row always visible")
+	}
+
+	if err := tt.Click("切换使用 Win+V 呼出"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.OverrideWinV {
+		t.Fatalf("expected OverrideWinV=false after second toggle")
+	}
+	if !tt.HasText("呼出快捷键") {
+		t.Fatalf("expected custom hotkey row visible when OverrideWinV=false")
 	}
 }
 

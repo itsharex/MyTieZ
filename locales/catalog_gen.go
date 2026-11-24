@@ -1086,6 +1086,36 @@ func (msgs Messages) SettingsHotkeyNeedMod() string {
 	return Catalog.Format(msgs.locale, "settingsHotkeyNeedMod", nil)
 }
 
+// SettingsOverrideWinV says "使用 Win+V 呼出"
+// in the language the app shows.
+func SettingsOverrideWinV() string { return In(i18n.Locale()).SettingsOverrideWinV() }
+
+// SettingsOverrideWinV says "使用 Win+V 呼出"
+// in the language of msgs.
+func (msgs Messages) SettingsOverrideWinV() string {
+	return Catalog.Format(msgs.locale, "settingsOverrideWinV", nil)
+}
+
+// SettingsOverrideWinVDesc says "开启后接管系统 Win+V，原自定义快捷键暂停生效"
+// in the language the app shows.
+func SettingsOverrideWinVDesc() string { return In(i18n.Locale()).SettingsOverrideWinVDesc() }
+
+// SettingsOverrideWinVDesc says "开启后接管系统 Win+V，原自定义快捷键暂停生效"
+// in the language of msgs.
+func (msgs Messages) SettingsOverrideWinVDesc() string {
+	return Catalog.Format(msgs.locale, "settingsOverrideWinVDesc", nil)
+}
+
+// SettingsOverrideWinVErr says "未能接管 Win+V，请检查权限或稍后重试"
+// in the language the app shows.
+func SettingsOverrideWinVErr() string { return In(i18n.Locale()).SettingsOverrideWinVErr() }
+
+// SettingsOverrideWinVErr says "未能接管 Win+V，请检查权限或稍后重试"
+// in the language of msgs.
+func (msgs Messages) SettingsOverrideWinVErr() string {
+	return Catalog.Format(msgs.locale, "settingsOverrideWinVErr", nil)
+}
+
 // SettingsDeduplicate says "自动去重"
 // in the language the app shows.
 func SettingsDeduplicate() string { return In(i18n.Locale()).SettingsDeduplicate() }

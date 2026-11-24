@@ -56,7 +56,7 @@ func (a *clipApp) cancelHotkeyRecording() {
 	a.recordingTarget = ""
 	a.hotkeyFocusPending = false
 	a.hotkeyMods = 0
-	if wasGlobal && mygo.App.IsReady() && a.shortcut != "" && !mygo.GlobalShortcut.IsRegistered(a.shortcut) {
+	if wasGlobal && !a.settings.OverrideWinV && mygo.App.IsReady() && a.shortcut != "" && !mygo.GlobalShortcut.IsRegistered(a.shortcut) {
 		_ = mygo.GlobalShortcut.Register(a.shortcut, a.togglePanel)
 	}
 }

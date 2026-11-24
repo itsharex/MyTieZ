@@ -449,17 +449,23 @@ func (a *clipApp) ready() {
 		}
 	})
 
-	candidates := append([]string{a.settings.Hotkey}, globalShortcuts...)
-	for _, s := range candidates {
-		if s == "" {
-			continue
-		}
-		if err := mygo.GlobalShortcut.Register(s, a.togglePanel); err == nil {
-			a.shortcut = s
-			a.settings.Hotkey = s
-			break
-		} else {
-			log.Printf("register shortcut %s: %v", s, err)
+	a.shortcut = a.settings.Hotkey
+	if a.settings.OverrideWinV {
+		a.applyWinVOverride()
+	}
+	if !a.settings.OverrideWinV {
+		candidates := append([]string{a.settings.Hotkey}, globalShortcuts...)
+		for _, s := range candidates {
+			if s == "" {
+				continue
+			}
+			if err := mygo.GlobalShortcut.Register(s, a.togglePanel); err == nil {
+				a.shortcut = s
+				a.settings.Hotkey = s
+				break
+			} else {
+				log.Printf("register shortcut %s: %v", s, err)
+			}
 		}
 	}
 

@@ -113,6 +113,13 @@ func (a *clipApp) settingsView(c *ui.Context) {
 				// 2. 剪贴板设置
 				a.renderSettingsGroup(c, "clipboard", msgs.SettingsGroupClipboard(), &a.expanded.clipboard, func() {
 					a.renderHotkeyRecorder(c)
+					a.renderSwitchRow(c, msgs.SettingsOverrideWinV(), msgs.SettingsOverrideWinVDesc(), &a.settings.OverrideWinV, func(on bool) {
+						if on {
+							a.cancelHotkeyRecording()
+						}
+						a.applyWinVOverride()
+						a.persistSettings()
+					})
 					a.renderSwitchRow(c, msgs.SettingsDeduplicate(), "", &a.settings.Deduplicate, func(bool) {
 						a.persistSettings()
 					})

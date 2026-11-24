@@ -50,6 +50,7 @@ type clipApp struct {
 	list              ui.ListState
 	listHandle        ui.Handle
 	listScroll        ui.ScrollState
+	settingsScroll    ui.ScrollState
 	searchHandle      ui.Handle
 	editingTagsID     int64
 	tagInput          string

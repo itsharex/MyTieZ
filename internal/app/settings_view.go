@@ -39,6 +39,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 				a.renderHeaderIconBtn(c, iconBack, msgs.HeaderBack(), false, false, func() {
 					a.cancelHotkeyRecording()
 					a.showSettings = false
+					a.settingsScroll = ui.ScrollState{}
 					a.confirmAction = ""
 				})
 
@@ -50,12 +51,29 @@ func (a *clipApp) settingsView(c *ui.Context) {
 			})
 		})
 
-		ui.Box(c).FillWidth().Padding(0, 14, 0, 14).Children(func() {
-			ui.Box(c).FillWidth().Height(1).Background(t.Border.Alpha(0.45))
-		})
+		scrolled := a.settingsScroll.Y > 2
+		seam := ui.Box(c.Key("settings-top-seam")).FillWidth().Height(1)
+		fade := seam.Animate("seam", b2f(scrolled), 140*time.Millisecond)
+		seam.Background(t.Border.Alpha(0.16 + 0.42*fade))
 
-		ui.Scroll(c.Key("settings-scroll")).Grow(1).Children(func() {
-			ui.Column(c).FillWidth().Padding(22, 14, 18, 14).Gap(10).Children(func() {
+		scroll := ui.Scroll(c.Key("settings-scroll")).TrackScroll(&a.settingsScroll).Grow(1)
+		if fade > 0 {
+			maxAlpha := float32(0.065)
+			if t.Dark {
+				maxAlpha = 0.22
+			}
+			scroll.DrawOver(func(p *ui.Painter, r ui.Rect) {
+				const h float32 = 12
+				shadowRect := ui.Rect{X: r.X, Y: r.Y, W: r.W, H: min(h, r.H)}
+				p.FillGradient(shadowRect, ui.LinearGradient{
+					From:  ui.RGBA(0, 0, 0, maxAlpha*fade),
+					To:    ui.RGBA(0, 0, 0, 0),
+					Angle: 180,
+				}, 0)
+			})
+		}
+		scroll.Children(func() {
+			ui.Column(c).FillWidth().Padding(18, 14, 18, 14).Gap(10).Children(func() {
 				// 1. 常规设置
 				a.renderSettingsGroup(c, "general", msgs.SettingsGroupGeneral(), &a.expanded.general, func() {
 					a.renderSwitchRow(c, msgs.SettingsAutostart(), "", &a.settings.AutoStart, func(on bool) {

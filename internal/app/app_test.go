@@ -1028,23 +1028,14 @@ func TestMicaPresets(t *testing.T) {
 		t.Fatalf("unexpected acrylic preset: %+v ok=%v", acrylic, ok)
 	}
 
-	// Mica presets keep higher matte root opacity than Acrylic so they stay subtly tinted instead of glassy.
-	if mica.rootOverlayDark <= micaAlt.rootOverlayDark || micaAlt.rootOverlayDark <= acrylicBase.rootOverlayDark {
-		t.Fatalf("expected dark root opacity mica > mica_alt > acrylic_base, got %.2f / %.2f / %.2f",
-			mica.rootOverlayDark, micaAlt.rootOverlayDark, acrylicBase.rootOverlayDark)
+	// WinUI 3 标准：Mica/Mica Alt 根背景透明由 DWM 原生绘制；Acrylic 叠加高白度/深灰面纱且标准 > 轻薄。
+	if mica.rootOverlayDark != 0 || mica.rootOverlayLight != 0 || micaAlt.rootOverlayDark != 0 || micaAlt.rootOverlayLight != 0 {
+		t.Fatalf("expected mica/mica_alt transparent root overlays, got mica=(%.2f,%.2f) mica_alt=(%.2f,%.2f)",
+			mica.rootOverlayDark, mica.rootOverlayLight, micaAlt.rootOverlayDark, micaAlt.rootOverlayLight)
 	}
-	if mica.rootOverlayLight <= micaAlt.rootOverlayLight || micaAlt.rootOverlayLight <= acrylicBase.rootOverlayLight {
-		t.Fatalf("expected light root opacity mica > mica_alt > acrylic_base, got %.2f / %.2f / %.2f",
-			mica.rootOverlayLight, micaAlt.rootOverlayLight, acrylicBase.rootOverlayLight)
-	}
-	// Mica cards stay more opaque in light mode and less glassy in dark mode than Acrylic.
-	if mica.surfaceLight <= acrylicBase.surfaceLight || micaAlt.surfaceLight <= mica.surfaceLight {
-		t.Fatalf("expected light card opacity acrylic_base < mica < mica_alt, got %.2f / %.2f / %.2f",
-			acrylicBase.surfaceLight, mica.surfaceLight, micaAlt.surfaceLight)
-	}
-	if mica.surfaceDark >= acrylic.surfaceDark || micaAlt.surfaceDark >= acrylic.surfaceDark {
-		t.Fatalf("expected dark card fill lower than acrylic glass, got mica=%.3f mica_alt=%.3f acrylic=%.3f",
-			mica.surfaceDark, micaAlt.surfaceDark, acrylic.surfaceDark)
+	if acrylicBase.rootOverlayLight <= acrylic.rootOverlayLight || acrylicBase.rootOverlayDark <= acrylic.rootOverlayDark {
+		t.Fatalf("expected acrylic_base tint opacity > acrylic, got light=%.2f/%.2f dark=%.2f/%.2f",
+			acrylicBase.rootOverlayLight, acrylic.rootOverlayLight, acrylicBase.rootOverlayDark, acrylic.rootOverlayDark)
 	}
 }
 

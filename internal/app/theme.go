@@ -126,63 +126,63 @@ type backdropPreset struct {
 	borderLight       float32
 }
 
-// Mica / Mica Alt layer a matte tinted veil over DWM vibrancy so only a soft
-// wallpaper-like tint bleeds through, while Acrylic presets keep DeskBox's
-// luminous translucent glass surfaces.
+// WinUI 3 / Fluent Design 标准材质参数：
+// - Mica / Mica Alt 由 DWM 原生绘制背景（根遮罩为 0），仅在卡片层叠加标准 LayerFillColor；
+// - Acrylic / Acrylic Thin 在 DWM 模糊底上叠加标准 TintColor/TintOpacity 面纱，抑制杂色并保持通透。
 var backdropPresets = map[string]backdropPreset{
 	"mica": {
 		vibrancy:          mygo.VibrancyMica,
 		isMica:            true,
-		rootOverlayDark:   0.72,
-		rootOverlayLight:  0.68,
-		surfaceDark:       0.06,
-		surfaceLight:      0.86,
-		surfaceHoverDark:  0.095,
-		surfaceHoverLight: 0.94,
-		surfacePressDark:  0.13,
-		surfacePressLight: 0.98,
-		borderDark:        0.09,
-		borderLight:       0.075,
+		rootOverlayDark:   0,
+		rootOverlayLight:  0,
+		surfaceDark:       0.055,
+		surfaceLight:      0.70,
+		surfaceHoverDark:  0.085,
+		surfaceHoverLight: 0.86,
+		surfacePressDark:  0.115,
+		surfacePressLight: 0.94,
+		borderDark:        0.08,
+		borderLight:       0.06,
 	},
 	"mica_alt": {
 		vibrancy:          mygo.VibrancyTabbed,
 		isMica:            true,
-		rootOverlayDark:   0.58,
-		rootOverlayLight:  0.52,
-		surfaceDark:       0.075,
-		surfaceLight:      0.90,
-		surfaceHoverDark:  0.11,
-		surfaceHoverLight: 0.96,
-		surfacePressDark:  0.145,
-		surfacePressLight: 0.99,
-		borderDark:        0.10,
-		borderLight:       0.09,
+		rootOverlayDark:   0,
+		rootOverlayLight:  0,
+		surfaceDark:       0.055,
+		surfaceLight:      0.70,
+		surfaceHoverDark:  0.085,
+		surfaceHoverLight: 0.86,
+		surfacePressDark:  0.115,
+		surfacePressLight: 0.94,
+		borderDark:        0.08,
+		borderLight:       0.06,
 	},
 	"acrylic_base": {
 		vibrancy:          mygo.VibrancyAcrylic,
-		rootOverlayDark:   0.24,
-		rootOverlayLight:  0.22,
-		surfaceDark:       0.14,
-		surfaceLight:      0.56,
-		surfaceHoverDark:  0.20,
-		surfaceHoverLight: 0.72,
-		surfacePressDark:  0.25,
-		surfacePressLight: 0.82,
-		borderDark:        0.19,
-		borderLight:       0.60,
+		rootOverlayDark:   0.36,
+		rootOverlayLight:  0.58,
+		surfaceDark:       0.08,
+		surfaceLight:      0.78,
+		surfaceHoverDark:  0.12,
+		surfaceHoverLight: 0.90,
+		surfacePressDark:  0.16,
+		surfacePressLight: 0.95,
+		borderDark:        0.09,
+		borderLight:       0.06,
 	},
 	"acrylic": {
 		vibrancy:          mygo.VibrancyAcrylic,
-		rootOverlayDark:   0.06,
-		rootOverlayLight:  0,
-		surfaceDark:       0.11,
-		surfaceLight:      0.38,
-		surfaceHoverDark:  0.17,
-		surfaceHoverLight: 0.54,
-		surfacePressDark:  0.22,
-		surfacePressLight: 0.68,
-		borderDark:        0.16,
-		borderLight:       0.55,
+		rootOverlayDark:   0.16,
+		rootOverlayLight:  0.36,
+		surfaceDark:       0.06,
+		surfaceLight:      0.68,
+		surfaceHoverDark:  0.10,
+		surfaceHoverLight: 0.84,
+		surfacePressDark:  0.14,
+		surfacePressLight: 0.92,
+		borderDark:        0.08,
+		borderLight:       0.06,
 	},
 }
 
@@ -219,16 +219,14 @@ func (a *clipApp) rootBackground(c *ui.Context, t *ui.Theme) ui.Color {
 		if p.rootOverlayDark <= 0 {
 			return ui.Transparent
 		}
-		if p.isMica {
-			return ui.RGBA(28, 28, 30, p.rootOverlayDark)
-		}
-		// Cool deep tint counteracts Win11 DWM acrylic's warm gray haze.
-		return ui.RGBA(14, 17, 24, p.rootOverlayDark)
+		// 冷调深色中和 Win11 DWM Acrylic 原生暖灰雾感。
+		return ui.RGBA(18, 20, 26, p.rootOverlayDark)
 	}
 	if p.rootOverlayLight <= 0 {
 		return ui.Transparent
 	}
-	return t.Background.Alpha(p.rootOverlayLight)
+	// 纯白面纱中和 Win11 DWM 暖灰/米白偏色，同时保持背景色彩通透度。
+	return ui.RGBA(255, 255, 255, p.rootOverlayLight)
 }
 
 func (a *clipApp) floatingSurface(c *ui.Context, t *ui.Theme) ui.Color {
@@ -292,12 +290,11 @@ func (a *clipApp) resolveTheme(c *ui.Context) *ui.Theme {
 			cloned.Surface = cloned.Surface.Alpha(p.surfaceLight)
 			cloned.SurfaceHover = cloned.SurfaceHover.Alpha(p.surfaceHoverLight)
 			cloned.SurfacePressed = cloned.SurfacePressed.Alpha(p.surfacePressLight)
+			cloned.Border = ui.RGBA(0, 0, 0, p.borderLight)
 			if p.isMica {
-				cloned.Border = ui.RGBA(0, 0, 0, p.borderLight)
 				cloned.TextMuted = cloned.Text.Alpha(0.68)
 			} else {
-				cloned.Border = cloned.Border.Alpha(p.borderLight)
-				cloned.TextMuted = cloned.Text.Alpha(0.74)
+				cloned.TextMuted = cloned.Text.Alpha(0.72)
 			}
 		}
 	}

@@ -25,9 +25,8 @@ func (a *clipApp) applyWinVOverride() {
 		})
 		if !ok {
 			a.settings.OverrideWinV = false
-			if a.shortcut != "" && !mygo.GlobalShortcut.IsRegistered(a.shortcut) {
-				_ = mygo.GlobalShortcut.Register(a.shortcut, a.togglePanel)
-			}
+			a.persistSettings()
+			a.registerFallbackHotkey()
 			a.setStatus(locales.SettingsOverrideWinVErr())
 			return
 		}
@@ -39,6 +38,27 @@ func (a *clipApp) applyWinVOverride() {
 	sys.StopGlobalHotkeyHook()
 	if a.settings.Hotkey != "" {
 		_ = a.switchHotkey(a.settings.Hotkey)
+	}
+}
+
+func (a *clipApp) registerFallbackHotkey() {
+	candidates := append([]string{a.settings.Hotkey}, globalShortcuts...)
+	for _, s := range candidates {
+		if s == "" {
+			continue
+		}
+		if !mygo.GlobalShortcut.IsRegistered(s) {
+			if err := mygo.GlobalShortcut.Register(s, a.togglePanel); err != nil {
+				log.Printf("register shortcut %s: %v", s, err)
+				continue
+			}
+		}
+		a.shortcut = s
+		a.settings.Hotkey = s
+		if a.trayOpenItem != nil {
+			a.trayOpenItem.SetAccelerator(s)
+		}
+		return
 	}
 }
 

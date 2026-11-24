@@ -29,6 +29,7 @@ type globalHotkeyState struct {
 var (
 	globalHotkeyOnce sync.Once
 	globalHotkeyCB   uintptr
+	globalHotkeyMu   sync.Mutex
 	activeGlobalHK   atomic.Pointer[globalHotkeyState]
 )
 
@@ -58,7 +59,7 @@ func sendWinMaskKey() {
 	)
 }
 
-func ensureGlobalHotkeyHook() *globalHotkeyState {
+func ensureGlobalHotkeyHookLocked() *globalHotkeyState {
 	if st := activeGlobalHK.Load(); st != nil {
 		return st
 	}
@@ -69,9 +70,6 @@ func ensureGlobalHotkeyHook() *globalHotkeyState {
 	st := &globalHotkeyState{
 		events: make(chan func(), 16),
 		stopCh: make(chan struct{}),
-	}
-	if !activeGlobalHK.CompareAndSwap(nil, st) {
-		return activeGlobalHK.Load()
 	}
 
 	go func() {
@@ -87,18 +85,12 @@ func ensureGlobalHotkeyHook() *globalHotkeyState {
 		}
 	}()
 
-	stop, ok := startLLHook(whKeyboardLL, globalHotkeyCB, func() {
-		activeGlobalHK.CompareAndSwap(st, nil)
-		close(st.stopCh)
-	})
+	stop, ok := startLLHook(whKeyboardLL, globalHotkeyCB, nil)
 	if !ok {
-		activeGlobalHK.CompareAndSwap(st, nil)
 		close(st.stopCh)
 		return nil
 	}
-	st.mu.Lock()
 	st.stopHook = stop
-	st.mu.Unlock()
 	return st
 }
 
@@ -108,7 +100,10 @@ func StartGlobalHotkeyHook(vk uint32, win, ctrl, shift, alt bool, onTrigger func
 	if vk == 0 || vk >= 256 || onTrigger == nil {
 		return func() {}, false
 	}
-	st := ensureGlobalHotkeyHook()
+	globalHotkeyMu.Lock()
+	defer globalHotkeyMu.Unlock()
+
+	st := ensureGlobalHotkeyHookLocked()
 	if st == nil {
 		return func() {}, false
 	}
@@ -117,12 +112,16 @@ func StartGlobalHotkeyHook(vk uint32, win, ctrl, shift, alt bool, onTrigger func
 	st.onTrigger = onTrigger
 	st.suppressed = [256]bool{}
 	st.mu.Unlock()
+	activeGlobalHK.Store(st)
 	return StopGlobalHotkeyHook, true
 }
 
 // StopGlobalHotkeyHook 卸载全局热键低级键盘钩子。
 func StopGlobalHotkeyHook() {
-	st := activeGlobalHK.Load()
+	globalHotkeyMu.Lock()
+	defer globalHotkeyMu.Unlock()
+
+	st := activeGlobalHK.Swap(nil)
 	if st == nil {
 		return
 	}
@@ -131,10 +130,12 @@ func StopGlobalHotkeyHook() {
 	st.onTrigger = nil
 	st.suppressed = [256]bool{}
 	stopFn := st.stopHook
+	st.stopHook = nil
 	st.mu.Unlock()
 	if stopFn != nil {
 		stopFn()
 	}
+	close(st.stopCh)
 }
 
 func lowLevelGlobalHotkeyProc(nCode int32, wp, lp uintptr) uintptr {
@@ -171,9 +172,7 @@ func lowLevelGlobalHotkeyProc(nCode int32, wp, lp uintptr) uintptr {
 					st.mu.Unlock()
 
 					if onTrigger != nil && matchesGlobalHotkey(target, vk, winDown, ctrl, shift, alt) {
-						st.mu.Lock()
-						st.suppressed[vk] = true
-						st.mu.Unlock()
+						queued := alreadyPressed
 						if !alreadyPressed {
 							select {
 							case st.events <- func() {
@@ -182,10 +181,16 @@ func lowLevelGlobalHotkeyProc(nCode int32, wp, lp uintptr) uintptr {
 								}
 								onTrigger()
 							}:
+								queued = true
 							default:
 							}
 						}
-						return 1
+						if queued {
+							st.mu.Lock()
+							st.suppressed[vk] = true
+							st.mu.Unlock()
+							return 1
+						}
 					}
 				}
 			}

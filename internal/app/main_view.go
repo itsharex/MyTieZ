@@ -86,11 +86,13 @@ func (a *clipApp) view(c *ui.Context) {
 				if a.confirmAction != "" {
 					a.confirmAction = ""
 				} else {
-					a.showSettings = false
+					a.closeSettings()
 				}
 			}
-			a.settingsView(c)
-			return
+			if a.showSettings {
+				a.settingsView(c)
+				return
+			}
 		}
 		a.mainView(c)
 	})

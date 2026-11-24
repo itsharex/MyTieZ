@@ -29,6 +29,19 @@ type settingsGroupExpanded struct {
 	fontPicker     bool
 }
 
+func (a *clipApp) closeSettings() {
+	a.cancelHotkeyRecording()
+	a.showSettings = false
+	a.expanded.accentPicker = false
+	a.expanded.fontPicker = false
+	a.expanded.privacyKinds = false
+	a.expanded.privacyRules = false
+	a.expanded.privacyMasking = false
+	a.settingsScroll = ui.ScrollState{}
+	a.fontQuery = ""
+	a.confirmAction = ""
+}
+
 func (a *clipApp) settingsView(c *ui.Context) {
 	t := c.Theme()
 	msgs := locales.In(c.Locale())
@@ -37,12 +50,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 		// 设置页顶部导航栏（与主页顶栏同构，下方带左右留白的细分割线）
 		ui.Column(c).FillWidth().Padding(10, 16, 8, 16).Children(func() {
 			ui.Row(c).Height(headerBtnSize).AlignItems(ui.Center).Gap(8).DragWindow().Children(func() {
-				a.renderHeaderIconBtn(c, iconBack, msgs.HeaderBack(), false, false, func() {
-					a.cancelHotkeyRecording()
-					a.showSettings = false
-					a.settingsScroll = ui.ScrollState{}
-					a.confirmAction = ""
-				})
+				a.renderHeaderIconBtn(c, iconBack, msgs.HeaderBack(), false, false, a.closeSettings)
 
 				ui.Text(c, msgs.SettingsTitle()).FontSize(17).FontWeight(600).TextColor(t.Text)
 				ui.Box(c).Grow(1)

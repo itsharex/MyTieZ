@@ -1548,5 +1548,14 @@ func TestFontPickerLazyAndPersistence(t *testing.T) {
 	if a.settings.FontFamily != "" {
 		t.Fatalf("expected FontFamily cleared after reset, got %q", a.settings.FontFamily)
 	}
+
+	// 关闭设置页后应立即收起下拉/子面板，同时保留大分组展开状态
+	if err := tt.Click("返回"); err != nil {
+		t.Fatal(err)
+	}
+	if a.showSettings || !a.expanded.appearance || a.expanded.fontPicker || a.expanded.accentPicker || a.fontQuery != "" || a.settingsScroll != (ui.ScrollState{}) {
+		t.Fatalf("expected sub-pickers settled and appearance preserved on close: show=%v expanded=%+v query=%q scroll=%+v",
+			a.showSettings, a.expanded, a.fontQuery, a.settingsScroll)
+	}
 }
 

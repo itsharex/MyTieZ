@@ -118,6 +118,7 @@ type clipApp struct {
 	snapNextFrame       bool
 	hasShownOnce        bool
 	expanded            settingsGroupExpanded
+	accentPicker        *accentPickerState
 	confirmAction       string
 	recordingHotkey     bool
 	recordingTarget     string // "" | "global" | "plain_paste"

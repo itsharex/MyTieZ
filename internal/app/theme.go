@@ -3,6 +3,8 @@ package app
 import (
 	"time"
 
+	"mytiez/internal/store"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -260,10 +262,14 @@ func (a *clipApp) resolveTheme(c *ui.Context) *ui.Theme {
 	}
 	vibrancy := a.usingVibrancy(c)
 	scale := c.Preferences().TextScale
-	if !vibrancy && (scale <= 0 || scale == 1) {
+	accentHex := store.NormalizeHexColor(a.settings.AccentColor)
+	if !vibrancy && (scale <= 0 || scale == 1) && accentHex == "" {
 		return base
 	}
 	cloned := *base
+	if accentHex != "" {
+		applyAccentColor(&cloned, ui.Hex(accentHex), useDark)
+	}
 	if scale > 0 && scale != 1 {
 		cloned.FontSize *= scale
 		cloned.Spacing *= scale
@@ -296,4 +302,24 @@ func (a *clipApp) resolveTheme(c *ui.Context) *ui.Theme {
 		}
 	}
 	return &cloned
+}
+
+func applyAccentColor(t *ui.Theme, accent ui.Color, dark bool) {
+	solid := ui.RGB(accent.R, accent.G, accent.B)
+	t.Accent = solid
+	t.InactiveAccent = solid
+	if dark {
+		t.AccentHover = solid.Mix(ui.RGB(255, 255, 255), 0.16)
+		t.AccentPressed = solid.Mix(ui.RGB(0, 0, 0), 0.18)
+	} else {
+		t.AccentHover = solid.Mix(ui.RGB(0, 0, 0), 0.14)
+		t.AccentPressed = solid.Mix(ui.RGB(0, 0, 0), 0.26)
+	}
+	// 根据感知亮度自动切换白字/深色字，确保高亮度强调色下的可读性。
+	luma := 0.299*float32(solid.R)/255 + 0.587*float32(solid.G)/255 + 0.114*float32(solid.B)/255
+	if luma > 0.64 {
+		t.AccentText = ui.Hex("#182235")
+	} else {
+		t.AccentText = ui.Hex("#ffffff")
+	}
 }

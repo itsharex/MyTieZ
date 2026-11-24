@@ -366,6 +366,8 @@ func TestShowAllCardActionsAndRichActionAlignment(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Advance(250 * time.Millisecond)
+	tt.Wheel(panelWidth/2, panelHeight/2, 0, 200)
+	tt.Advance(250 * time.Millisecond)
 	if err := tt.Click(msgs.SettingsSwitchA11y(msgs.SettingsShowAllCardActions())); err != nil {
 		t.Fatal(err)
 	}

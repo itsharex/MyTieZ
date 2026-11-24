@@ -78,6 +78,7 @@ type Settings struct {
 	SensitiveMaskEmailDomain bool     `json:"sensitive_mask_email_domain"`
 	ColorMode                string   `json:"color_mode"`    // "system" | "light" | "dark"
 	BackdropMode             string   `json:"backdrop_mode"` // "solid" | "mica" | "mica_alt" | "acrylic_base" | "acrylic"
+	AccentColor              string   `json:"accent_color"`  // "" (default blue) or "#rrggbb"
 	CompactMode        bool   `json:"compact_mode"`
 	ShowAllCardActions bool   `json:"show_all_card_actions"`
 	HideCardActions    bool   `json:"hide_card_actions"`
@@ -347,6 +348,7 @@ func (s *Store) LoadSettings() (Settings, error) {
 	default:
 		cfg.BackdropMode = DefaultSettings().BackdropMode
 	}
+	cfg.AccentColor = NormalizeHexColor(cfg.AccentColor)
 	if cfg.PasteMethod != "shift_insert" && cfg.PasteMethod != "ctrl_v" && cfg.PasteMethod != "game_mode" {
 		cfg.PasteMethod = "shift_insert"
 	}
@@ -1324,4 +1326,20 @@ func formatBytes(n int64) string {
 	default:
 		return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
 	}
+}
+
+// NormalizeHexColor 校验并规范化 #RRGGBB 格式颜色，不合法时返回空字符串。
+func NormalizeHexColor(raw string) string {
+	s := strings.TrimSpace(raw)
+	if len(s) != 7 || s[0] != '#' {
+		return ""
+	}
+	for i := 1; i < 7; i++ {
+		c := s[i]
+		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+		if !isHex {
+			return ""
+		}
+	}
+	return strings.ToLower(s)
 }

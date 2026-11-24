@@ -25,6 +25,7 @@ type settingsGroupExpanded struct {
 	privacyKinds   bool
 	privacyRules   bool
 	privacyMasking bool
+	accentPicker   bool
 }
 
 func (a *clipApp) settingsView(c *ui.Context) {
@@ -160,6 +161,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						{label: msgs.SettingsColorLight(), a11y: msgs.SettingsColorLightA11y(), active: a.settings.ColorMode == "light", onClick: func() { a.setColorMode("light") }},
 						{label: msgs.SettingsColorDark(), a11y: msgs.SettingsColorDarkA11y(), active: a.settings.ColorMode == "dark", onClick: func() { a.setColorMode("dark") }},
 					})
+					a.renderAccentColorSection(c, msgs)
 					a.renderSwitchRow(c, msgs.SettingsCompactMode(), "", &a.settings.CompactMode, func(bool) {
 						a.persistSettings()
 					})
@@ -550,6 +552,120 @@ func (a *clipApp) setLanguage(locale string) {
 func (a *clipApp) setColorMode(mode string) {
 	a.settings.ColorMode = mode
 	a.persistSettings()
+}
+
+func (a *clipApp) setAccentColor(hex string) {
+	a.settings.AccentColor = store.NormalizeHexColor(hex)
+	a.persistSettings()
+}
+
+func (a *clipApp) renderAccentColorSection(c *ui.Context, msgs locales.Messages) {
+	t := c.Theme()
+	defaultBlue := myTiezLightTheme.Accent
+	if t.Dark {
+		defaultBlue = myTiezDarkTheme.Accent
+	}
+	type accentPreset struct {
+		hex   string
+		color ui.Color
+		a11y  string
+	}
+	presets := []accentPreset{
+		{hex: "", color: defaultBlue, a11y: msgs.SettingsAccentDefault()},
+		{hex: "#6366f1", color: ui.Hex("#6366f1"), a11y: msgs.SettingsAccentSwatchA11y("#6366f1")},
+		{hex: "#8b5cf6", color: ui.Hex("#8b5cf6"), a11y: msgs.SettingsAccentSwatchA11y("#8b5cf6")},
+		{hex: "#ec4899", color: ui.Hex("#ec4899"), a11y: msgs.SettingsAccentSwatchA11y("#ec4899")},
+		{hex: "#ef4444", color: ui.Hex("#ef4444"), a11y: msgs.SettingsAccentSwatchA11y("#ef4444")},
+		{hex: "#f59e0b", color: ui.Hex("#f59e0b"), a11y: msgs.SettingsAccentSwatchA11y("#f59e0b")},
+		{hex: "#10b981", color: ui.Hex("#10b981"), a11y: msgs.SettingsAccentSwatchA11y("#10b981")},
+	}
+
+	curHex := store.NormalizeHexColor(a.settings.AccentColor)
+	isPreset := false
+	for _, preset := range presets {
+		if curHex == preset.hex {
+			isPreset = true
+			break
+		}
+	}
+
+	ui.Column(c).FillWidth().Padding(8, 16).Gap(10).Children(func() {
+		// 第一行：固定 24px 高度，防止「恢复默认」显隐引起高度跳动
+		ui.Row(c).FillWidth().Height(24).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(8).Children(func() {
+			a.renderSettingTitle(c, msgs.SettingsAccentColor(), "")
+			if curHex != "" {
+				resetBtn := ui.ButtonBase(c).Height(22).Padding(0, 6).Radius(radiusMicro).Center().
+					Label(msgs.SettingsAccentReset())
+				bg := ui.Transparent
+				if resetBtn.Hovered() {
+					bg = t.SurfaceHover
+				}
+				resetBtn.Background(bg).Transition(colorTransition).
+					OnClick(func() {
+						a.confirmAction = ""
+						a.setAccentColor("")
+					}).
+					Children(func() {
+						ui.Text(c, msgs.SettingsAccentReset()).FontSize(11.5).FontWeight(500).TextColor(t.TextMuted).SingleLine()
+					})
+			}
+		})
+
+		// 第二行：7 个精选预设色卡 + 第 8 个彩虹取色盘按钮
+		ui.Row(c).FillWidth().Justify(ui.SpaceBetween).AlignItems(ui.Center).Children(func() {
+			for _, preset := range presets {
+				item := preset
+				selected := curHex == item.hex
+				btn := ui.ButtonBase(c).Size(28, 28).Radius(14).Center().
+					Label(item.a11y).Tooltip(item.a11y)
+				ringColor := ui.Transparent
+				if selected {
+					ringColor = t.Text
+				} else if btn.Hovered() {
+					ringColor = t.Border
+				}
+				btn.Border(1.5, ringColor).Transition(colorTransition).
+					OnClick(func() {
+						a.confirmAction = ""
+						a.setAccentColor(item.hex)
+					}).
+					Children(func() {
+						ui.Box(c).Size(20, 20).Radius(10).
+							Background(item.color).Border(1, t.Text.Alpha(0.12))
+					})
+			}
+
+			// 第 8 个：彩虹渐变圆点（仅自定义非预设色时显示高亮白圈，避免出现双圈）
+			customBtn := ui.ButtonBase(c).Size(28, 28).Radius(14).Center().
+				Label(msgs.SettingsAccentCustom()).Tooltip(msgs.SettingsAccentCustom())
+			customRing := ui.Transparent
+			if !isPreset {
+				customRing = t.Text
+			} else if a.expanded.accentPicker || customBtn.Hovered() {
+				customRing = t.Border
+			}
+			customBtn.Border(1.5, customRing).Transition(colorTransition).
+				OnClick(func() {
+					a.confirmAction = ""
+					a.expanded.accentPicker = !a.expanded.accentPicker
+				}).
+				Children(func() {
+					ui.Box(c).Size(20, 20).Radius(10).Border(1, t.Text.Alpha(0.15)).
+						Draw(func(p *ui.Painter, r ui.Rect) {
+							p.FillGradient(r, ui.LinearGradient{
+								From:  ui.Hex("#fb7185"),
+								To:    ui.Hex("#38bdf8"),
+								Angle: 135,
+							}, r.W/2)
+						})
+				})
+		})
+
+		// 第三部分：就地展开紧凑取色盘
+		if a.expanded.accentPicker {
+			a.renderCompactAccentPicker(c)
+		}
+	})
 }
 
 type choiceOption struct {

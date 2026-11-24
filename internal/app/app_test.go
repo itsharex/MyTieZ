@@ -1397,3 +1397,62 @@ func TestHiddenPanelSettlesListAndFirstFrameWithoutJump(t *testing.T) {
 	}
 }
 
+func TestAccentColorSettings(t *testing.T) {
+	if got := store.NormalizeHexColor(" #8B5CF6 "); got != "#8b5cf6" {
+		t.Fatalf("expected normalized #8b5cf6, got %q", got)
+	}
+	if got := store.NormalizeHexColor("invalid"); got != "" {
+		t.Fatalf("expected empty for invalid hex, got %q", got)
+	}
+
+	light := *myTiezLightTheme
+	applyAccentColor(&light, ui.Hex("#fde047"), false)
+	if light.AccentText != ui.Hex("#182235") {
+		t.Fatalf("expected dark AccentText on bright yellow, got %+v", light.AccentText)
+	}
+
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	a := newClipApp(st, nil)
+	a.reload()
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	if err := tt.Click("设置"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("界面设置"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+
+	if err := tt.Click("选择强调色 #8b5cf6"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.AccentColor != "#8b5cf6" {
+		t.Fatalf("expected AccentColor=#8b5cf6, got %q", a.settings.AccentColor)
+	}
+	if loaded, err := a.store.LoadSettings(); err != nil || loaded.AccentColor != "#8b5cf6" {
+		t.Fatalf("expected persisted AccentColor=#8b5cf6, got %q err=%v", loaded.AccentColor, err)
+	}
+
+	if err := tt.Click("取色盘"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	if !a.expanded.accentPicker {
+		t.Fatalf("expected accentPicker expanded after clicking 取色盘")
+	}
+
+	if err := tt.Click("恢复默认"); err != nil {
+		t.Fatal(err)
+	}
+	if a.settings.AccentColor != "" {
+		t.Fatalf("expected AccentColor cleared after reset, got %q", a.settings.AccentColor)
+	}
+	if loaded, err := a.store.LoadSettings(); err != nil || loaded.AccentColor != "" {
+		t.Fatalf("expected persisted AccentColor empty after reset, got %q err=%v", loaded.AccentColor, err)
+	}
+}
+

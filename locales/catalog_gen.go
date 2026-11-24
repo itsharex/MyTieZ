@@ -1554,6 +1554,58 @@ func (msgs Messages) SettingsColorDarkA11y() string {
 	return Catalog.Format(msgs.locale, "settingsColorDarkA11y", nil)
 }
 
+// SettingsAccentColor says "强调色"
+// in the language the app shows.
+func SettingsAccentColor() string { return In(i18n.Locale()).SettingsAccentColor() }
+
+// SettingsAccentColor says "强调色"
+// in the language of msgs.
+func (msgs Messages) SettingsAccentColor() string {
+	return Catalog.Format(msgs.locale, "settingsAccentColor", nil)
+}
+
+// SettingsAccentDefault says "默认蓝"
+// in the language the app shows.
+func SettingsAccentDefault() string { return In(i18n.Locale()).SettingsAccentDefault() }
+
+// SettingsAccentDefault says "默认蓝"
+// in the language of msgs.
+func (msgs Messages) SettingsAccentDefault() string {
+	return Catalog.Format(msgs.locale, "settingsAccentDefault", nil)
+}
+
+// SettingsAccentReset says "恢复默认"
+// in the language the app shows.
+func SettingsAccentReset() string { return In(i18n.Locale()).SettingsAccentReset() }
+
+// SettingsAccentReset says "恢复默认"
+// in the language of msgs.
+func (msgs Messages) SettingsAccentReset() string {
+	return Catalog.Format(msgs.locale, "settingsAccentReset", nil)
+}
+
+// SettingsAccentCustom says "取色盘"
+// in the language the app shows.
+func SettingsAccentCustom() string { return In(i18n.Locale()).SettingsAccentCustom() }
+
+// SettingsAccentCustom says "取色盘"
+// in the language of msgs.
+func (msgs Messages) SettingsAccentCustom() string {
+	return Catalog.Format(msgs.locale, "settingsAccentCustom", nil)
+}
+
+// SettingsAccentSwatchA11y says "选择强调色 {color}"
+// in the language the app shows.
+func SettingsAccentSwatchA11y(color string) string {
+	return In(i18n.Locale()).SettingsAccentSwatchA11y(color)
+}
+
+// SettingsAccentSwatchA11y says "选择强调色 {color}"
+// in the language of msgs.
+func (msgs Messages) SettingsAccentSwatchA11y(color string) string {
+	return Catalog.Format(msgs.locale, "settingsAccentSwatchA11y", map[string]any{"color": color})
+}
+
 // SettingsCompactMode says "紧凑卡片模式"
 // in the language the app shows.
 func SettingsCompactMode() string { return In(i18n.Locale()).SettingsCompactMode() }

@@ -44,7 +44,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 					a.confirmAction = ""
 				})
 
-				ui.Text(c, msgs.SettingsTitle()).FontSize(17).Bold().TextColor(t.Text)
+				ui.Text(c, msgs.SettingsTitle()).FontSize(17).FontWeight(600).TextColor(t.Text)
 				ui.Box(c).Grow(1)
 				ui.Row(c).AlignItems(ui.Center).Gap(4).Children(func() {
 					a.renderWindowActionButtons(c)
@@ -124,7 +124,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 								mygo.App.Quit()
 							}).
 							Children(func() {
-								ui.Text(c, msgs.SettingsRestartBtn()).FontSize(13).FontWeight(600).TextColor(t.Text)
+								ui.Text(c, msgs.SettingsRestartBtn()).FontSize(13).FontWeight(500).TextColor(t.Text)
 							})
 					})
 				})
@@ -231,7 +231,7 @@ func (a *clipApp) settingsView(c *ui.Context) {
 								}
 							}).
 							Children(func() {
-								ui.Text(c, msgs.SettingsOpenDir()).FontSize(13).FontWeight(600).TextColor(t.Text)
+								ui.Text(c, msgs.SettingsOpenDir()).FontSize(13).FontWeight(500).TextColor(t.Text)
 							})
 					})
 					a.renderConfirmActionRow(c, msgs.SettingsClearUnpinned(), "", "clear_unpinned", msgs.SettingsClearBtn(), msgs.SettingsClearConfirm(), func() {
@@ -334,7 +334,7 @@ func (a *clipApp) renderUpdateControls(c *ui.Context, msgs locales.Messages) {
 			}
 		}).
 		Children(func() {
-			ui.Text(c, btnLabel).FontSize(12.5).FontWeight(600).TextColor(fg)
+			ui.Text(c, btnLabel).FontSize(12.5).FontWeight(500).TextColor(fg)
 		})
 
 	if a.updateStatus != "" {
@@ -525,7 +525,7 @@ func (a *clipApp) renderNumberStepperRow(c *ui.Context, label string, val *int, 
 				ui.Text(c, "−").FontSize(13).TextColor(t.TextMuted)
 			})
 			ui.Text(c, strconv.Itoa(*val)).Width(26).TextAlign(ui.Center).
-				FontSize(13).FontWeight(600).TextColor(t.Text).SingleLine()
+				FontSize(13).FontWeight(500).TextColor(t.Text).SingleLine()
 			ui.ButtonBase(c).Size(24, 26).Center().Label("+").OnClick(func() {
 				if *val < maxVal {
 					*val++
@@ -717,7 +717,7 @@ func (a *clipApp) renderSettingsGroup(c *ui.Context, key, title string, expanded
 				tr.Background(t.SurfaceHover)
 			}
 			tr.Children(func() {
-				ui.Text(c, title).FontSize(14.5).FontWeight(700).TextColor(t.Text)
+				ui.Text(c, title).FontSize(14.5).FontWeight(600).TextColor(t.Text)
 				ui.Icon(c, iconChevronRight).FontSize(15).TextColor(t.TextMuted).Rotate(90 * p.Progress())
 			})
 
@@ -733,7 +733,7 @@ func (a *clipApp) renderSettingsGroup(c *ui.Context, key, title string, expanded
 func (a *clipApp) renderSettingTitle(c *ui.Context, title, desc string) ui.Element {
 	t := c.Theme()
 	return ui.Row(c).AlignItems(ui.Center).Gap(5).Children(func() {
-		ui.Text(c, title).Shrink(1).FontSize(14).FontWeight(600).TextColor(t.Text).SingleLine()
+		ui.Text(c, title).Shrink(1).FontSize(14).FontWeight(500).TextColor(t.Text).SingleLine()
 		if desc != "" {
 			a.renderHelpTooltip(c, desc)
 		}
@@ -870,7 +870,11 @@ func (a *clipApp) renderChoicePill(c *ui.Context, text, a11yLabel, tooltip strin
 			onClick()
 		}).
 		Children(func() {
-			ui.Text(c, text).FontSize(13).FontWeight(600).TextColor(fg).SingleLine()
+			w := 500
+			if active {
+				w = 600
+			}
+			ui.Text(c, text).FontSize(13).FontWeight(w).TextColor(fg).SingleLine()
 		})
 	return pill
 }
@@ -902,7 +906,7 @@ func (a *clipApp) renderConfirmActionRow(c *ui.Context, title, desc, actionKey, 
 				onConfirm()
 			}).
 			Children(func() {
-				ui.Text(c, text).FontSize(13).FontWeight(600).TextColor(fg)
+				ui.Text(c, text).FontSize(13).FontWeight(500).TextColor(fg)
 			})
 	})
 }
@@ -931,7 +935,7 @@ func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) 
 						}
 					}).
 					Children(func() {
-						ui.Text(c, msgs.OpenAppResetBtn()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, msgs.OpenAppResetBtn()).FontSize(12).FontWeight(400).TextColor(t.TextMuted)
 					})
 			}
 
@@ -945,7 +949,7 @@ func (a *clipApp) renderOpenAppRow(c *ui.Context, title string, target *string) 
 					a.pickOpenApp(title, target)
 				}).
 				Children(func() {
-					ui.Text(c, msgs.OpenAppPickBtn()).FontSize(13).FontWeight(600).TextColor(t.Text)
+					ui.Text(c, msgs.OpenAppPickBtn()).FontSize(13).FontWeight(500).TextColor(t.Text)
 				})
 		})
 	})
@@ -979,7 +983,7 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 						a.cancelHotkeyRecording()
 					}).
 					Children(func() {
-						ui.Text(c, msgs.SettingsHotkeyCancel()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, msgs.SettingsHotkeyCancel()).FontSize(12).FontWeight(400).TextColor(t.TextMuted)
 					})
 			} else if a.settings.Hotkey != defaultHotkey {
 				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsHotkeyResetA11y())
@@ -988,7 +992,7 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 						a.applyHotkey(defaultHotkey)
 					}).
 					Children(func() {
-						ui.Text(c, msgs.SettingsHotkeyReset()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, msgs.SettingsHotkeyReset()).FontSize(12).FontWeight(400).TextColor(t.TextMuted)
 					})
 			}
 
@@ -1021,7 +1025,7 @@ func (a *clipApp) renderHotkeyRecorder(c *ui.Context) {
 					a.startHotkeyRecording()
 				}).
 				Children(func() {
-					ui.Text(c, labelText).FontSize(13).FontWeight(600).TextColor(fg)
+					ui.Text(c, labelText).FontSize(13).FontWeight(500).TextColor(fg)
 				})
 		})
 	})
@@ -1055,7 +1059,7 @@ func (a *clipApp) renderPlainPasteShortcutRecorder(c *ui.Context) {
 						a.cancelHotkeyRecording()
 					}).
 					Children(func() {
-						ui.Text(c, msgs.SettingsHotkeyCancel()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, msgs.SettingsHotkeyCancel()).FontSize(12).FontWeight(400).TextColor(t.TextMuted)
 					})
 			} else if a.settings.PlainPasteShortcut != defaultShortcut {
 				resetBtn := ui.ButtonBase(c).Height(pillHeight).Padding(0, 10).Radius(radiusGroup).Label(msgs.SettingsPlainPasteResetA11y())
@@ -1064,7 +1068,7 @@ func (a *clipApp) renderPlainPasteShortcutRecorder(c *ui.Context) {
 						a.applyPlainPasteShortcut(defaultShortcut)
 					}).
 					Children(func() {
-						ui.Text(c, msgs.SettingsHotkeyReset()).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, msgs.SettingsHotkeyReset()).FontSize(12).FontWeight(400).TextColor(t.TextMuted)
 					})
 			}
 
@@ -1097,7 +1101,7 @@ func (a *clipApp) renderPlainPasteShortcutRecorder(c *ui.Context) {
 					a.startPlainShortcutRecording()
 				}).
 				Children(func() {
-					ui.Text(c, labelText).FontSize(13).FontWeight(600).TextColor(fg)
+					ui.Text(c, labelText).FontSize(13).FontWeight(500).TextColor(fg)
 				})
 		})
 	})

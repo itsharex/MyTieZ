@@ -109,7 +109,7 @@ func (a *clipApp) renderFontPickerSection(c *ui.Context, msgs locales.Messages) 
 					}
 				}).
 				Children(func() {
-					ui.Text(c, displayLabel).FontSize(13).FontWeight(600).TextColor(t.Text).SingleLine().Shrink(1)
+					ui.Text(c, displayLabel).FontSize(13).FontWeight(500).TextColor(t.Text).SingleLine().Shrink(1)
 					rot := float32(0)
 					if a.expanded.fontPicker {
 						rot = 180

@@ -151,7 +151,7 @@ func (a *clipApp) renderCompactAccentPicker(c *ui.Context) {
 				// 3. 右侧：微圆角 HEX 输入 + 紧凑 RGB 数值
 				ui.Column(c).Width(infoW).Height(panelH).Shrink(0).Justify(ui.Center).Gap(8).Children(func() {
 					ui.Column(c).FillWidth().Gap(4).Children(func() {
-						ui.Text(c, "HEX").FontSize(10.5).FontWeight(600).TextColor(t.TextMuted).SingleLine()
+						ui.Text(c, "HEX").FontSize(10.5).FontWeight(500).TextColor(t.TextMuted).SingleLine()
 						hexBox := ui.TextInputBase(c.Key("accent-hex-input"), &st.hexInput).
 							FillWidth().Height(28).Padding(0, 8).Radius(radiusMicro).
 							FontSize(12).FontFeatures("tnum").TextColor(t.Text).

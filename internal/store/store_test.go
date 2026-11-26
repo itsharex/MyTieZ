@@ -832,3 +832,12 @@ func TestReorderPinnedPersistence(t *testing.T) {
 			got[0].ID, got[1].ID, got[2].ID, b.ID, c.ID, a.ID)
 	}
 }
+
+func TestMakeTextPreviewPreservesLineBreaks(t *testing.T) {
+	if got := makeTextPreview("line 1\n\nline 2\r\nline 3"); got != "line 1\nline 2\nline 3" {
+		t.Fatalf("makeTextPreview = %q, want %q", got, "line 1\nline 2\nline 3")
+	}
+	if got := makeTextPreview("l1\nl2\nl3\nl4\nl5\nl6"); got != "l1\nl2\nl3\nl4\nl5" {
+		t.Fatalf("makeTextPreview line cap = %q, want 5 lines", got)
+	}
+}

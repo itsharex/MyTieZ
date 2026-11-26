@@ -1340,12 +1340,22 @@ func truncateRunes(s string, maxRunes int) string {
 }
 
 func makeTextPreview(s string) string {
-	s = strings.TrimSpace(strings.ReplaceAll(s, "\r\n", "\n"))
-	lines := strings.Split(s, "\n")
-	if len(lines) > 4 {
-		lines = lines[:4]
+	s = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n"))
+	if s == "" {
+		return ""
 	}
-	out := strings.Join(lines, " ")
+	var lines []string
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimRight(line, " \t")
+		if strings.TrimSpace(trimmed) == "" {
+			continue
+		}
+		lines = append(lines, trimmed)
+		if len(lines) >= 5 {
+			break
+		}
+	}
+	out := strings.Join(lines, "\n")
 	if len(out) > 220 && utf8.RuneCountInString(out) > 220 {
 		return truncateRunes(out, 220) + "…"
 	}

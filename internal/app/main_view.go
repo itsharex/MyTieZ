@@ -574,9 +574,14 @@ func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string,
 	const lineHeight = 1.45
 	if a.settings.CompactMode {
 		if len(spans) > 0 {
-			ui.RichText(c, spans...).FontSize(bodySize).LineHeight(lineHeight).TextColor(t.Text).Wrap().MaxLines(maxLines)
+			compactSpans := make([]ui.Span, len(spans))
+			for i, sp := range spans {
+				sp.Text = strings.ReplaceAll(sp.Text, "\n", " ")
+				compactSpans[i] = sp
+			}
+			ui.RichText(c, compactSpans...).FontSize(bodySize).LineHeight(lineHeight).TextColor(t.Text).Wrap().MaxLines(maxLines)
 		} else {
-			ui.Text(c, text).FontSize(bodySize).LineHeight(lineHeight).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(maxLines)
+			ui.Text(c, strings.ReplaceAll(text, "\n", " ")).FontSize(bodySize).LineHeight(lineHeight).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(maxLines)
 		}
 		return
 	}

@@ -6,7 +6,11 @@ import (
 	"encoding/binary"
 	"image"
 	"image/color"
+	"os"
+	"os/exec"
+	"slices"
 	"testing"
+	"time"
 	"unsafe"
 )
 
@@ -159,5 +163,38 @@ func TestForegroundWinEventProcFiltering(t *testing.T) {
 	foregroundWinEventProc(0, eventSystemForeground, 0x9999, uintptr(objidWindow), 1, 0, 0)
 	if got := lastExternalHWND.Load(); got != 0x5678 {
 		t.Fatalf("expected non-self idChild ignored, got %#x", got)
+	}
+}
+
+func TestElevatedRestartArgsAndWait(t *testing.T) {
+	built := buildRestartAdminArgs(4321, []string{"--wait-pid=111", "--foo", "--wait-pid", "222", "bar"})
+	wantBuilt := []string{"--foo", "bar", "--wait-pid=4321"}
+	if !slices.Equal(built, wantBuilt) {
+		t.Fatalf("buildRestartAdminArgs = %v, want %v", built, wantBuilt)
+	}
+
+	pid, cleaned := extractWaitPID([]string{"mytiez.exe", "--foo", "--wait-pid=4321", "bar"})
+	if pid != 4321 {
+		t.Fatalf("extractWaitPID pid = %d, want 4321", pid)
+	}
+	if !slices.Equal(cleaned, []string{"mytiez.exe", "--foo", "bar"}) {
+		t.Fatalf("extractWaitPID cleaned = %v, want [mytiez.exe --foo bar]", cleaned)
+	}
+
+	pid2, cleaned2 := extractWaitPID([]string{"mytiez.exe", "--wait-pid", "9876", "--baz"})
+	if pid2 != 9876 || !slices.Equal(cleaned2, []string{"mytiez.exe", "--baz"}) {
+		t.Fatalf("extractWaitPID two-arg = (%d, %v), want (9876, [mytiez.exe --baz])", pid2, cleaned2)
+	}
+
+	// Verify waitForProcessExit returns promptly once a child process exits.
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start dummy child: %v", err)
+	}
+	start := time.Now()
+	waitForProcessExit(cmd.Process.Pid, 5*time.Second)
+	_ = cmd.Wait()
+	if elapsed := time.Since(start); elapsed >= 3*time.Second {
+		t.Fatalf("waitForProcessExit took too long (%v) for exited child", elapsed)
 	}
 }

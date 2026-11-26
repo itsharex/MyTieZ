@@ -125,6 +125,9 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						}
 						btn.Background(bg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 							OnClick(func() {
+								if a.quitting {
+									return
+								}
 								if err := sys.RestartAsAdmin(); err != nil {
 									a.setStatus(msgs.SettingsRestartAdminErr(err.Error()))
 									return

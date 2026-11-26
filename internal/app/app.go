@@ -161,6 +161,7 @@ func newClipApp(st *store.Store, iconPNG []byte) *clipApp {
 
 // Run starts the clipboard manager application.
 func Run(iconPNG []byte) {
+	sys.PrepareElevatedRestart()
 	if os.Getenv("GOGC") == "" {
 		debug.SetGCPercent(50)
 	}

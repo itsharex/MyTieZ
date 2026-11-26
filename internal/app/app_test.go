@@ -1183,6 +1183,78 @@ func TestThumbWindowRetentionAndEviction(t *testing.T) {
 	}
 }
 
+func TestSelectThumbPreloadsBudgetAndOrder(t *testing.T) {
+	st, err := store.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	a := newClipApp(st, nil)
+	items := make([]store.ClipItem, 20)
+	for i := range items {
+		items[i] = store.ClipItem{
+			ID:        int64(i + 1),
+			Kind:      store.KindImage,
+			ImagePath: fmt.Sprintf("pre-img-%02d.png", i),
+		}
+	}
+	activeWindow := func(start, end int) map[string]struct{} {
+		m := make(map[string]struct{}, end-start+1)
+		for i := start; i <= end; i++ {
+			m[items[i].ImagePath] = struct{}{}
+		}
+		return m
+	}
+
+	fullThumb := ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, thumbMaxWidth, thumbMaxHeight))) // 850,000 B
+
+	// 1) pruned == true skips preloading for this frame.
+	if got := a.selectThumbPreloads(items, 10, 11, 8, 13, activeWindow(8, 13), true); len(got) != 0 {
+		t.Fatalf("expected no preloads when pruned=true, got %v", got)
+	}
+
+	// 2) Full cache of cold out-of-window entries must not block active window preloading;
+	//    nearest-first order should alternate below then above (12, 9, 13, 8).
+	for i := 0; i < maxThumbCacheCount; i++ {
+		a.thumbs.put(fmt.Sprintf("cold-%02d.png", i), fullThumb)
+	}
+	a.thumbs.put(items[10].ImagePath, fullThumb)
+	a.thumbs.put(items[11].ImagePath, fullThumb)
+	got := a.selectThumbPreloads(items, 10, 11, 8, 13, activeWindow(8, 13), false)
+	want := []string{items[12].ImagePath, items[9].ImagePath, items[13].ImagePath, items[8].ImagePath}
+	if len(got) != len(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("preload order[%d]: want %s, got %s (full=%v)", i, want[i], got[i], got)
+		}
+	}
+
+	// 3) In-flight loading key must not be double-counted against remaining byte budget.
+	//    7 cached (5.95 MB) + 1 loading (0.85 MB) = 6.80 MB; remaining 1.58 MB fits exactly 1 more (items[2]).
+	a.thumbs.clear()
+	for i := 3; i <= 9; i++ {
+		a.thumbs.put(items[i].ImagePath, fullThumb)
+	}
+	a.thumbs.startLoading(items[10].ImagePath)
+	defer a.thumbs.finishLoading(items[10].ImagePath)
+	got = a.selectThumbPreloads(items, 3, 9, 1, 11, activeWindow(1, 11), false)
+	if len(got) != 1 || got[0] != items[2].ImagePath {
+		t.Fatalf("expected in-flight item[10] skipped without double-counting and item[2] selected, got %v", got)
+	}
+
+	// 4) Active window already at byte budget (9 * 850 KB = 7.65 MB; +850 KB > 8 MB) stops preloading to prevent thrash.
+	a.thumbs.clear()
+	for i := 2; i <= 10; i++ {
+		a.thumbs.put(items[i].ImagePath, fullThumb)
+	}
+	if got := a.selectThumbPreloads(items, 2, 10, 0, 12, activeWindow(0, 12), false); len(got) != 0 {
+		t.Fatalf("expected no preloads when active window fills byte budget, got %v", got)
+	}
+}
+
 func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 	st, err := store.OpenStore(t.TempDir())
 	if err != nil {

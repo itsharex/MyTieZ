@@ -481,6 +481,10 @@ func (a *clipApp) startForegroundTracker() {
 		a.stopTrack()
 		a.stopTrack = nil
 	}
-	stop, _ := sys.StartForegroundWatcher()
+	stop, ok := sys.StartForegroundWatcher()
+	if !ok {
+		log.Printf("start foreground watcher: SetWinEventHook failed")
+		return
+	}
 	a.stopTrack = stop
 }

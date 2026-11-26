@@ -138,3 +138,26 @@ func TestStartForegroundWatcherAndZeroHWND(t *testing.T) {
 	stop()
 	stop() // idempotent
 }
+
+func TestForegroundWinEventProcFiltering(t *testing.T) {
+	prev := lastExternalHWND.Swap(0x5678)
+	defer lastExternalHWND.Store(prev)
+
+	// Non-foreground event should be ignored.
+	foregroundWinEventProc(0, eventSystemForeground+1, 0x9999, uintptr(objidWindow), uintptr(childidSelf), 0, 0)
+	if got := lastExternalHWND.Load(); got != 0x5678 {
+		t.Fatalf("expected non-foreground event ignored, got %#x", got)
+	}
+
+	// Non-window idObject should be ignored.
+	foregroundWinEventProc(0, eventSystemForeground, 0x9999, 1, uintptr(childidSelf), 0, 0)
+	if got := lastExternalHWND.Load(); got != 0x5678 {
+		t.Fatalf("expected non-window idObject ignored, got %#x", got)
+	}
+
+	// Non-self idChild should be ignored.
+	foregroundWinEventProc(0, eventSystemForeground, 0x9999, uintptr(objidWindow), 1, 0, 0)
+	if got := lastExternalHWND.Load(); got != 0x5678 {
+		t.Fatalf("expected non-self idChild ignored, got %#x", got)
+	}
+}

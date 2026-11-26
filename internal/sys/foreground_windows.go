@@ -55,7 +55,6 @@ func recordExternalForeground(hwnd uintptr) {
 // StartForegroundWatcher installs an out-of-context EVENT_SYSTEM_FOREGROUND hook
 // so external foreground window changes are tracked without periodic polling.
 func StartForegroundWatcher() (func(), bool) {
-	TrackForegroundWindow()
 	foregroundHookOnce.Do(func() {
 		foregroundHookCB = syscall.NewCallback(foregroundWinEventProc)
 	})
@@ -70,6 +69,10 @@ func StartForegroundWatcher() (func(), bool) {
 				0,
 				wineventOutOfContext|wineventSkipOwnProcess,
 			)
+			// Seed initial foreground window on the pump thread right after hook
+			// installation (before GetMessageW dispatches queued events) to avoid
+			// both startup gaps and out-of-order overwrites.
+			TrackForegroundWindow()
 			return h
 		},
 		func(h uintptr) {

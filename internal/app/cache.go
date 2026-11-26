@@ -183,24 +183,52 @@ func (bc *bitmapCache) finishLoading(key string) {
 	bc.loadingMu.Unlock()
 }
 
-func (bc *bitmapCache) loadingCount() int {
-	if bc == nil {
-		return 0
+func (bc *bitmapCache) activeStats(keys map[string]struct{}) (cachedCount int, cachedBytes int64, loadingCount int) {
+	if bc == nil || len(keys) == 0 {
+		return 0, 0, 0
+	}
+	for k := range keys {
+		if bmp, ok := bc.items[k]; ok {
+			cachedCount++
+			cachedBytes += bitmapByteSize(bmp)
+		}
 	}
 	bc.loadingMu.Lock()
-	n := len(bc.loading)
+	if len(bc.loading) <= len(keys) {
+		for k := range bc.loading {
+			if _, active := keys[k]; active {
+				if _, cached := bc.items[k]; !cached {
+					loadingCount++
+				}
+			}
+		}
+	} else {
+		for k := range keys {
+			if bc.loading[k] {
+				if _, cached := bc.items[k]; !cached {
+					loadingCount++
+				}
+			}
+		}
+	}
 	bc.loadingMu.Unlock()
-	return n
+	return cachedCount, cachedBytes, loadingCount
 }
 
-func (bc *bitmapCache) hasOrFailed(key string) bool {
+func (bc *bitmapCache) hasOrPending(key string) bool {
 	if bc == nil || key == "" {
 		return false
 	}
 	if _, ok := bc.items[key]; ok {
 		return true
 	}
-	return bc.failed[key]
+	if bc.failed[key] {
+		return true
+	}
+	bc.loadingMu.Lock()
+	pending := bc.loading[key]
+	bc.loadingMu.Unlock()
+	return pending
 }
 
 func (bc *bitmapCache) touch(key string) {

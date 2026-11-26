@@ -968,8 +968,14 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 			a.thumbs.touchIfPresent(item.ImagePath)
 		}
 	}
-	// Touch overscan rows first and core visible rows last; when anchored at row 0
-	// (including initial unmeasured frames), touch in reverse so row 0 stays newest in LRU.
+	// Touch LRU from coldest active tier to hottest: preload margin -> list overscan -> core visible.
+	// When anchored at row 0 (including initial unmeasured frames), touch core rows in reverse so row 0 stays newest.
+	for i := windowStart; i < firstVisible; i++ {
+		touchActive(i)
+	}
+	for i := lastVisible + 1; i <= windowEnd; i++ {
+		touchActive(i)
+	}
 	coreStart, coreEnd := firstVisible, lastVisible
 	if visFirst, visLast := a.list.Visible(); visLast >= visFirst && visFirst < len(items) {
 		overlapStart := max(firstVisible, visFirst)
@@ -1004,22 +1010,25 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 }
 
 // selectThumbPreloads picks nearby off-screen thumbnails from nearest to farthest
-// only while projected count and byte budget have headroom, preventing preload/evict thrash.
+// only while the active window's projected count and byte budget have headroom,
+// allowing cold out-of-window entries to be evicted while preventing active thrash.
 func (a *clipApp) selectThumbPreloads(items []store.ClipItem, firstVisible, lastVisible, windowStart, windowEnd int, activeKeys map[string]struct{}, pruned bool) []string {
 	if pruned || a.thumbs == nil {
 		return nil
 	}
-	inFlight := a.thumbs.loadingCount()
-	projectedCount := a.thumbs.len() + inFlight
+	activeCached, activeBytes, activeLoading := a.thumbs.activeStats(activeKeys)
+	projectedCount := activeCached + activeLoading
 	if projectedCount >= maxThumbCacheCount {
 		return nil
 	}
 	const defaultEstThumbBytes int64 = int64(thumbMaxWidth) * int64(thumbMaxHeight) * 4
 	estBytes := defaultEstThumbBytes
-	if n := a.thumbs.len(); n > 0 && a.thumbs.bytes() > 0 {
+	if activeCached > 0 && activeBytes > 0 {
+		estBytes = max(activeBytes/int64(activeCached), 256<<10)
+	} else if n := a.thumbs.len(); n > 0 && a.thumbs.bytes() > 0 {
 		estBytes = max(a.thumbs.bytes()/int64(n), 256<<10)
 	}
-	projectedBytes := a.thumbs.bytes() + int64(inFlight)*estBytes
+	projectedBytes := activeBytes + int64(activeLoading)*estBytes
 	if projectedBytes+estBytes > maxThumbCacheBytes {
 		return nil
 	}
@@ -1038,7 +1047,7 @@ func (a *clipApp) selectThumbPreloads(items []store.ClipItem, firstVisible, last
 		if _, active := activeKeys[p]; !active {
 			return false
 		}
-		if _, dup := seen[p]; dup || a.thumbs.hasOrFailed(p) {
+		if _, dup := seen[p]; dup || a.thumbs.hasOrPending(p) {
 			return false
 		}
 		if projectedCount >= maxThumbCacheCount || projectedBytes+estBytes > maxThumbCacheBytes {
@@ -1051,7 +1060,7 @@ func (a *clipApp) selectThumbPreloads(items []store.ClipItem, firstVisible, last
 		return false
 	}
 
-	maxDist := max(lastVisible-windowStart, windowEnd-firstVisible)
+	maxDist := max(firstVisible-windowStart, windowEnd-lastVisible)
 	for d := 1; d <= maxDist; d++ {
 		if tryAdd(lastVisible + d) {
 			break

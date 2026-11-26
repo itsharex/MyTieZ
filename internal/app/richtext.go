@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/binary"
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -13,6 +14,7 @@ import (
 
 const (
 	maxRichPreviewHTMLBytes = 16 * 1024
+	maxRichCheckHTMLBytes   = 64 * 1024
 	maxRichPreviewSpans     = 48
 	maxRichPreviewChars     = 400
 	maxRichSpanCacheEntries = 128
@@ -175,66 +177,6 @@ func truncateUTF8Bytes(s string, maxBytes int) string {
 	return s[:n]
 }
 
-func extractHTMLFragment(raw string) string {
-	const startMarker = "<!--StartFragment-->"
-	const endMarker = "<!--EndFragment-->"
-	if i := strings.Index(raw, startMarker); i >= 0 {
-		s := raw[i+len(startMarker):]
-		if j := strings.Index(s, endMarker); j >= 0 {
-			s = s[:j]
-		}
-		return strings.TrimSpace(s)
-	}
-	if i := strings.Index(strings.ToLower(raw), "<html"); i >= 0 {
-		return strings.TrimSpace(raw[i:])
-	}
-	raw = stripCFHTMLHeaders(raw)
-	if strings.Contains(raw, "<") {
-		return strings.TrimSpace(raw)
-	}
-	return ""
-}
-
-func stripCFHTMLHeaders(raw string) string {
-	head := raw
-	if len(head) > 512 {
-		head = head[:512]
-	}
-	if !strings.HasPrefix(head, "Version:") || (!strings.Contains(head, "StartHTML:") && !strings.Contains(head, "StartFragment:")) {
-		return raw
-	}
-	s := raw
-	for s != "" {
-		line, rest, hasNL := strings.Cut(s, "\n")
-		if !isCFHTMLHeaderLine(strings.TrimRight(line, "\r")) {
-			return s
-		}
-		if !hasNL {
-			return ""
-		}
-		s = rest
-	}
-	return ""
-}
-
-func isCFHTMLHeaderLine(line string) bool {
-	for _, prefix := range []string{
-		"Version:",
-		"StartHTML:",
-		"EndHTML:",
-		"StartFragment:",
-		"EndFragment:",
-		"StartSelection:",
-		"EndSelection:",
-		"SourceURL:",
-	} {
-		if strings.HasPrefix(line, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 func collapsePreviewWhitespace(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -330,16 +272,19 @@ func applyTagAndStyle(st spanStyle, tag string, attrs []html.Attribute, t *ui.Th
 					st.strikethrough = true
 				}
 			case "color":
-				if col, ok := parseCSSColor(val); ok && isReadableForeground(col, t.Dark) {
-					st.color = col
-					st.hasColor = true
+				if r, g, b, a, ok := parseCSSColorRGBA(val); ok {
+					col := ui.RGBA(r, g, b, float32(a)/255)
+					if isReadableForeground(col, t.Dark) {
+						st.color = col
+						st.hasColor = true
+					}
 				}
 			case "background-color", "background":
-				if col, ok := parseCSSColor(val); ok && col.A > 20 {
-					if col.A > 110 {
-						col.A = 110
+				if r, g, b, a, ok := parseCSSColorRGBA(val); ok && !isPageCanvasColor(r, g, b, a) {
+					if a > 110 {
+						a = 110
 					}
-					st.bg = col
+					st.bg = ui.RGBA(r, g, b, float32(a)/255)
 					st.hasBG = true
 				}
 			}
@@ -391,74 +336,171 @@ func isReadableForeground(col ui.Color, dark bool) bool {
 	return lum <= 215
 }
 
-func parseCSSColor(raw string) (ui.Color, bool) {
+func extractHTMLFragment(raw string) string {
+	const startMarker = "<!--StartFragment-->"
+	const endMarker = "<!--EndFragment-->"
+	if i := strings.Index(raw, startMarker); i >= 0 {
+		s := raw[i+len(startMarker):]
+		if j := strings.Index(s, endMarker); j >= 0 {
+			s = s[:j]
+		}
+		s = strings.TrimSpace(s)
+		if strings.Contains(s, "<") {
+			return s
+		}
+		return ""
+	}
+	if i := strings.Index(strings.ToLower(raw), "<html"); i >= 0 {
+		return strings.TrimSpace(raw[i:])
+	}
+	raw = stripCFHTMLHeaders(raw)
+	if strings.Contains(raw, "<") {
+		return strings.TrimSpace(raw)
+	}
+	return ""
+}
+
+func stripCFHTMLHeaders(raw string) string {
+	head := raw
+	if len(head) > 512 {
+		head = head[:512]
+	}
+	if !strings.HasPrefix(head, "Version:") || (!strings.Contains(head, "StartHTML:") && !strings.Contains(head, "StartFragment:")) {
+		return raw
+	}
+	s := raw
+	for s != "" {
+		line, rest, hasNL := strings.Cut(s, "\n")
+		if !isCFHTMLHeaderLine(strings.TrimRight(line, "\r")) {
+			return s
+		}
+		if !hasNL {
+			return ""
+		}
+		s = rest
+	}
+	return ""
+}
+
+func isCFHTMLHeaderLine(line string) bool {
+	for _, prefix := range []string{
+		"Version:",
+		"StartHTML:",
+		"EndHTML:",
+		"StartFragment:",
+		"EndFragment:",
+		"StartSelection:",
+		"EndSelection:",
+		"SourceURL:",
+	} {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseCSSColorRGBA(raw string) (r, g, b, a uint8, ok bool) {
 	s := strings.ToLower(strings.TrimSpace(raw))
-	if s == "" || s == "inherit" || s == "initial" || s == "transparent" || s == "none" {
-		return ui.Color{}, false
+	if s == "" || s == "inherit" || s == "initial" || s == "unset" || s == "transparent" || s == "none" {
+		return 0, 0, 0, 0, false
 	}
 	if strings.HasPrefix(s, "#") {
 		hex := s[1:]
-		if len(hex) == 3 {
-			r, err1 := strconv.ParseUint(strings.Repeat(hex[0:1], 2), 16, 8)
-			g, err2 := strconv.ParseUint(strings.Repeat(hex[1:2], 2), 16, 8)
-			b, err3 := strconv.ParseUint(strings.Repeat(hex[2:3], 2), 16, 8)
+		switch len(hex) {
+		case 3:
+			r1, err1 := strconv.ParseUint(strings.Repeat(hex[0:1], 2), 16, 8)
+			g1, err2 := strconv.ParseUint(strings.Repeat(hex[1:2], 2), 16, 8)
+			b1, err3 := strconv.ParseUint(strings.Repeat(hex[2:3], 2), 16, 8)
 			if err1 == nil && err2 == nil && err3 == nil {
-				return ui.RGB(uint8(r), uint8(g), uint8(b)), true
+				return uint8(r1), uint8(g1), uint8(b1), 255, true
 			}
-		} else if len(hex) == 6 {
-			r, err1 := strconv.ParseUint(hex[0:2], 16, 8)
-			g, err2 := strconv.ParseUint(hex[2:4], 16, 8)
-			b, err3 := strconv.ParseUint(hex[4:6], 16, 8)
-			if err1 == nil && err2 == nil && err3 == nil {
-				return ui.RGB(uint8(r), uint8(g), uint8(b)), true
+		case 6, 8:
+			r1, err1 := strconv.ParseUint(hex[0:2], 16, 8)
+			g1, err2 := strconv.ParseUint(hex[2:4], 16, 8)
+			b1, err3 := strconv.ParseUint(hex[4:6], 16, 8)
+			a1 := uint64(255)
+			var err4 error
+			if len(hex) == 8 {
+				a1, err4 = strconv.ParseUint(hex[6:8], 16, 8)
+			}
+			if err1 == nil && err2 == nil && err3 == nil && err4 == nil && a1 > 0 {
+				return uint8(r1), uint8(g1), uint8(b1), uint8(a1), true
 			}
 		}
-		return ui.Color{}, false
+		return 0, 0, 0, 0, false
 	}
 	if strings.HasPrefix(s, "rgb(") || strings.HasPrefix(s, "rgba(") {
-		inner := strings.TrimSuffix(s[strings.IndexByte(s, '(')+1:], ")")
-		parts := strings.Split(inner, ",")
+		open := strings.IndexByte(s, '(')
+		closeIdx := strings.LastIndexByte(s, ')')
+		if open < 0 || closeIdx <= open {
+			return 0, 0, 0, 0, false
+		}
+		parts := strings.Split(s[open+1:closeIdx], ",")
 		if len(parts) < 3 {
-			return ui.Color{}, false
+			return 0, 0, 0, 0, false
 		}
-		r, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
-		g, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
-		b, err3 := strconv.Atoi(strings.TrimSpace(parts[2]))
+		rv, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+		gv, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+		bv, err3 := strconv.Atoi(strings.TrimSpace(parts[2]))
 		if err1 != nil || err2 != nil || err3 != nil {
-			return ui.Color{}, false
+			return 0, 0, 0, 0, false
 		}
-		a := float64(1)
+		af := 1.0
 		if len(parts) >= 4 {
-			if af, err := strconv.ParseFloat(strings.TrimSpace(parts[3]), 64); err == nil {
-				a = af
+			parsedA, err := strconv.ParseFloat(strings.TrimSpace(parts[3]), 64)
+			if err != nil {
+				return 0, 0, 0, 0, false
 			}
+			af = parsedA
 		}
-		if a <= 0 {
-			return ui.Color{}, false
+		if af <= 0 {
+			return 0, 0, 0, 0, false
 		}
-		return ui.RGBA(clampByte(r), clampByte(g), clampByte(b), float32(a)), true
+		if af > 1 {
+			af = 1
+		}
+		return clampByte(rv), clampByte(gv), clampByte(bv), uint8(af*255 + 0.5), true
 	}
 	switch s {
 	case "black":
-		return ui.RGB(0, 0, 0), true
+		return 0, 0, 0, 255, true
 	case "white":
-		return ui.RGB(255, 255, 255), true
+		return 255, 255, 255, 255, true
 	case "red":
-		return ui.RGB(220, 38, 38), true
+		return 220, 38, 38, 255, true
 	case "blue":
-		return ui.RGB(37, 99, 235), true
+		return 37, 99, 235, 255, true
 	case "green":
-		return ui.RGB(22, 163, 74), true
+		return 22, 163, 74, 255, true
 	case "orange":
-		return ui.RGB(234, 88, 12), true
+		return 234, 88, 12, 255, true
 	case "purple":
-		return ui.RGB(147, 51, 234), true
+		return 147, 51, 234, 255, true
 	case "yellow":
-		return ui.RGB(234, 179, 8), true
+		return 234, 179, 8, 255, true
 	case "gray", "grey":
-		return ui.RGB(107, 114, 128), true
+		return 107, 114, 128, 255, true
 	}
-	return ui.Color{}, false
+	return 0, 0, 0, 0, false
+}
+
+// isPageCanvasColor reports whether an RGBA color is a neutral light/dark page
+// background (white/near-white or black/near-black) commonly serialized by browsers
+// onto plain text selections.
+func isPageCanvasColor(r, g, b, a uint8) bool {
+	if a <= 20 {
+		return true
+	}
+	chroma := max(r, max(g, b)) - min(r, min(g, b))
+	if chroma > 20 {
+		return false
+	}
+	return (r >= 235 && g >= 235 && b >= 235) || (r <= 36 && g <= 36 && b <= 36)
+}
+
+func isChromaticColor(r, g, b uint8) bool {
+	return max(r, max(g, b))-min(r, min(g, b)) > 24
 }
 
 func clampByte(v int) uint8 {
@@ -469,4 +511,284 @@ func clampByte(v int) uint8 {
 		return 255
 	}
 	return uint8(v)
+}
+
+type richCheckStyle struct {
+	bold          bool
+	italic        bool
+	underline     bool
+	strikethrough bool
+	inPre         bool
+	fgKey         string
+	fgChromatic   bool
+	bgKey         string
+	bgCanvas      bool
+	fontSize      string
+	fontFamily    string
+}
+
+// isMeaningfulRichHTML reports whether rawHTML carries actual rich-text structure
+// or visual formatting beyond plain-text wrappers emitted by browsers/editors.
+func isMeaningfulRichHTML(rawHTML, plainText string) bool {
+	frag := extractHTMLFragment(rawHTML)
+	if frag == "" {
+		return false
+	}
+	if len(frag) > maxRichCheckHTMLBytes {
+		frag = truncateUTF8Bytes(frag, maxRichCheckHTMLBytes)
+	}
+	doc, err := html.Parse(strings.NewReader(frag))
+	if err != nil {
+		return false
+	}
+
+	var (
+		hasRichStructure bool
+		hasStyledText    bool
+		nonLinkTextSeen  bool
+		linkCount        int
+		linkMeaningful   bool
+		fgColors         = make(map[string]bool)
+		bgColors         = make(map[string]bool)
+		fontSizes        = make(map[string]struct{})
+		fontFamilies     = make(map[string]struct{})
+	)
+
+	var walk func(n *html.Node, st richCheckStyle, inLink bool)
+	walk = func(n *html.Node, st richCheckStyle, inLink bool) {
+		if hasRichStructure || hasStyledText {
+			return
+		}
+		switch n.Type {
+		case html.TextNode:
+			if strings.TrimSpace(n.Data) == "" {
+				return
+			}
+			if !inLink {
+				nonLinkTextSeen = true
+			}
+			if st.bold || st.italic || st.underline || st.strikethrough {
+				hasStyledText = true
+				return
+			}
+			if st.fgKey != "" {
+				fgColors[st.fgKey] = st.fgChromatic
+			} else {
+				fgColors["default"] = false
+			}
+			if st.bgKey != "" {
+				bgColors[st.bgKey] = !st.bgCanvas
+			} else {
+				bgColors["default"] = false
+			}
+			if st.fontSize != "" {
+				fontSizes[st.fontSize] = struct{}{}
+			} else {
+				fontSizes["default"] = struct{}{}
+			}
+			if st.fontFamily != "" {
+				fontFamilies[st.fontFamily] = struct{}{}
+			} else {
+				fontFamilies["default"] = struct{}{}
+			}
+			return
+		case html.ElementNode:
+			tag := strings.ToLower(n.Data)
+			switch tag {
+			case "script", "style", "head", "meta", "title", "noscript", "link":
+				return
+			case "img", "svg", "hr", "ul", "ol", "li", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "blockquote", "dl", "dt", "dd":
+				hasRichStructure = true
+				return
+			case "kbd":
+				if hasNonEmptyText(n) {
+					hasRichStructure = true
+					return
+				}
+			case "code", "tt", "samp":
+				if !st.inPre && hasNonEmptyText(n) {
+					hasRichStructure = true
+					return
+				}
+			case "a":
+				if href := attrValue(n.Attr, "href"); isMeaningfulHref(href) {
+					anchorText := strings.TrimSpace(nodePlainText(n))
+					if anchorText != "" {
+						linkCount++
+						if !sameURLTarget(anchorText, href) && !sameURLTarget(strings.TrimSpace(plainText), href) {
+							linkMeaningful = true
+						}
+						next := applyRichCheckStyle(st, tag, n.Attr)
+						for c := n.FirstChild; c != nil; c = c.NextSibling {
+							walk(c, next, true)
+						}
+						return
+					}
+				}
+			}
+
+			next := applyRichCheckStyle(st, tag, n.Attr)
+			if tag == "font" && (attrValue(n.Attr, "color") != "" || attrValue(n.Attr, "face") != "" || attrValue(n.Attr, "size") != "") && hasNonEmptyText(n) {
+				hasRichStructure = true
+				return
+			}
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c, next, inLink)
+			}
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c, st, inLink)
+		}
+	}
+
+	walk(doc, richCheckStyle{}, false)
+
+	if hasRichStructure || hasStyledText {
+		return true
+	}
+	if linkCount > 0 && (linkMeaningful || nonLinkTextSeen || linkCount > 1) {
+		return true
+	}
+	if len(fgColors) >= 2 {
+		return true
+	}
+	for k, chromatic := range fgColors {
+		if k != "default" && chromatic {
+			return true
+		}
+	}
+	if len(bgColors) >= 2 {
+		return true
+	}
+	for k, nonCanvas := range bgColors {
+		if k != "default" && nonCanvas {
+			return true
+		}
+	}
+	if len(fontSizes) >= 2 || len(fontFamilies) >= 2 {
+		return true
+	}
+	return false
+}
+
+func applyRichCheckStyle(st richCheckStyle, tag string, attrs []html.Attribute) richCheckStyle {
+	switch tag {
+	case "b", "strong", "h1", "h2", "h3", "h4", "h5", "h6":
+		st.bold = true
+	case "i", "em", "cite":
+		st.italic = true
+	case "u", "ins":
+		st.underline = true
+	case "s", "del", "strike":
+		st.strikethrough = true
+	case "mark":
+		st.bgKey = "mark"
+		st.bgCanvas = false
+	case "pre":
+		st.inPre = true
+	}
+
+	for _, a := range attrs {
+		if !strings.EqualFold(a.Key, "style") {
+			continue
+		}
+		for _, decl := range strings.Split(a.Val, ";") {
+			k, v, ok := strings.Cut(decl, ":")
+			if !ok {
+				continue
+			}
+			key := strings.ToLower(strings.TrimSpace(k))
+			val := strings.TrimSpace(v)
+			lval := strings.ToLower(val)
+			switch key {
+			case "font-weight":
+				if strings.Contains(lval, "bold") {
+					st.bold = true
+				} else if w, err := strconv.Atoi(val); err == nil && w >= 600 {
+					st.bold = true
+				} else if lval == "normal" || lval == "400" || lval == "300" || lval == "lighter" {
+					st.bold = false
+				}
+			case "font-style":
+				if strings.Contains(lval, "italic") || strings.Contains(lval, "oblique") {
+					st.italic = true
+				} else if strings.Contains(lval, "normal") {
+					st.italic = false
+				}
+			case "text-decoration", "text-decoration-line":
+				if strings.Contains(lval, "underline") {
+					st.underline = true
+				}
+				if strings.Contains(lval, "line-through") {
+					st.strikethrough = true
+				}
+				if lval == "none" {
+					st.underline = false
+					st.strikethrough = false
+				}
+			case "color":
+				if r, g, b, _, ok := parseCSSColorRGBA(val); ok {
+					st.fgKey = fmt.Sprintf("%d,%d,%d", r, g, b)
+					st.fgChromatic = isChromaticColor(r, g, b)
+				}
+			case "background-color", "background":
+				if r, g, b, a, ok := parseCSSColorRGBA(val); ok {
+					st.bgKey = fmt.Sprintf("%d,%d,%d,%d", r, g, b, a)
+					st.bgCanvas = isPageCanvasColor(r, g, b, a)
+				}
+			case "font-size":
+				if lval != "" && lval != "inherit" && lval != "initial" && lval != "unset" {
+					st.fontSize = lval
+				}
+			case "font-family":
+				if lval != "" && lval != "inherit" && lval != "initial" && lval != "unset" {
+					st.fontFamily = lval
+				}
+			}
+		}
+	}
+	return st
+}
+
+func attrValue(attrs []html.Attribute, key string) string {
+	for _, a := range attrs {
+		if strings.EqualFold(a.Key, key) {
+			return strings.TrimSpace(a.Val)
+		}
+	}
+	return ""
+}
+
+func isMeaningfulHref(href string) bool {
+	if href == "" || href == "#" {
+		return false
+	}
+	return !strings.HasPrefix(strings.ToLower(href), "javascript:")
+}
+
+func sameURLTarget(text, href string) bool {
+	a := strings.TrimRight(strings.TrimSpace(text), "/")
+	b := strings.TrimRight(strings.TrimSpace(href), "/")
+	return a != "" && strings.EqualFold(a, b)
+}
+
+func hasNonEmptyText(n *html.Node) bool {
+	return strings.TrimSpace(nodePlainText(n)) != ""
+}
+
+func nodePlainText(n *html.Node) string {
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(cur *html.Node) {
+		if cur.Type == html.TextNode {
+			b.WriteString(cur.Data)
+			return
+		}
+		for c := cur.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return b.String()
 }

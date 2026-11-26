@@ -523,7 +523,7 @@ func (a *clipApp) onClipboardChanged() {
 		var htmlStr string
 		if a.settings.CaptureRichText && slices.Contains(formats, transfer.HTML) {
 			if htmlData, err := mygo.Clipboard.ReadFormat(transfer.HTML); err == nil && len(htmlData) > 0 {
-				htmlStr = decodeClipboardHTML(htmlData)
+				htmlStr = normalizeCapturedHTML(htmlData, text)
 			}
 		}
 		h := store.TextContentHash(text, htmlStr)
@@ -547,6 +547,14 @@ type privacySnapshot struct {
 	enabled     bool
 	kinds       []string
 	customRules string
+}
+
+func normalizeCapturedHTML(htmlData []byte, plainText string) string {
+	htmlStr := decodeClipboardHTML(htmlData)
+	if htmlStr != "" && !isMeaningfulRichHTML(htmlStr, plainText) {
+		return ""
+	}
+	return htmlStr
 }
 
 func (a *clipApp) saveTextWithPrivacy(text string, opts store.SaveOptions) (store.ClipItem, error) {

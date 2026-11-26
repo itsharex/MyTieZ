@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"mytiez/internal/store"
@@ -164,5 +165,52 @@ func TestNormalizeCapturedHTMLAndClassification(t *testing.T) {
 	}
 	if wrapped.ID != plain.ID || wrapped.Kind != store.KindText {
 		t.Fatalf("expected non-rich wrapped HTML to deduplicate into plain item %d, got id=%d kind=%q", plain.ID, wrapped.ID, wrapped.Kind)
+	}
+}
+
+func TestParseHTMLPreviewSpansRichStructures(t *testing.T) {
+	joinedText := func(raw string) string {
+		spans := parseHTMLPreviewSpans(raw, myTiezLightTheme)
+		var b strings.Builder
+		for _, sp := range spans {
+			b.WriteString(sp.Text)
+		}
+		return b.String()
+	}
+
+	if got := joinedText(`<ul><li>One</li><li>Two</li></ul>`); got != "• One\n• Two" {
+		t.Fatalf("unordered list = %q, want %q", got, "• One\n• Two")
+	}
+	if got := joinedText(`<ol><li>First</li><li>Second</li></ol>`); got != "1. First\n2. Second" {
+		t.Fatalf("ordered list = %q, want %q", got, "1. First\n2. Second")
+	}
+	if got := joinedText(`<blockquote>Cited note</blockquote>`); got != "▎ Cited note" {
+		t.Fatalf("blockquote = %q, want %q", got, "▎ Cited note")
+	}
+	if got := joinedText(`<table><tr><th>Name</th><th>Role</th></tr><tr><td>Tomori</td><td>Vocal</td></tr></table>`); got != "Name │ Role\nTomori │ Vocal" {
+		t.Fatalf("table = %q, want %q", got, "Name │ Role\nTomori │ Vocal")
+	}
+	if got := joinedText("<pre><span style=\"color:#569cd6\">func</span> main() {\n\treturn\n}</pre>"); !strings.Contains(got, "\n  return\n") {
+		t.Fatalf("pre indentation lost: %q", got)
+	}
+
+	hSpans := parseHTMLPreviewSpans(`<h2>Heading</h2><p>Press <kbd>Ctrl+V</kbd> to <mark>paste</mark> H<sub>2</sub>O</p>`, myTiezLightTheme)
+	if len(hSpans) < 5 || hSpans[0].Size != 14.5 || hSpans[0].Weight != 700 {
+		t.Fatalf("unexpected heading span: %+v", hSpans)
+	}
+	foundKbd, foundMark, foundSub := false, false, false
+	for _, sp := range hSpans {
+		if sp.Text == "Ctrl+V" && sp.Font == "Consolas" && sp.PaddingX == 4 {
+			foundKbd = true
+		}
+		if sp.Text == "paste" && sp.Background.A > 0 && sp.PaddingX == 2 {
+			foundMark = true
+		}
+		if sp.Text == "2" && sp.BaselineShift < 0 && sp.Size == 11 {
+			foundSub = true
+		}
+	}
+	if !foundKbd || !foundMark || !foundSub {
+		t.Fatalf("missing styled spans (kbd=%v mark=%v sub=%v): %+v", foundKbd, foundMark, foundSub, hSpans)
 	}
 }

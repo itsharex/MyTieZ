@@ -13,23 +13,30 @@ import (
 )
 
 const (
-	maxRichPreviewHTMLBytes = 16 * 1024
+	maxRichPreviewHTMLBytes = 32 * 1024
 	maxRichCheckHTMLBytes   = 64 * 1024
-	maxRichPreviewSpans     = 48
-	maxRichPreviewChars     = 400
+	maxRichPreviewSpans     = 160
+	maxRichPreviewChars     = 1000
 	maxRichSpanCacheEntries = 128
 )
 
 type spanStyle struct {
 	weight        int
+	size          float32
+	baselineShift float32
 	italic        bool
 	underline     bool
 	strikethrough bool
 	code          bool
+	kbd           bool
+	inPre         bool
+	inQuote       bool
 	color         ui.Color
 	hasColor      bool
 	bg            ui.Color
 	hasBG         bool
+	paddingX      float32
+	radius        float32
 }
 
 // decodeClipboardHTML converts Windows UTF-16LE/BE clipboard HTML payloads
@@ -85,6 +92,11 @@ func decodeUTF16Bytes(b []byte, order binary.ByteOrder) string {
 	return string(utf16.Decode(u))
 }
 
+type listState struct {
+	ordered bool
+	index   int
+}
+
 // parseHTMLPreviewSpans extracts lightweight inline-styled spans from clipboard HTML
 // for card previews without generating screenshots or layout-breaking sizes.
 func parseHTMLPreviewSpans(rawHTML string, t *ui.Theme) []ui.Span {
@@ -102,6 +114,25 @@ func parseHTMLPreviewSpans(rawHTML string, t *ui.Theme) []ui.Span {
 
 	var spans []ui.Span
 	totalChars := 0
+	var listStack []listState
+
+	appendText := func(txt string, st spanStyle) {
+		if txt == "" || len(spans) >= maxRichPreviewSpans || totalChars >= maxRichPreviewChars {
+			return
+		}
+		if remaining := maxRichPreviewChars - totalChars; len([]rune(txt)) > remaining {
+			r := []rune(txt)
+			txt = string(r[:remaining]) + "…"
+		}
+		totalChars += len([]rune(txt))
+		sp := buildUISpan(txt, st, t)
+		if len(spans) > 0 && sameSpanStyle(spans[len(spans)-1], sp) {
+			spans[len(spans)-1].Text += sp.Text
+		} else {
+			spans = append(spans, sp)
+		}
+	}
+
 	var walk func(n *html.Node, st spanStyle)
 	walk = func(n *html.Node, st spanStyle) {
 		if len(spans) >= maxRichPreviewSpans || totalChars >= maxRichPreviewChars {
@@ -109,40 +140,88 @@ func parseHTMLPreviewSpans(rawHTML string, t *ui.Theme) []ui.Span {
 		}
 		switch n.Type {
 		case html.TextNode:
-			txt := collapsePreviewWhitespace(n.Data)
+			var txt string
+			if st.inPre {
+				txt = normalizePreText(n.Data)
+			} else {
+				txt = collapsePreviewWhitespace(n.Data)
+			}
 			if txt == "" {
 				return
 			}
-			if txt == " " && (len(spans) == 0 || strings.HasSuffix(spans[len(spans)-1].Text, " ")) {
-				return
+			if txt == " " {
+				if len(spans) == 0 {
+					return
+				}
+				prev := spans[len(spans)-1].Text
+				if strings.HasSuffix(prev, " ") || strings.HasSuffix(prev, "\n") {
+					return
+				}
 			}
-			if remaining := maxRichPreviewChars - totalChars; len([]rune(txt)) > remaining {
-				r := []rune(txt)
-				txt = string(r[:remaining]) + "…"
+			if strings.HasPrefix(txt, " ") && len(spans) > 0 && strings.HasSuffix(spans[len(spans)-1].Text, "\n") {
+				txt = strings.TrimLeft(txt, " ")
+				if txt == "" {
+					return
+				}
 			}
-			totalChars += len([]rune(txt))
-			sp := buildUISpan(txt, st, t)
-			if len(spans) > 0 && sameSpanStyle(spans[len(spans)-1], sp) {
-				spans[len(spans)-1].Text += sp.Text
-			} else {
-				spans = append(spans, sp)
-			}
+			appendText(txt, st)
 			return
 		case html.ElementNode:
 			tag := strings.ToLower(n.Data)
-			if tag == "script" || tag == "style" || tag == "head" || tag == "meta" || tag == "title" || tag == "noscript" {
+			if tag == "script" || tag == "style" || tag == "head" || tag == "meta" || tag == "title" || tag == "noscript" || tag == "link" {
 				return
 			}
 			if tag == "br" {
-				appendSpaceSpan(&spans, &totalChars, st, t)
+				appendLineBreakSpan(&spans, &totalChars)
 				return
 			}
+			if tag == "hr" {
+				appendLineBreakSpan(&spans, &totalChars)
+				appendText("───", spanStyle{color: t.TextMuted, hasColor: true})
+				appendLineBreakSpan(&spans, &totalChars)
+				return
+			}
+
+			switch tag {
+			case "ul":
+				listStack = append(listStack, listState{ordered: false})
+				defer func() { listStack = listStack[:len(listStack)-1] }()
+			case "ol":
+				listStack = append(listStack, listState{ordered: true})
+				defer func() { listStack = listStack[:len(listStack)-1] }()
+			case "li":
+				appendLineBreakSpan(&spans, &totalChars)
+				indent := ""
+				if len(listStack) > 1 {
+					indent = strings.Repeat("  ", min(len(listStack)-1, 3))
+				}
+				marker := "• "
+				if n := len(listStack); n > 0 && listStack[n-1].ordered {
+					listStack[n-1].index++
+					marker = strconv.Itoa(listStack[n-1].index) + ". "
+				}
+				appendText(indent+marker, spanStyle{color: t.TextMuted, hasColor: true, weight: 600})
+			case "blockquote":
+				appendLineBreakSpan(&spans, &totalChars)
+				appendText("▎ ", spanStyle{color: t.Accent.Alpha(0.75), hasColor: true, weight: 700})
+			}
+
 			next := applyTagAndStyle(st, tag, n.Attr, t)
+			firstCell := true
 			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				if (tag == "tr") && c.Type == html.ElementNode {
+					ctag := strings.ToLower(c.Data)
+					if ctag == "td" || ctag == "th" {
+						if !firstCell {
+							appendText(" │ ", spanStyle{color: t.TextMuted, hasColor: true})
+						}
+						firstCell = false
+					}
+				}
 				walk(c, next)
 			}
 			if isBlockHTMLTag(tag) {
-				appendSpaceSpan(&spans, &totalChars, st, t)
+				appendLineBreakSpan(&spans, &totalChars)
 			}
 			return
 		}
@@ -152,14 +231,17 @@ func parseHTMLPreviewSpans(rawHTML string, t *ui.Theme) []ui.Span {
 	}
 
 	walk(doc, spanStyle{})
-	for len(spans) > 0 && strings.TrimSpace(spans[0].Text) == "" {
+	for len(spans) > 0 && strings.Trim(spans[0].Text, " \n") == "" {
 		spans = spans[1:]
 	}
 	if len(spans) > 0 {
-		spans[0].Text = strings.TrimLeft(spans[0].Text, " ")
-		last := len(spans) - 1
-		spans[last].Text = strings.TrimRight(spans[last].Text, " ")
-		if spans[last].Text == "" {
+		spans[0].Text = strings.TrimLeft(spans[0].Text, " \n")
+		for len(spans) > 0 {
+			last := len(spans) - 1
+			spans[last].Text = strings.TrimRight(spans[last].Text, " \n")
+			if spans[last].Text != "" {
+				break
+			}
 			spans = spans[:last]
 		}
 	}
@@ -195,23 +277,35 @@ func collapsePreviewWhitespace(s string) string {
 	return b.String()
 }
 
-func appendSpaceSpan(spans *[]ui.Span, totalChars *int, st spanStyle, t *ui.Theme) {
+func normalizePreText(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return strings.ReplaceAll(s, "\t", "  ")
+}
+
+func appendLineBreakSpan(spans *[]ui.Span, totalChars *int) {
 	if len(*spans) == 0 || *totalChars >= maxRichPreviewChars {
 		return
 	}
 	last := &(*spans)[len(*spans)-1]
-	if strings.HasSuffix(last.Text, " ") {
+	last.Text = strings.TrimRight(last.Text, " ")
+	if strings.HasSuffix(last.Text, "\n") {
 		return
 	}
-	last.Text += " "
+	if last.Text == "" && len(*spans) > 1 {
+		*spans = (*spans)[:len(*spans)-1]
+		last = &(*spans)[len(*spans)-1]
+		if strings.HasSuffix(last.Text, "\n") {
+			return
+		}
+	}
+	last.Text += "\n"
 	*totalChars++
-	_ = st
-	_ = t
 }
 
 func isBlockHTMLTag(tag string) bool {
 	switch tag {
-	case "p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "section", "article":
+	case "p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "section", "article", "dt", "dd":
 		return true
 	default:
 		return false
@@ -220,20 +314,62 @@ func isBlockHTMLTag(tag string) bool {
 
 func applyTagAndStyle(st spanStyle, tag string, attrs []html.Attribute, t *ui.Theme) spanStyle {
 	switch tag {
-	case "b", "strong", "h1", "h2", "h3", "h4", "h5", "h6":
+	case "h1":
 		st.weight = 700
-	case "i", "em":
+		st.size = 15.5
+	case "h2":
+		st.weight = 700
+		st.size = 14.5
+	case "h3", "h4", "h5", "h6", "b", "strong", "th":
+		st.weight = 700
+	case "i", "em", "cite":
 		st.italic = true
 	case "u", "ins":
 		st.underline = true
 	case "s", "del", "strike":
 		st.strikethrough = true
-	case "code", "pre", "kbd":
+	case "mark":
+		st.bg = ui.RGBA(250, 204, 21, 0.28)
+		if t.Dark {
+			st.bg = ui.RGBA(250, 204, 21, 0.22)
+		}
+		st.hasBG = true
+		st.paddingX = 2
+		st.radius = 3
+	case "sub":
+		st.size = 11
+		st.baselineShift = -2.5
+	case "sup":
+		st.size = 11
+		st.baselineShift = 3.5
+	case "blockquote":
+		st.inQuote = true
+		if !st.hasColor {
+			st.color = t.TextMuted
+			st.hasColor = true
+		}
+	case "pre":
+		st.inPre = true
+		st.code = true
+	case "code", "tt", "samp":
+		st.code = true
+	case "kbd":
+		st.kbd = true
 		st.code = true
 	case "a":
 		st.color = t.Accent
 		st.hasColor = true
 		st.underline = true
+	case "font":
+		if colStr := attrValue(attrs, "color"); colStr != "" {
+			if r, g, b, a, ok := parseCSSColorRGBA(colStr); ok {
+				col := ui.RGBA(r, g, b, float32(a)/255)
+				if isReadableForeground(col, t.Dark) {
+					st.color = col
+					st.hasColor = true
+				}
+			}
+		}
 	}
 
 	for _, a := range attrs {
@@ -296,34 +432,56 @@ func applyTagAndStyle(st spanStyle, tag string, attrs []html.Attribute, t *ui.Th
 func buildUISpan(txt string, st spanStyle, t *ui.Theme) ui.Span {
 	sp := ui.Span{
 		Text:          txt,
+		Size:          st.size,
+		BaselineShift: st.baselineShift,
 		Weight:        st.weight,
 		Italic:        st.italic,
 		Underline:     st.underline,
 		Strikethrough: st.strikethrough,
+		PaddingX:      st.paddingX,
+		Radius:        st.radius,
 	}
 	if st.code {
 		sp.Font = "Consolas"
-		sp.Background = t.Text.Alpha(0.08)
-		sp.Radius = 3
+		if sp.Size == 0 {
+			sp.Size = 13.5
+		}
+		if !st.inPre {
+			sp.Background = t.Text.Alpha(0.08)
+			if st.kbd {
+				sp.Background = t.Text.Alpha(0.12)
+				sp.Weight = 600
+				sp.PaddingX = 4
+				sp.Radius = 4
+			} else {
+				sp.PaddingX = 3
+				sp.Radius = 3
+			}
+		}
 	}
 	if st.hasColor {
 		sp.Color = st.color
 	}
 	if st.hasBG {
 		sp.Background = st.bg
-		sp.Radius = 3
+		if sp.Radius == 0 {
+			sp.Radius = 3
+		}
 	}
 	return sp
 }
 
 func sameSpanStyle(a, b ui.Span) bool {
 	return a.Font == b.Font &&
+		a.Size == b.Size &&
+		a.BaselineShift == b.BaselineShift &&
 		a.Weight == b.Weight &&
 		a.Italic == b.Italic &&
 		a.Underline == b.Underline &&
 		a.Strikethrough == b.Strikethrough &&
 		a.Color == b.Color &&
 		a.Background == b.Background &&
+		a.PaddingX == b.PaddingX &&
 		a.Radius == b.Radius
 }
 

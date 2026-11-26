@@ -524,19 +524,19 @@ func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem, items []store.
 					a.renderSensitiveImageMask(c, t, msgs)
 				} else {
 					masked := store.MaskSensitiveText(item.Preview, a.settings.SensitiveMaskPrefix, a.settings.SensitiveMaskSuffix, a.settings.SensitiveMaskEmailDomain)
-					a.renderCardTextPreview(c, t, masked, []ui.Span{{Text: masked, Color: t.TextMuted}}, bodySize, maxLines)
+					a.renderCardTextPreview(c, t, masked, []ui.Span{{Text: masked, Color: t.TextMuted}}, bodySize, maxLines, false)
 				}
 			} else {
 				switch item.Kind {
 				case store.KindText, store.KindCode:
-					a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
+					a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines, false)
 				case store.KindURL:
-					a.renderCardTextPreview(c, t, item.Preview, []ui.Span{{Text: item.Preview, Color: t.Accent}}, bodySize, maxLines)
+					a.renderCardTextPreview(c, t, item.Preview, []ui.Span{{Text: item.Preview, Color: t.Accent}}, bodySize, maxLines, false)
 				case store.KindRichText:
 					if spans := a.getRichPreviewSpans(item, t); len(spans) > 0 {
-						a.renderCardTextPreview(c, t, item.Preview, spans, bodySize, maxLines)
+						a.renderCardTextPreview(c, t, item.Preview, spans, bodySize, maxLines, true)
 					} else {
-						a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines)
+						a.renderCardTextPreview(c, t, item.Preview, nil, bodySize, maxLines, false)
 					}
 				case store.KindImage:
 					a.renderImagePreview(c, item)
@@ -570,7 +570,7 @@ func (a *clipApp) renderCard(row ui.ListRow, item store.ClipItem, items []store.
 	}
 }
 
-func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string, spans []ui.Span, bodySize float32, maxLines int) {
+func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string, spans []ui.Span, bodySize float32, maxLines int, rich bool) {
 	const lineHeight = 1.45
 	if a.settings.CompactMode {
 		if len(spans) > 0 {
@@ -581,8 +581,16 @@ func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string,
 		return
 	}
 
-	// 约 3.55 行高度：前 3 行完整显示，第 4 行露出约半行并渐隐
-	maxPreviewH := bodySize * lineHeight * 3.55
+	// 普通卡片约 3.55 行高度；富文本卡片适度放宽至 4.55 行（约 92px，仍小于图片卡片 100px 上限）以保持整体视觉和谐
+	previewLines := float32(3.55)
+	displayMaxLines := 5
+	fadeStart := float32(0.68)
+	if rich && len(spans) > 0 {
+		previewLines = 4.55
+		displayMaxLines = 6
+		fadeStart = 0.74
+	}
+	maxPreviewH := bodySize * lineHeight * previewLines
 	contentW := a.cardContentWidth()
 
 	var measureSpans []ui.Span
@@ -601,7 +609,7 @@ func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string,
 		measureSpans = []ui.Span{{Text: text, Font: t.Font, Size: bodySize}}
 	}
 	_, measuredH := c.MeasureText(contentW, measureSpans...)
-	overflows := measuredH > bodySize*4.0
+	overflows := measuredH > maxPreviewH-1
 
 	box := ui.Box(c).FillWidth().MaxHeight(maxPreviewH).Clip()
 	if overflows {
@@ -610,16 +618,16 @@ func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string,
 			Angle: 180,
 			Stops: []ui.GradientStop{
 				{Color: black, At: 0},
-				{Color: black, At: 0.68},
+				{Color: black, At: fadeStart},
 				{Color: ui.Transparent, At: 1},
 			},
 		})
 	}
 	box.Children(func() {
 		if len(spans) > 0 {
-			ui.RichText(c, spans...).FontSize(bodySize).LineHeight(lineHeight).TextColor(t.Text).Wrap().MaxLines(5)
+			ui.RichText(c, spans...).FontSize(bodySize).LineHeight(lineHeight).TextColor(t.Text).Wrap().MaxLines(displayMaxLines)
 		} else {
-			ui.Text(c, text).FontSize(bodySize).LineHeight(lineHeight).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(5)
+			ui.Text(c, text).FontSize(bodySize).LineHeight(lineHeight).FontWeight(400).TextColor(t.Text).Wrap().MaxLines(displayMaxLines)
 		}
 	})
 }

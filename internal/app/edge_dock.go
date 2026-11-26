@@ -137,7 +137,7 @@ func (a *clipApp) syncEdgeDocking() {
 				if a.panel == nil {
 					return
 				}
-				a.panel.Update(a.checkEdgeDocking)
+				mygo.RunOnMain(a.checkEdgeDocking)
 			}
 		}
 	}()

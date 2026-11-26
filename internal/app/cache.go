@@ -183,6 +183,26 @@ func (bc *bitmapCache) finishLoading(key string) {
 	bc.loadingMu.Unlock()
 }
 
+func (bc *bitmapCache) loadingCount() int {
+	if bc == nil {
+		return 0
+	}
+	bc.loadingMu.Lock()
+	n := len(bc.loading)
+	bc.loadingMu.Unlock()
+	return n
+}
+
+func (bc *bitmapCache) hasOrFailed(key string) bool {
+	if bc == nil || key == "" {
+		return false
+	}
+	if _, ok := bc.items[key]; ok {
+		return true
+	}
+	return bc.failed[key]
+}
+
 func (bc *bitmapCache) touch(key string) {
 	n := len(bc.order)
 	if n > 0 && bc.order[n-1] == key {

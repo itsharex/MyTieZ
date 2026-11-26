@@ -948,7 +948,6 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 	windowEnd := min(len(items)-1, lastVisible+margin)
 
 	activeKeys := make(map[string]struct{}, windowEnd-windowStart+1)
-	var preloadPaths []string
 	for i := windowStart; i <= windowEnd; i++ {
 		item := items[i]
 		if item.Kind != store.KindImage || item.ImagePath == "" {
@@ -959,9 +958,6 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 			continue
 		}
 		activeKeys[item.ImagePath] = struct{}{}
-		if i < firstVisible || i > lastVisible {
-			preloadPaths = append(preloadPaths, item.ImagePath)
-		}
 	}
 	touchActive := func(i int) {
 		item := items[i]
@@ -997,13 +993,74 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 		}
 	}
 	a.thumbs.setActiveKeys(activeKeys)
+	pruned := false
 	if a.thumbs.len() > maxThumbCacheCount {
-		a.thumbs.pruneTo(maxThumbCacheCount)
+		pruned = a.thumbs.pruneTo(maxThumbCacheCount) || pruned
 	}
-	a.thumbs.pruneToBytes(maxThumbCacheBytes)
-	for _, path := range preloadPaths {
+	pruned = a.thumbs.pruneToBytes(maxThumbCacheBytes) || pruned
+	for _, path := range a.selectThumbPreloads(items, firstVisible, lastVisible, windowStart, windowEnd, activeKeys, pruned) {
 		a.preloadThumb(path)
 	}
+}
+
+// selectThumbPreloads picks nearby off-screen thumbnails from nearest to farthest
+// only while projected count and byte budget have headroom, preventing preload/evict thrash.
+func (a *clipApp) selectThumbPreloads(items []store.ClipItem, firstVisible, lastVisible, windowStart, windowEnd int, activeKeys map[string]struct{}, pruned bool) []string {
+	if pruned || a.thumbs == nil {
+		return nil
+	}
+	inFlight := a.thumbs.loadingCount()
+	projectedCount := a.thumbs.len() + inFlight
+	if projectedCount >= maxThumbCacheCount {
+		return nil
+	}
+	const defaultEstThumbBytes int64 = int64(thumbMaxWidth) * int64(thumbMaxHeight) * 4
+	estBytes := defaultEstThumbBytes
+	if n := a.thumbs.len(); n > 0 && a.thumbs.bytes() > 0 {
+		estBytes = max(a.thumbs.bytes()/int64(n), 256<<10)
+	}
+	projectedBytes := a.thumbs.bytes() + int64(inFlight)*estBytes
+	if projectedBytes+estBytes > maxThumbCacheBytes {
+		return nil
+	}
+
+	var preloadPaths []string
+	seen := make(map[string]struct{})
+	tryAdd := func(i int) bool {
+		if i < windowStart || i > windowEnd {
+			return false
+		}
+		item := items[i]
+		p := item.ImagePath
+		if p == "" || item.Kind != store.KindImage {
+			return false
+		}
+		if _, active := activeKeys[p]; !active {
+			return false
+		}
+		if _, dup := seen[p]; dup || a.thumbs.hasOrFailed(p) {
+			return false
+		}
+		if projectedCount >= maxThumbCacheCount || projectedBytes+estBytes > maxThumbCacheBytes {
+			return true
+		}
+		seen[p] = struct{}{}
+		preloadPaths = append(preloadPaths, p)
+		projectedCount++
+		projectedBytes += estBytes
+		return false
+	}
+
+	maxDist := max(lastVisible-windowStart, windowEnd-firstVisible)
+	for d := 1; d <= maxDist; d++ {
+		if tryAdd(lastVisible + d) {
+			break
+		}
+		if tryAdd(firstVisible - d) {
+			break
+		}
+	}
+	return preloadPaths
 }
 
 func (a *clipApp) getOrLoadAppIcon(path string) *ui.Bitmap {

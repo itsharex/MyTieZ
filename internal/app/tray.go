@@ -137,7 +137,7 @@ func (a *clipApp) setupTray() {
 			a.stopWatch()
 		}
 		if a.stopTrack != nil {
-			close(a.stopTrack)
+			a.stopTrack()
 			a.stopTrack = nil
 		}
 		a.cleanupTempFiles()

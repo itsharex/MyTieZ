@@ -121,3 +121,20 @@ func TestMatchesGlobalHotkey(t *testing.T) {
 		t.Fatalf("expected empty target not to match")
 	}
 }
+
+func TestStartForegroundWatcherAndZeroHWND(t *testing.T) {
+	prev := lastExternalHWND.Swap(0x1234)
+	defer lastExternalHWND.Store(prev)
+
+	recordExternalForeground(0)
+	if got := lastExternalHWND.Load(); got != 0x1234 {
+		t.Fatalf("expected zero hwnd ignored, got %#x", got)
+	}
+
+	stop, ok := StartForegroundWatcher()
+	if !ok {
+		t.Fatalf("expected StartForegroundWatcher to succeed")
+	}
+	stop()
+	stop() // idempotent
+}

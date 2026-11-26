@@ -41,7 +41,7 @@ type clipApp struct {
 	trayOpenItem      *mygo.MenuItem
 	shortcut          string
 	stopWatch         func()
-	stopTrack         chan struct{}
+	stopTrack         func()
 	items             []store.ClipItem
 	searchHits        []store.ClipItem
 	query             string
@@ -477,19 +477,10 @@ func (a *clipApp) ready() {
 }
 
 func (a *clipApp) startForegroundTracker() {
-	sys.TrackForegroundWindow()
-	stop := make(chan struct{})
+	if a.stopTrack != nil {
+		a.stopTrack()
+		a.stopTrack = nil
+	}
+	stop, _ := sys.StartForegroundWatcher()
 	a.stopTrack = stop
-	go func() {
-		ticker := time.NewTicker(200 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				sys.TrackForegroundWindow()
-			case <-stop:
-				return
-			}
-		}
-	}()
 }

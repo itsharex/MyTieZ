@@ -11,6 +11,19 @@ import (
 )
 
 func startLLHook(hookID, callback uintptr, onCleanup func()) (func(), bool) {
+	return startMessagePump(
+		func() uintptr {
+			hhook, _, _ := procSetWindowsHookExW.Call(hookID, callback, 0, 0)
+			return hhook
+		},
+		func(h uintptr) {
+			procUnhookWindowsHookEx.Call(h)
+		},
+		onCleanup,
+	)
+}
+
+func startMessagePump(install func() uintptr, uninstall func(uintptr), onCleanup func()) (func(), bool) {
 	tidReady := make(chan uint32, 1)
 	hookOK := make(chan bool, 1)
 	pumpDone := make(chan struct{})
@@ -24,13 +37,13 @@ func startLLHook(hookID, callback uintptr, onCleanup func()) (func(), bool) {
 		// Force creation of the thread message queue before advertising tid.
 		procPeekMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0, pmNoRemove)
 		tid := windows.GetCurrentThreadId()
-		hhook, _, _ := procSetWindowsHookExW.Call(hookID, callback, 0, 0)
+		handle := install()
 		tidReady <- tid
-		hookOK <- (hhook != 0)
-		if hhook == 0 {
+		hookOK <- (handle != 0)
+		if handle == 0 {
 			return
 		}
-		defer procUnhookWindowsHookEx.Call(hhook)
+		defer uninstall(handle)
 
 		for {
 			r, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)

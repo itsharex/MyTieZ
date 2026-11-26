@@ -4,7 +4,7 @@
 
 ## 下载安装
 
-- **Windows 安装包（amd64，v0.1.5）**：[mytiez-setup-0.1.5-amd64.exe](https://github.com/llxo/MyTieZ/releases/download/v0.1.5/mytiez-setup-0.1.5-amd64.exe)
+- **Windows 安装包（amd64，v0.1.6）**：[mytiez-setup-0.1.6-amd64.exe](https://github.com/llxo/MyTieZ/releases/download/v0.1.6/mytiez-setup-0.1.6-amd64.exe)
 - **全部版本**：[GitHub Releases](https://github.com/llxo/MyTieZ/releases/latest)
 
 ## 功能特性

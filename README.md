@@ -9,9 +9,20 @@
 
 ## 界面预览
 
-| 主面板（浅色） | 主面板（深色） | 分类筛选 | 界面设置 |
-| :---: | :---: | :---: | :---: |
-| ![主面板浅色](./docs/screenshots/main-light.jpg) | ![主面板深色](./docs/screenshots/main-dark.jpg) | ![分类筛选](./docs/screenshots/filter-images.jpg) | ![界面设置](./docs/screenshots/settings.jpg) |
+<table>
+  <tr>
+    <th width="25%">主面板（浅色）</th>
+    <th width="25%">主面板（深色）</th>
+    <th width="25%">分类筛选</th>
+    <th width="25%">界面设置</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="./docs/screenshots/main-light.jpg" alt="主面板浅色" width="200" /></td>
+    <td align="center"><img src="./docs/screenshots/main-dark.jpg" alt="主面板深色" width="200" /></td>
+    <td align="center"><img src="./docs/screenshots/filter-images.jpg" alt="分类筛选" width="200" /></td>
+    <td align="center"><img src="./docs/screenshots/settings.jpg" alt="界面设置" width="200" /></td>
+  </tr>
+</table>
 
 ## 核心特性
 

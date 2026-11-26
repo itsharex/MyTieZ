@@ -139,7 +139,7 @@ func TestUnifiedContextMenuAcrossAllCardKinds(t *testing.T) {
 	}{
 		{"plain text card", baseMenu},
 		{"https://example.com/docs", baseMenu},
-		{"func main() { \tfmt.Println(1) }", baseMenu},
+		{"func main() {\n\tfmt.Println(1)\n}", baseMenu},
 		{"rich card", []string{msgs.CardActionOpen(), msgs.RichMenuPastePlain(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}},
 		{"single-doc.txt", []string{msgs.CardActionOpen(), msgs.FileMenuShowInFolder(), msgs.CardMenuEditTags(), msgs.CardActionPin(), "-", msgs.CardActionDelete()}},
 		{"multi-a.txt", baseMenu},

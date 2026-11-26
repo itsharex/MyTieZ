@@ -251,7 +251,10 @@ CREATE TABLE IF NOT EXISTS clip_items (
 	updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_clip_items_order ON clip_items(pinned DESC, pin_order ASC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clip_items_kind_order ON clip_items(kind, pinned DESC, pin_order ASC, updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_clip_items_unpinned_recent ON clip_items(updated_at DESC, id DESC) WHERE pinned = 0;
 CREATE INDEX IF NOT EXISTS idx_clip_items_kind_hash ON clip_items(kind, content_hash);
+CREATE INDEX IF NOT EXISTS idx_clip_items_image_path ON clip_items(image_path) WHERE image_path != '';
 CREATE INDEX IF NOT EXISTS idx_clip_items_tags ON clip_items(tags_json) WHERE tags_json != '[]' AND tags_json != '';
 CREATE TABLE IF NOT EXISTS app_settings (
 	key TEXT PRIMARY KEY,
@@ -610,13 +613,30 @@ func (s *Store) save(item ClipItem, opts SaveOptions) (ClipItem, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	saved := ClipItem{
+		Kind:       item.Kind,
+		Hash:       item.Hash,
+		Text:       item.Text,
+		HTML:       item.HTML,
+		ImagePath:  item.ImagePath,
+		Preview:    item.Preview,
+		SourceApp:  sourceApp,
+		SourcePath: sourcePath,
+		ByteSize:   item.ByteSize,
+		UpdatedAt:  time.UnixMilli(now),
+	}
+	if len(item.Files) > 0 {
+		saved.Files = append([]string(nil), item.Files...)
+	}
+
 	var targetID int64
 	if opts.Deduplicate {
-		var existingID int64
+		var existingID, existingCreatedMs int64
+		var existingPinned int
 		var existingApp, existingPath, existingTagsJSON string
 		err := tx.QueryRow(`
-SELECT id, source_app, source_path, tags_json FROM clip_items WHERE kind = ? AND content_hash = ? ORDER BY updated_at DESC, id DESC LIMIT 1
-`, string(item.Kind), item.Hash).Scan(&existingID, &existingApp, &existingPath, &existingTagsJSON)
+SELECT id, source_app, source_path, tags_json, created_at, pinned FROM clip_items WHERE kind = ? AND content_hash = ? ORDER BY updated_at DESC, id DESC LIMIT 1
+`, string(item.Kind), item.Hash).Scan(&existingID, &existingApp, &existingPath, &existingTagsJSON, &existingCreatedMs, &existingPinned)
 		if err == nil {
 			keepApp, keepPath := sourceApp, sourcePath
 			if keepPath == "" && existingPath != "" {
@@ -624,7 +644,9 @@ SELECT id, source_app, source_path, tags_json FROM clip_items WHERE kind = ? AND
 			}
 			mergedTagsJSON := existingTagsJSON
 			var mergedTags []string
-			_ = json.Unmarshal([]byte(existingTagsJSON), &mergedTags)
+			if existingTagsJSON != "" && existingTagsJSON != "[]" {
+				_ = json.Unmarshal([]byte(existingTagsJSON), &mergedTags)
+			}
 			if len(opts.Tags) > 0 {
 				mergedTags = normalizeTags(append(mergedTags, opts.Tags...))
 				if b, err := json.Marshal(mergedTags); err == nil {
@@ -643,6 +665,14 @@ WHERE id = ?
 				return ClipItem{}, err
 			}
 			targetID = existingID
+			saved.ID = existingID
+			saved.SourceApp = keepApp
+			saved.SourcePath = keepPath
+			saved.Pinned = existingPinned != 0
+			saved.CreatedAt = time.UnixMilli(existingCreatedMs)
+			if len(mergedTags) > 0 {
+				saved.Tags = mergedTags
+			}
 		} else if err != sql.ErrNoRows {
 			return ClipItem{}, err
 		}
@@ -671,6 +701,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
 		if err != nil {
 			return ClipItem{}, err
 		}
+		saved.ID = targetID
+		saved.CreatedAt = time.UnixMilli(now)
+		if len(cleanTags) > 0 {
+			saved.Tags = cleanTags
+		}
 	}
 
 	var orphanPaths []string
@@ -683,14 +718,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
 		}
 	}
 
-	row := tx.QueryRow(`
-SELECT id, kind, content_hash, text_content, html_content, image_path, files_json, preview, source_app, source_path, byte_size, pinned, tags_json, created_at, updated_at
-FROM clip_items WHERE id = ?
-`, targetID)
-	saved, err := scanItem(row)
-	if err != nil {
-		return ClipItem{}, err
-	}
 	if err := tx.Commit(); err != nil {
 		return ClipItem{}, err
 	}
@@ -793,13 +820,11 @@ ORDER BY pinned DESC, pin_order ASC, updated_at DESC, id DESC`+limitClause, args
 		if it.HTML, err = decryptString(it.HTML); err != nil {
 			continue
 		}
-		if summary && utf8.RuneCountInString(it.Text) > 1024 {
+		if summary && len(it.Text) > 1024 && utf8.RuneCountInString(it.Text) > 1024 {
 			it.Text = ""
 		}
-		if summary && it.Kind == KindRichText {
-			if runes := []rune(it.HTML); len(runes) > 8192 {
-				it.HTML = string(runes[:8192])
-			}
+		if summary && it.Kind == KindRichText && len(it.HTML) > 8192 && utf8.RuneCountInString(it.HTML) > 8192 {
+			it.HTML = truncateRunes(it.HTML, 8192)
 		}
 		items = append(items, it)
 		if len(items) >= limit {
@@ -1034,29 +1059,26 @@ func (s *Store) ClearAll() error {
 	return s.deleteItemsWhere("1 = 1")
 }
 
+const enforceLimitWhere = `id IN (
+		SELECT id FROM clip_items
+		WHERE pinned = 0
+		ORDER BY updated_at DESC, id DESC
+		LIMIT -1 OFFSET ?
+	)`
+
 // EnforceLimit trims unpinned items beyond maxHistory (keeping pinned items untouched).
 func (s *Store) EnforceLimit(maxHistory int) error {
 	if maxHistory <= 0 {
 		return nil
 	}
-	return s.deleteItemsWhere(`id IN (
-		SELECT id FROM clip_items
-		WHERE pinned = 0
-		ORDER BY updated_at DESC, id DESC
-		LIMIT -1 OFFSET ?
-	)`, maxHistory)
+	return s.deleteItemsWhere(enforceLimitWhere, maxHistory)
 }
 
 func enforceLimitExec(exec sqlExecer, maxHistory int) ([]string, int64, error) {
 	if maxHistory <= 0 {
 		return nil, 0, nil
 	}
-	return deleteItemsWhereExec(exec, `id IN (
-		SELECT id FROM clip_items
-		WHERE pinned = 0
-		ORDER BY updated_at DESC, id DESC
-		LIMIT -1 OFFSET ?
-	)`, maxHistory)
+	return deleteItemsWhereExec(exec, enforceLimitWhere, maxHistory)
 }
 
 func (s *Store) deleteItemsWhere(where string, args ...any) error {
@@ -1119,8 +1141,8 @@ func (s *Store) removeOrphanImage(imgPath string) {
 	if imgPath == "" {
 		return
 	}
-	var cnt int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM clip_items WHERE image_path = ?`, imgPath).Scan(&cnt); err == nil && cnt == 0 {
+	var exists int
+	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM clip_items WHERE image_path = ? LIMIT 1)`, imgPath).Scan(&exists); err == nil && exists == 0 {
 		_ = os.Remove(imgPath)
 		if tp := ThumbPath(imgPath); tp != "" {
 			_ = os.Remove(tp)
@@ -1306,6 +1328,17 @@ WHERE text_content LIKE ? OR preview LIKE ? OR html_content LIKE ?
 	_ = tx.Commit()
 }
 
+func truncateRunes(s string, maxRunes int) string {
+	n := 0
+	for i := range s {
+		if n == maxRunes {
+			return s[:i]
+		}
+		n++
+	}
+	return s
+}
+
 func makeTextPreview(s string) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, "\r\n", "\n"))
 	lines := strings.Split(s, "\n")
@@ -1313,9 +1346,8 @@ func makeTextPreview(s string) string {
 		lines = lines[:4]
 	}
 	out := strings.Join(lines, " ")
-	runes := []rune(out)
-	if len(runes) > 220 {
-		return string(runes[:220]) + "…"
+	if len(out) > 220 && utf8.RuneCountInString(out) > 220 {
+		return truncateRunes(out, 220) + "…"
 	}
 	return out
 }

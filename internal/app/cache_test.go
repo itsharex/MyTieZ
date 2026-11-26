@@ -220,7 +220,7 @@ func TestLoadOrCreateThumbBitmapDiskCacheAndCleanup(t *testing.T) {
 		t.Fatalf("expected thumb cache absent before first load")
 	}
 
-	// First load decodes original, downscales to <= 680x200, and writes on-disk thumbnail.
+	// First load decodes original, downscales to <= 850x250, and writes on-disk thumbnail.
 	bmp, err := loadOrCreateThumbBitmap(saved.ImagePath, thumbPath, thumbMaxWidth, thumbMaxHeight)
 	if err != nil {
 		t.Fatal(err)

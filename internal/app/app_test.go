@@ -1202,9 +1202,10 @@ func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 			Preview:   fmt.Sprintf("100 × 100 · #%02d", i),
 		}
 	}
-	// Seed cache in ascending order so [0..7] are oldest, then render top viewport so [0..firstLast] become MRU.
+	// Seed cache with realistic thumbnail dimensions so viewport pagination matches production (~4 cards/page).
+	thumbBmp := ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 340, 100)))
 	for _, it := range items {
-		a.thumbs.put(it.ImagePath, &ui.Bitmap{})
+		a.thumbs.put(it.ImagePath, thumbBmp)
 	}
 	a.items = items
 
@@ -1222,16 +1223,18 @@ func TestListViewportThumbEvictionOnScroll(t *testing.T) {
 		t.Fatalf("expected top visible image retained at top")
 	}
 
-	// Scroll to bottom: visible bottom rows are touched, and because top rows were recently viewed,
-	// top row 0 remains cached within the 24-item LRU budget (avoiding decode spikes on next open).
+	// Scroll to bottom: simulate async decode of bottom visible thumbnails (since tester has no panel window),
+	// then verify bottom items are retained and recently viewed top row 0 stays cached within the LRU budget.
 	a.list.ScrollToEnd()
 	tt.Frame()
-	tt.Frame()
-
 	first1, last1 := a.list.Visible()
 	if last1 < first1 || last1 < total-2 {
 		t.Fatalf("expected list scrolled near bottom, got visible (%d, %d)", first1, last1)
 	}
+	for i := first1; i <= last1; i++ {
+		a.thumbs.put(items[i].ImagePath, thumbBmp)
+	}
+	tt.Frame()
 	if a.thumbs.len() > maxThumbCacheCount {
 		t.Fatalf("expected cache bounded to %d after scroll, got %d", maxThumbCacheCount, a.thumbs.len())
 	}

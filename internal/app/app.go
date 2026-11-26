@@ -19,17 +19,17 @@ import (
 var globalShortcuts = []string{"Alt+V", "Ctrl+Shift+V", "Alt+Shift+V"}
 
 const (
-	// warmThumbCacheLimit keeps up to 16 recently viewed thumbnails (~3-4 MB at
-	// 680x200) intact on panel hide when process memory is healthy so MyGo's D3D11
+	// warmThumbCacheLimit keeps up to 4 recently viewed thumbnails (~3-4 MB at
+	// 850x250) intact on panel hide when process memory is healthy so MyGo's D3D11
 	// renderer reuses existing textures instead of creating new IDs on every show.
-	warmThumbCacheLimit = 16
+	warmThumbCacheLimit = 4
 	// heapReleaseDelay returns idle Go heap spans to the OS shortly after hiding
 	// without evicting warm bitmaps, preventing working set from creeping up.
 	heapReleaseDelay = 5 * time.Second
 	// idleUnloadDelay unloads hidden UI caches and item slices after the panel
-	// stays hidden for 3 minutes (inspired by CopyQ's tab expiration), allowing
+	// stays hidden for 1 minute (inspired by CopyQ's tab expiration), allowing
 	// long-running background instances to settle at minimal RAM usage.
-	idleUnloadDelay = 3 * time.Minute
+	idleUnloadDelay = 1 * time.Minute
 )
 
 type clipApp struct {
@@ -326,7 +326,7 @@ func (a *clipApp) unloadHiddenIdleState() {
 }
 
 // releaseHiddenMemory prunes caches and trims OS working set pages as needed.
-// Under the 75 MB working set threshold, up to warmThumbCacheLimit (16) recently
+// Under the 75 MB working set threshold, up to warmThumbCacheLimit (4) recently
 // viewed thumbnails and richSpans are preserved on hide to avoid wake-up CPU spikes.
 func (a *clipApp) releaseHiddenMemory() {
 	a.fileMenuStatID = 0

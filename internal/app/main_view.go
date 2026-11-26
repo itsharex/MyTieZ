@@ -900,13 +900,13 @@ func (a *clipApp) getRichPreviewSpans(item store.ClipItem, t *ui.Theme) []ui.Spa
 }
 
 const (
-	maxThumbCacheCount    = 24
+	maxThumbCacheCount    = 12
 	maxThumbCacheBytes    = 8 << 20
 	maxAppIconCacheBytes  = 2 << 20
-	thumbMaxWidth         = 680
-	thumbMaxHeight        = 200
-	minThumbPreloadMargin = 2
-	maxThumbPreloadMargin = 3
+	thumbMaxWidth         = 850
+	thumbMaxHeight        = 250
+	minThumbPreloadMargin = 1
+	maxThumbPreloadMargin = 2
 )
 
 func loadThumbFile(path string) (*ui.Bitmap, error) {
@@ -959,10 +959,41 @@ func (a *clipApp) syncThumbWindow(items []store.ClipItem, firstVisible, lastVisi
 			continue
 		}
 		activeKeys[item.ImagePath] = struct{}{}
-		if i >= firstVisible && i <= lastVisible {
-			a.thumbs.touchIfPresent(item.ImagePath)
-		} else {
+		if i < firstVisible || i > lastVisible {
 			preloadPaths = append(preloadPaths, item.ImagePath)
+		}
+	}
+	touchActive := func(i int) {
+		item := items[i]
+		if item.Kind != store.KindImage || item.ImagePath == "" {
+			return
+		}
+		if _, active := activeKeys[item.ImagePath]; active {
+			a.thumbs.touchIfPresent(item.ImagePath)
+		}
+	}
+	// Touch overscan rows first and core visible rows last; when anchored at row 0
+	// (including initial unmeasured frames), touch in reverse so row 0 stays newest in LRU.
+	coreStart, coreEnd := firstVisible, lastVisible
+	if visFirst, visLast := a.list.Visible(); visLast >= visFirst && visFirst < len(items) {
+		overlapStart := max(firstVisible, visFirst)
+		overlapEnd := min(lastVisible, visLast)
+		if overlapStart <= overlapEnd {
+			coreStart, coreEnd = overlapStart, overlapEnd
+			for i := firstVisible; i <= lastVisible; i++ {
+				if i < coreStart || i > coreEnd {
+					touchActive(i)
+				}
+			}
+		}
+	}
+	if coreStart == 0 {
+		for i := coreEnd; i >= coreStart; i-- {
+			touchActive(i)
+		}
+	} else {
+		for i := coreStart; i <= coreEnd; i++ {
+			touchActive(i)
 		}
 	}
 	a.thumbs.setActiveKeys(activeKeys)

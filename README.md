@@ -1,5 +1,7 @@
 # MyTieZ
 
+简体中文 | [English](./README_EN.md)
+
 基于 Go 与原生 UI 框架 [MyGo](https://github.com/egoist/mygo) 编写的轻量级桌面剪贴板管理工具，界面设计与核心交互参考自 [tiez-clipboard](https://github.com/jimuzhe/tiez-clipboard)。
 
 ## 下载安装

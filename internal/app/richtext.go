@@ -97,10 +97,20 @@ type listState struct {
 	index   int
 }
 
+func maybeDecodeClipboardHTML(raw string) string {
+	if len(raw) >= 2 && ((raw[0] == 0xFF && raw[1] == 0xFE) || (raw[0] == 0xFE && raw[1] == 0xFF)) {
+		return decodeClipboardHTML([]byte(raw))
+	}
+	if strings.IndexByte(raw, 0) >= 0 {
+		return decodeClipboardHTML([]byte(raw))
+	}
+	return raw
+}
+
 // parseHTMLPreviewSpans extracts lightweight inline-styled spans from clipboard HTML
 // for card previews without generating screenshots or layout-breaking sizes.
 func parseHTMLPreviewSpans(rawHTML string, t *ui.Theme) []ui.Span {
-	frag := extractHTMLFragment(decodeClipboardHTML([]byte(rawHTML)))
+	frag := extractHTMLFragment(maybeDecodeClipboardHTML(rawHTML))
 	if frag == "" {
 		return nil
 	}
@@ -372,60 +382,52 @@ func applyTagAndStyle(st spanStyle, tag string, attrs []html.Attribute, t *ui.Th
 		}
 	}
 
-	for _, a := range attrs {
-		if !strings.EqualFold(a.Key, "style") {
-			continue
-		}
-		for _, decl := range strings.Split(a.Val, ";") {
-			k, v, ok := strings.Cut(decl, ":")
-			if !ok {
-				continue
+	forEachInlineStyle(attrs, func(key, val string) {
+		lval := strings.ToLower(val)
+		switch key {
+		case "font-weight":
+			if strings.Contains(lval, "bold") {
+				st.weight = 700
+			} else if w, err := strconv.Atoi(val); err == nil && w >= 600 {
+				st.weight = 700
+			} else if lval == "normal" || lval == "400" || lval == "300" || lval == "lighter" {
+				st.weight = 400
 			}
-			key := strings.ToLower(strings.TrimSpace(k))
-			val := strings.TrimSpace(v)
-			switch key {
-			case "font-weight":
-				if strings.Contains(strings.ToLower(val), "bold") {
-					st.weight = 700
-				} else if w, err := strconv.Atoi(val); err == nil && w >= 600 {
-					st.weight = 700
-				} else if strings.EqualFold(val, "normal") || val == "400" {
-					st.weight = 400
-				}
-			case "font-style":
-				lval := strings.ToLower(val)
-				if strings.Contains(lval, "italic") || strings.Contains(lval, "oblique") {
-					st.italic = true
-				} else if strings.Contains(lval, "normal") {
-					st.italic = false
-				}
-			case "text-decoration", "text-decoration-line":
-				lval := strings.ToLower(val)
-				if strings.Contains(lval, "underline") {
-					st.underline = true
-				}
-				if strings.Contains(lval, "line-through") {
-					st.strikethrough = true
-				}
-			case "color":
-				if r, g, b, a, ok := parseCSSColorRGBA(val); ok {
-					col := ui.RGBA(r, g, b, float32(a)/255)
-					if isReadableForeground(col, t.Dark) {
-						st.color = col
-						st.hasColor = true
-					}
-				}
-			case "background-color", "background":
-				if r, g, b, a, ok := parseCSSColorRGBA(val); ok && !isPageCanvasColor(r, g, b, a) {
-					if a > 110 {
-						a = 110
-					}
-					st.bg = ui.RGBA(r, g, b, float32(a)/255)
-					st.hasBG = true
+		case "font-style":
+			if strings.Contains(lval, "italic") || strings.Contains(lval, "oblique") {
+				st.italic = true
+			} else if strings.Contains(lval, "normal") {
+				st.italic = false
+			}
+		case "text-decoration", "text-decoration-line":
+			if strings.Contains(lval, "underline") {
+				st.underline = true
+			}
+			if strings.Contains(lval, "line-through") {
+				st.strikethrough = true
+			}
+			if lval == "none" {
+				st.underline = false
+				st.strikethrough = false
+			}
+		case "color":
+			if r, g, b, a, ok := parseCSSColorRGBA(val); ok {
+				col := ui.RGBA(r, g, b, float32(a)/255)
+				if isReadableForeground(col, t.Dark) {
+					st.color = col
+					st.hasColor = true
 				}
 			}
+		case "background-color", "background":
+			if r, g, b, a, ok := parseCSSBackgroundColorRGBA(val); ok && !isPageCanvasColor(r, g, b, a) {
+				if a > 110 {
+					a = 110
+				}
+				st.bg = ui.RGBA(r, g, b, float32(a)/255)
+				st.hasBG = true
+			}
 		}
-	}
+	})
 	return st
 }
 
@@ -558,8 +560,69 @@ func isCFHTMLHeaderLine(line string) bool {
 	return false
 }
 
+func forEachInlineStyle(attrs []html.Attribute, fn func(key, val string)) {
+	for _, a := range attrs {
+		if !strings.EqualFold(a.Key, "style") {
+			continue
+		}
+		for _, decl := range strings.Split(a.Val, ";") {
+			k, v, ok := strings.Cut(decl, ":")
+			if !ok {
+				continue
+			}
+			key := strings.ToLower(strings.TrimSpace(k))
+			val := stripCSSImportant(v)
+			if key == "" || val == "" {
+				continue
+			}
+			fn(key, val)
+		}
+	}
+}
+
+func stripCSSImportant(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= len("!important") && strings.EqualFold(v[len(v)-len("!important"):], "!important") {
+		v = strings.TrimSpace(v[:len(v)-len("!important")])
+	}
+	return v
+}
+
+func parseCSSBackgroundColorRGBA(raw string) (r, g, b, a uint8, ok bool) {
+	if r, g, b, a, ok = parseCSSColorRGBA(raw); ok {
+		return r, g, b, a, true
+	}
+	// Handle CSS `background` shorthand (e.g. "rgb(255 240 240) no-repeat" or "#fff none").
+	s := strings.TrimSpace(raw)
+	for i := 0; i < len(s); {
+		for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+			i++
+		}
+		if i >= len(s) {
+			break
+		}
+		start := i
+		depth := 0
+		for i < len(s) {
+			ch := s[i]
+			if ch == '(' {
+				depth++
+			} else if ch == ')' && depth > 0 {
+				depth--
+			} else if depth == 0 && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+				break
+			}
+			i++
+		}
+		if r, g, b, a, ok = parseCSSColorRGBA(s[start:i]); ok {
+			return r, g, b, a, true
+		}
+	}
+	return 0, 0, 0, 0, false
+}
+
 func parseCSSColorRGBA(raw string) (r, g, b, a uint8, ok bool) {
-	s := strings.ToLower(strings.TrimSpace(raw))
+	s := strings.ToLower(stripCSSImportant(raw))
 	if s == "" || s == "inherit" || s == "initial" || s == "unset" || s == "transparent" || s == "none" {
 		return 0, 0, 0, 0, false
 	}
@@ -591,26 +654,52 @@ func parseCSSColorRGBA(raw string) (r, g, b, a uint8, ok bool) {
 	if strings.HasPrefix(s, "rgb(") || strings.HasPrefix(s, "rgba(") {
 		open := strings.IndexByte(s, '(')
 		closeIdx := strings.LastIndexByte(s, ')')
-		if open < 0 || closeIdx <= open {
+		if open < 0 || closeIdx <= open || closeIdx != len(s)-1 {
 			return 0, 0, 0, 0, false
 		}
-		parts := strings.Split(s[open+1:closeIdx], ",")
-		if len(parts) < 3 {
-			return 0, 0, 0, 0, false
+		inner := strings.TrimSpace(s[open+1 : closeIdx])
+		var rgbParts []string
+		alphaRaw := ""
+		if strings.Contains(inner, ",") {
+			parts := strings.Split(inner, ",")
+			if len(parts) < 3 {
+				return 0, 0, 0, 0, false
+			}
+			rgbParts = parts[:3]
+			if len(parts) >= 4 {
+				alphaRaw = strings.TrimSpace(parts[3])
+			}
+		} else {
+			rgbSide, aSide, hasSlash := strings.Cut(inner, "/")
+			rgbParts = strings.Fields(rgbSide)
+			if len(rgbParts) != 3 {
+				return 0, 0, 0, 0, false
+			}
+			if hasSlash {
+				alphaRaw = strings.TrimSpace(aSide)
+			}
 		}
-		rv, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
-		gv, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
-		bv, err3 := strconv.Atoi(strings.TrimSpace(parts[2]))
+		rv, err1 := strconv.Atoi(strings.TrimSpace(rgbParts[0]))
+		gv, err2 := strconv.Atoi(strings.TrimSpace(rgbParts[1]))
+		bv, err3 := strconv.Atoi(strings.TrimSpace(rgbParts[2]))
 		if err1 != nil || err2 != nil || err3 != nil {
 			return 0, 0, 0, 0, false
 		}
 		af := 1.0
-		if len(parts) >= 4 {
-			parsedA, err := strconv.ParseFloat(strings.TrimSpace(parts[3]), 64)
-			if err != nil {
-				return 0, 0, 0, 0, false
+		if alphaRaw != "" {
+			if pct, isPct := strings.CutSuffix(alphaRaw, "%"); isPct {
+				parsedA, err := strconv.ParseFloat(strings.TrimSpace(pct), 64)
+				if err != nil {
+					return 0, 0, 0, 0, false
+				}
+				af = parsedA / 100.0
+			} else {
+				parsedA, err := strconv.ParseFloat(alphaRaw, 64)
+				if err != nil {
+					return 0, 0, 0, 0, false
+				}
+				af = parsedA
 			}
-			af = parsedA
 		}
 		if af <= 0 {
 			return 0, 0, 0, 0, false
@@ -755,9 +844,19 @@ func isMeaningfulRichHTML(rawHTML, plainText string) bool {
 			switch tag {
 			case "script", "style", "head", "meta", "title", "noscript", "link":
 				return
-			case "img", "svg", "hr", "ul", "ol", "li", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "blockquote", "dl", "dt", "dd":
+			case "img", "hr":
 				hasRichStructure = true
 				return
+			case "svg":
+				if n.FirstChild != nil {
+					hasRichStructure = true
+					return
+				}
+			case "ul", "ol", "li", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "blockquote", "dl", "dt", "dd":
+				if hasNonEmptyText(n) {
+					hasRichStructure = true
+					return
+				}
 			case "kbd":
 				if hasNonEmptyText(n) {
 					hasRichStructure = true
@@ -847,65 +946,54 @@ func applyRichCheckStyle(st richCheckStyle, tag string, attrs []html.Attribute) 
 		st.inPre = true
 	}
 
-	for _, a := range attrs {
-		if !strings.EqualFold(a.Key, "style") {
-			continue
-		}
-		for _, decl := range strings.Split(a.Val, ";") {
-			k, v, ok := strings.Cut(decl, ":")
-			if !ok {
-				continue
+	forEachInlineStyle(attrs, func(key, val string) {
+		lval := strings.ToLower(val)
+		switch key {
+		case "font-weight":
+			if strings.Contains(lval, "bold") {
+				st.bold = true
+			} else if w, err := strconv.Atoi(val); err == nil && w >= 600 {
+				st.bold = true
+			} else if lval == "normal" || lval == "400" || lval == "300" || lval == "lighter" {
+				st.bold = false
 			}
-			key := strings.ToLower(strings.TrimSpace(k))
-			val := strings.TrimSpace(v)
-			lval := strings.ToLower(val)
-			switch key {
-			case "font-weight":
-				if strings.Contains(lval, "bold") {
-					st.bold = true
-				} else if w, err := strconv.Atoi(val); err == nil && w >= 600 {
-					st.bold = true
-				} else if lval == "normal" || lval == "400" || lval == "300" || lval == "lighter" {
-					st.bold = false
-				}
-			case "font-style":
-				if strings.Contains(lval, "italic") || strings.Contains(lval, "oblique") {
-					st.italic = true
-				} else if strings.Contains(lval, "normal") {
-					st.italic = false
-				}
-			case "text-decoration", "text-decoration-line":
-				if strings.Contains(lval, "underline") {
-					st.underline = true
-				}
-				if strings.Contains(lval, "line-through") {
-					st.strikethrough = true
-				}
-				if lval == "none" {
-					st.underline = false
-					st.strikethrough = false
-				}
-			case "color":
-				if r, g, b, _, ok := parseCSSColorRGBA(val); ok {
-					st.fgKey = fmt.Sprintf("%d,%d,%d", r, g, b)
-					st.fgChromatic = isChromaticColor(r, g, b)
-				}
-			case "background-color", "background":
-				if r, g, b, a, ok := parseCSSColorRGBA(val); ok {
-					st.bgKey = fmt.Sprintf("%d,%d,%d,%d", r, g, b, a)
-					st.bgCanvas = isPageCanvasColor(r, g, b, a)
-				}
-			case "font-size":
-				if lval != "" && lval != "inherit" && lval != "initial" && lval != "unset" {
-					st.fontSize = lval
-				}
-			case "font-family":
-				if lval != "" && lval != "inherit" && lval != "initial" && lval != "unset" {
-					st.fontFamily = lval
-				}
+		case "font-style":
+			if strings.Contains(lval, "italic") || strings.Contains(lval, "oblique") {
+				st.italic = true
+			} else if strings.Contains(lval, "normal") {
+				st.italic = false
+			}
+		case "text-decoration", "text-decoration-line":
+			if strings.Contains(lval, "underline") {
+				st.underline = true
+			}
+			if strings.Contains(lval, "line-through") {
+				st.strikethrough = true
+			}
+			if lval == "none" {
+				st.underline = false
+				st.strikethrough = false
+			}
+		case "color":
+			if r, g, b, _, ok := parseCSSColorRGBA(val); ok {
+				st.fgKey = fmt.Sprintf("%d,%d,%d", r, g, b)
+				st.fgChromatic = isChromaticColor(r, g, b)
+			}
+		case "background-color", "background":
+			if r, g, b, a, ok := parseCSSBackgroundColorRGBA(val); ok {
+				st.bgKey = fmt.Sprintf("%d,%d,%d,%d", r, g, b, a)
+				st.bgCanvas = isPageCanvasColor(r, g, b, a)
+			}
+		case "font-size":
+			if lval != "" && lval != "inherit" && lval != "initial" && lval != "unset" {
+				st.fontSize = lval
+			}
+		case "font-family":
+			if lval != "" && lval != "inherit" && lval != "initial" && lval != "unset" {
+				st.fontFamily = lval
 			}
 		}
-	}
+	})
 	return st
 }
 

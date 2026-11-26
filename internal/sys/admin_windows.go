@@ -128,7 +128,8 @@ func RestartAsAdmin() error {
 		return err
 	}
 	// Pass foreground activation rights before launching so the elevated instance can raise its panel.
-	procAllowSetForegroundWindow.Call(^uintptr(0))
+	const asfwAny = ^uint32(0)
+	procAllowSetForegroundWindow.Call(uintptr(asfwAny))
 	const swShowNormal = 1
 	r, _, callErr := procShellExecuteW.Call(
 		0,

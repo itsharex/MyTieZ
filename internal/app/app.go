@@ -92,6 +92,7 @@ type clipApp struct {
 	lastShowAt         time.Time
 	lastOutsideHide    time.Time
 	pickingApp         bool
+	restartingAdmin    bool
 	quitting           bool
 	resizeTimer        *time.Timer
 	searchTimer        *time.Timer

@@ -125,13 +125,16 @@ func (a *clipApp) settingsView(c *ui.Context) {
 						}
 						btn.Background(bg).Border(1, t.Border.Alpha(0.7)).Transition(colorTransition).
 							OnClick(func() {
-								if a.quitting {
+								if a.quitting || a.restartingAdmin {
 									return
 								}
+								a.restartingAdmin = true
 								if err := sys.RestartAsAdmin(); err != nil {
+									a.restartingAdmin = false
 									a.setStatus(msgs.SettingsRestartAdminErr(err.Error()))
 									return
 								}
+								a.quitting = true
 								mygo.App.Quit()
 							}).
 							Children(func() {

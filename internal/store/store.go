@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS clip_items (
 	updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_clip_items_order ON clip_items(pinned DESC, pin_order ASC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clip_items_order_id ON clip_items(pinned DESC, pin_order ASC, updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_clip_items_kind_order ON clip_items(kind, pinned DESC, pin_order ASC, updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_clip_items_unpinned_recent ON clip_items(updated_at DESC, id DESC) WHERE pinned = 0;
 CREATE INDEX IF NOT EXISTS idx_clip_items_kind_hash ON clip_items(kind, content_hash);

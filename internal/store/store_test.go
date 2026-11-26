@@ -840,4 +840,14 @@ func TestMakeTextPreviewPreservesLineBreaks(t *testing.T) {
 	if got := makeTextPreview("l1\nl2\nl3\nl4\nl5\nl6"); got != "l1\nl2\nl3\nl4\nl5" {
 		t.Fatalf("makeTextPreview line cap = %q, want 5 lines", got)
 	}
+	if got := makeTextPreview("  \n  first  \n  second  "); got != "first\n  second" {
+		t.Fatalf("makeTextPreview trim = %q, want %q", got, "first\n  second")
+	}
+	exact220 := strings.Repeat("你", 220)
+	if got := makeTextPreview(exact220); got != exact220 {
+		t.Fatalf("makeTextPreview exact 220 runes should not truncate")
+	}
+	if got := makeTextPreview(exact220 + "多"); got != exact220+"…" {
+		t.Fatalf("makeTextPreview 221 runes = %q, want truncated with ellipsis", got)
+	}
 }

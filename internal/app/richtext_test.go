@@ -214,3 +214,21 @@ func TestParseHTMLPreviewSpansRichStructures(t *testing.T) {
 		t.Fatalf("missing styled spans (kbd=%v mark=%v sub=%v): %+v", foundKbd, foundMark, foundSub, hSpans)
 	}
 }
+
+func TestRichTextCSSParsingAndEmptyContainers(t *testing.T) {
+	if r, g, b, a, ok := parseCSSColorRGBA("rgb(220 38 38 / 50%) !important"); !ok || r != 220 || g != 38 || b != 38 || a != 128 {
+		t.Fatalf("modern rgb with percent alpha failed: (%d,%d,%d,%d,%v)", r, g, b, a, ok)
+	}
+	if r, g, b, a, ok := parseCSSBackgroundColorRGBA("url(bg.png) rgb(254 240 138 / 0.8) no-repeat !important"); !ok || r != 254 || g != 240 || b != 138 || a != 204 {
+		t.Fatalf("background shorthand parsing failed: (%d,%d,%d,%d,%v)", r, g, b, a, ok)
+	}
+
+	spans := parseHTMLPreviewSpans(`<a href="https://example.com" style="text-decoration: none !important; font-weight: 300 !important">Link</a>`, myTiezLightTheme)
+	if len(spans) != 1 || spans[0].Underline || spans[0].Weight != 400 {
+		t.Fatalf("expected text-decoration:none and font-weight:300 applied, got %+v", spans)
+	}
+
+	if isMeaningfulRichHTML(`<div><ul><li>   </li></ul><svg></svg>Plain text</div>`, "Plain text") {
+		t.Fatalf("empty list and empty svg should not mark plain text as rich HTML")
+	}
+}

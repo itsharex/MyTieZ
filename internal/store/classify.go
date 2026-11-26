@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 )
 
 func hashBytes(b []byte) string {
@@ -130,26 +129,64 @@ func truncateRunes(s string, maxRunes int) string {
 }
 
 func makeTextPreview(s string) string {
-	s = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n"))
-	if s == "" {
-		return ""
-	}
-	var lines []string
-	for _, line := range strings.Split(s, "\n") {
+	const (
+		maxLines = 5
+		maxRunes = 220
+	)
+	var b strings.Builder
+	lines := 0
+	runes := 0
+	truncated := false
+
+	for i := 0; i < len(s) && lines < maxLines; {
+		lineStart := i
+		for i < len(s) && s[i] != '\n' && s[i] != '\r' {
+			i++
+		}
+		line := s[lineStart:i]
+		if i < len(s) {
+			if s[i] == '\r' && i+1 < len(s) && s[i+1] == '\n' {
+				i += 2
+			} else {
+				i++
+			}
+		}
+
 		trimmed := strings.TrimRight(line, " \t")
+		if lines == 0 {
+			trimmed = strings.TrimLeft(trimmed, " \t")
+		}
 		if strings.TrimSpace(trimmed) == "" {
 			continue
 		}
-		lines = append(lines, trimmed)
-		if len(lines) >= 5 {
+
+		if lines > 0 {
+			if runes >= maxRunes {
+				truncated = true
+				break
+			}
+			b.WriteByte('\n')
+			runes++
+		}
+		lines++
+
+		for idx := range trimmed {
+			if runes == maxRunes {
+				b.WriteString(trimmed[:idx])
+				truncated = true
+				break
+			}
+			runes++
+		}
+		if truncated {
 			break
 		}
+		b.WriteString(trimmed)
 	}
-	out := strings.Join(lines, "\n")
-	if len(out) > 220 && utf8.RuneCountInString(out) > 220 {
-		return truncateRunes(out, 220) + "…"
+	if truncated {
+		b.WriteString("…")
 	}
-	return out
+	return b.String()
 }
 
 func formatBytes(n int64) string {

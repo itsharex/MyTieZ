@@ -614,7 +614,10 @@ func (a *clipApp) renderCardTextPreview(c *ui.Context, t *ui.Theme, text string,
 		measureSpans = []ui.Span{{Text: text, Font: t.Font, Size: bodySize}}
 	}
 	_, measuredH := c.MeasureText(contentW, measureSpans...)
-	overflows := measuredH > maxPreviewH-1
+	// MeasureText uses default line height (~1.2x) because ui.Span has no LineHeight,
+	// while rendering applies LineHeight(1.45); scale the threshold accordingly so
+	// clipped previews still receive the bottom fade mask.
+	overflows := measuredH > bodySize*previewLines*1.12
 
 	box := ui.Box(c).FillWidth().MaxHeight(maxPreviewH).Clip()
 	if overflows {
